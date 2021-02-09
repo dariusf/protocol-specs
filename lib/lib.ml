@@ -4,7 +4,11 @@ type party = Party of string [@@deriving ord, eq]
 
 let pp_party fmt (Party p) = Format.fprintf fmt "%s" p
 
-type var = V of party * string [@@deriving ord, eq]
+type var = V of party option * string [@@deriving ord, eq]
+
+let var_name (V (_, v)) = v
+
+let var_names vars = List.map var_name vars
 
 module VMap = struct
   include Map.Make (struct
@@ -17,39 +21,48 @@ end
 type expr =
   | Int of int
   | Bool of bool
-  | Fun of string * expr list
+  | Set of expr list
+  | App of string * expr list
   | Var of var
 [@@deriving eq]
 
-let plus a b = Fun ("+", [a; b])
+let plus a b = App ("+", [a; b])
 
-let eq a b = Fun ("=", [a; b])
+let eq a b = App ("==", [a; b])
 
-let and_ a b = Fun ("/\\", [a; b])
+let geq a b = App (">=", [a; b])
 
-let or_ a b = Fun ("\\/", [a; b])
+let ge a b = App (">", [a; b])
 
-let pp_var fmt (V (Party p, var)) = Format.fprintf fmt "%s.%s" p var
+let and_ a b = App ("/\\", [a; b])
+
+let or_ a b = App ("\\/", [a; b])
+
+let pp_var fmt (V (p, var)) =
+  match p with
+  | Some p -> Format.fprintf fmt "%a.%s" pp_party p var
+  | None -> Format.fprintf fmt "%s" var
 
 let rec pp_expr fmt e =
   let open Format in
   match e with
   | Int i -> fprintf fmt "%d" i
   | Bool b -> fprintf fmt "%b" b
-  | Fun (name, es) ->
+  | App (name, es) ->
     if List.length es = 2 then
       fprintf fmt "@[%a@ %s@ %a@]" pp_expr (List.nth es 0) name pp_expr
         (List.nth es 1)
     else
       fprintf fmt "%s(%a)" name (List.pp pp_expr) es
   | Var v -> pp_var fmt v
+  | Set s -> fprintf fmt "{%a}" (List.pp pp_expr) s
 
 type msg =
   | Message of {
       typ : string;
-      args : (string * expr) list;
+      args : (var * expr) list;
     }
-[@@deriving show { with_path = false }]
+[@@deriving show { with_path = false }, eq]
 
 let msg name = Message { typ = name; args = [] }
 
@@ -59,42 +72,46 @@ let pp_msg fmt (Message { typ; args }) =
     | [] -> ""
     | _ ->
       args
-      |> List.map (fun (k, v) -> Format.sprintf "%s: %a" k pp_expr v)
+      |> List.map (fun (k, v) -> Format.sprintf "%a: %a" pp_var k pp_expr v)
       |> String.concat ", "
       |> fun a -> "(" ^ a ^ ")")
-
-module Qn = struct
-  type 'a t =
-    | Some of 'a
-    | All of 'a
-
-  let get qp = match qp with Some p -> p | All p -> p
-
-  let pp pr fmt qp =
-    let s = match qp with Some _ -> "some" | All _ -> "all" in
-    Format.fprintf fmt "%s %a" s pr (get qp)
-end
 
 type protocol =
   | Emp
   | Seq of protocol list
   | Par of protocol list
+  | Disj of protocol * protocol
   | Send of {
-      from : party Qn.t;
-      to_ : party Qn.t;
+      from : var;
+      to_ : var;
       msg : msg;
     }
   | Assign of var * expr
-  | If of expr * protocol * protocol
+  | Imply of expr * protocol
+  | BlockingImply of expr * protocol
+  | Forall of var * var * protocol
+  | Exists of var * var * protocol
+  (* extras *)
+  | SendOnly of {
+      from : var;
+      to_ : var;
+      msg : msg;
+    }
+  | ReceiveOnly of {
+      from : var;
+      to_ : var;
+      msg : msg;
+    }
+[@@deriving eq]
 
 let rec pp_protocol fmt p =
   let open Format in
   match p with
-  | Emp -> fprintf fmt "nil"
+  | Emp -> fprintf fmt "emp"
   | Seq ps ->
     List.pp
-      ~pp_start:(fun fmt () -> fprintf fmt "@[<v 0>")
-      ~pp_stop:(fun fmt () -> fprintf fmt "@]")
+      ~pp_start:(fun fmt () -> fprintf fmt "(@[<v 0>")
+      ~pp_stop:(fun fmt () -> fprintf fmt "@])")
       ~pp_sep:(fun fmt () -> fprintf fmt ";@,")
       pp_protocol fmt ps
   | Par ps ->
@@ -105,13 +122,29 @@ let rec pp_protocol fmt p =
       (fun fmt ps -> fprintf fmt "(%a)" pp_protocol ps)
       fmt ps
   | Send { from; to_; msg } ->
-    fprintf fmt "%a->%a: %a" (Qn.pp pp_party) from (Qn.pp pp_party) to_ pp_msg
-      msg
-  | Assign (v, e) -> fprintf fmt "%a := %a" pp_var v pp_expr e
-  | If (c, co, a) ->
-    fprintf fmt
-      "@[<v 0>if (%a) {@;<0 2>@[<v 0>%a@]@,} else {@;<0 2>@[<v 0>%a@]@,}@]"
-      pp_expr c pp_protocol co pp_protocol a
+    fprintf fmt "%a->%a: %a" pp_var from pp_var to_ pp_msg msg
+  | SendOnly { from; to_; msg } ->
+    fprintf fmt "*%a->%a: %a" pp_var from pp_var to_ pp_msg msg
+  | ReceiveOnly { from; to_; msg } ->
+    fprintf fmt "%a->%a*: %a" pp_var from pp_var to_ pp_msg msg
+  | Assign (v, e) -> fprintf fmt "%a = %a" pp_var v pp_expr e
+  | Disj (a, b) ->
+    fprintf fmt "@[<v 0>%a@,\\/@,%a@]" pp_protocol a pp_protocol b
+  | Imply (e, p) ->
+    fprintf fmt "@[<v 0>%a =>@;<0 2>@[@,%a@]@]" pp_expr e pp_protocol p
+  | BlockingImply (e, p) ->
+    fprintf fmt "@[<v 0>%a =>*@;<0 2>@[@,%a@]@]" pp_expr e pp_protocol p
+  | Forall (v, s, p) ->
+    fprintf fmt "@[<v 0>forall %a:%a.@;<0 2>@[%a@]@]" pp_var v pp_var s
+      pp_protocol p
+  | Exists (v, s, p) ->
+    fprintf fmt "@[<v 0>exists %a:%a.@;<0 2>@[%a@]@]" pp_var v pp_var s
+      pp_protocol p
+
+(* | If (c, co, a) ->
+   fprintf fmt
+     "@[<v 0>if (%a) {@;<0 2>@[<v 0>%a@]@,} else {@;<0 2>@[<v 0>%a@]@,}@]"
+     pp_expr c pp_protocol co pp_protocol a *)
 
 (** generates some interleaving *)
 let interleave_n xss = List.fold_right (fun c t -> List.interleave c t) xss []
@@ -135,7 +168,8 @@ let rec eval_expr env e =
   (* dump_env_ env; *)
   match e with
   | Int _ | Bool _ -> e
-  | Fun (name, args) ->
+  | Set s -> Set (s |> List.map (eval_expr env))
+  | App (name, args) ->
     begin
       match name with
       | "+" ->
@@ -146,7 +180,7 @@ let rec eval_expr env e =
             | (a, b) ->
               fail "invalid args to %s: %a, %a" name pp_expr a pp_expr b)
           args (Int 0)
-      | "=" when List.length args = 2 ->
+      | "==" when List.length args = 2 ->
         let (a, b) = (List.hd args, List.hd (List.tl args)) in
         let a = eval_expr env a in
         let b = eval_expr env b in
@@ -174,7 +208,135 @@ let rec eval_expr env e =
   | Var v ->
   try VMap.find v env with Not_found -> fail "%a is unbound" pp_var v
 
-let eval p =
+let rec normalize_once p =
+  match p with
+  | Seq s ->
+    Seq
+      (s |> List.map normalize_once
+      |> List.filter (function Emp -> false | _ -> true))
+  | Par s ->
+    Par
+      (s |> List.map normalize_once
+      |> List.filter (function Emp -> false | _ -> true))
+  | Disj (a, b) ->
+    begin
+      match (a, b) with
+      | (Emp, _) -> normalize_once b
+      | (_, Emp) -> normalize_once a
+      | _ -> Disj (normalize_once a, normalize_once b)
+    end
+  | Emp -> p
+  | Send _ -> p
+  | Assign (_, _) -> p
+  | Imply (c, p) -> Imply (c, normalize_once p)
+  | BlockingImply (c, p) -> BlockingImply (c, normalize_once p)
+  | Forall (v, s, p) -> Forall (v, s, normalize_once p)
+  | Exists (v, s, p) -> Exists (v, s, normalize_once p)
+  | SendOnly _ -> p
+  | ReceiveOnly _ -> p
+
+let rec normalize p =
+  let p1 = normalize_once p in
+  if equal_protocol p p1 then
+    p1
+  else
+    normalize p1
+
+let rec transpose xss =
+  match xss with
+  | (_ :: _) :: _ -> List.map List.hd xss :: transpose (List.map List.tl xss)
+  | _ -> []
+
+let rec qualify_expr ((V (_, pn), vars) as party) e =
+  match e with
+  | Int _ | Bool _ -> e
+  | Var (V (None, vn)) ->
+    if List.mem ~eq:String.equal vn (var_names vars) then
+      Var (V (Some (Party pn), vn))
+    else
+      fail "variable %a does not belong to %s" pp_expr e pn
+  | Var (V (Some _, _)) -> e
+  | Set s -> Set (List.map (qualify_expr party) s)
+  | App (n, s) -> App (n, List.map (qualify_expr party) s)
+
+(* parties is a list of (party name, vars belonging to it) *)
+let project (parties : (var * var list) list) pr =
+  let rec aux pr =
+    match pr with
+    | Emp -> parties |> List.map (fun _ -> Emp)
+    | Assign (V (p1, v), e) ->
+      parties
+      |> List.map (fun ((V (_, pn), vars) as party) ->
+             match p1 with
+             | Some (Party p1) when String.equal pn p1 ->
+               (* given *)
+               Assign (V (Some (Party p1), v), qualify_expr party e)
+             | None when List.mem ~eq:String.equal v (var_names vars) ->
+               (* inferred *)
+               Assign (V (Some (Party pn), v), qualify_expr party e)
+             | _ -> Emp)
+    | Seq ps -> ps |> List.map aux |> transpose |> List.map (fun p -> Seq p)
+    | Par ps -> ps |> List.map aux |> transpose |> List.map (fun p -> Par p)
+    | Disj (a, b) ->
+      [a; b] |> List.map aux |> transpose
+      |> List.map (function [a; b] -> Disj (a, b) | _ -> failwith "invalid")
+    | Send { from; to_; msg } ->
+      let (V (_, fr)) = from in
+      let (V (_, to1)) = to_ in
+      parties
+      |> List.map (fun (V (_, pn), _) ->
+             if String.equal pn fr then
+               SendOnly { from; to_; msg }
+             else if String.equal pn to1 then
+               ReceiveOnly { from; to_; msg }
+             else
+               Emp)
+    | Imply (c, body) ->
+      List.map2
+        (fun par body1 ->
+          (* TODO check without exception *)
+          try Imply (qualify_expr par c, body1)
+          with Eval_failure _ ->
+            (* note that this is the body of the conditional, not emp *)
+            body1)
+        parties (aux body)
+    | BlockingImply (c, p) ->
+      List.map2
+        (fun par p1 ->
+          try BlockingImply (qualify_expr par c, p1)
+          with Eval_failure _ -> Emp)
+        parties (aux p)
+    | Forall (v, s, p) -> aux p |> List.map (fun p1 -> Forall (v, s, p1))
+    | Exists (v, s, p) -> aux p |> List.map (fun p1 -> Exists (v, s, p1))
+    | SendOnly _ -> fail "invalid send only"
+    | ReceiveOnly _ -> fail "invalid receive only"
+  in
+  aux pr |> List.map normalize
+
+let has_initiative (V (_, party)) p =
+  let rec aux p =
+    match p with
+    | Emp -> false
+    | Seq (s :: _) -> aux s
+    | Seq _ -> false
+    | Par ps -> List.exists aux ps
+    | Disj (a, b) -> List.for_all aux [a; b]
+    | Send { from = V (_, pn); _ } -> String.equal party pn
+    | Assign (_, _) -> true
+    | Imply (_, _) -> true
+    | BlockingImply (_, _) -> false
+    | Forall (_, _, p) -> aux p
+    | Exists (_, _, p) -> aux p
+    | SendOnly _ -> true
+    | ReceiveOnly _ -> false
+  in
+  aux p
+
+(* | _ -> parties |> List.map (fun _ -> pr) *)
+
+(* fail "nyi" *)
+
+(* let eval p =
   let rec aux env p =
     (* Format.printf "eval %a@." pp_protocol p; *)
     match p with
@@ -218,125 +380,301 @@ let eval p =
       (match c with Bool true -> aux env co | _ -> aux env alt)
   in
   try aux VMap.empty p |> ignore
-  with Eval_failure s -> Format.printf "evaluation failed: %s@." s
+  with Eval_failure s -> Format.printf "evaluation failed: %s@." s *)
 
 module Tpc = struct
-  let coord = Party "coordinator"
+  (* let coord = Party "coordinator" *)
 
-  let part = Party "participant"
+  (* let part = Party "participant" *)
 
-  let phase1 =
-    Seq
-      [
-        Send { from = Some coord; to_ = All part; msg = msg "prepare" };
-        Assign (part >. "ok", Bool false);
-        Send
-          {
-            (* TODO need a way to make this dependent. That? *)
-            from = Some part;
-            to_ = All coord;
-            (* decide *)
-            msg =
-              Message { typ = "prepare_ack"; args = [("commit", Bool true)] };
-          };
-        Assign
-          ( coord >. "res",
-            and_ (Var (coord >. "res")) (Var (coord >. "m_commit")) );
-        Assign (coord >. "count", plus (Var (coord >. "count")) (Int 1));
-      ]
+  let coord = V (None, "C")
 
-  let phase2a =
-    Seq
-      [
-        Send { from = Some coord; to_ = All part; msg = msg "commit" };
-        Assign (part >. "ok", Bool false);
-        Send { from = Some part; to_ = All coord; msg = msg "commit_ack" };
-        Assign (coord >. "count", plus (Var (coord >. "count")) (Int 1));
-      ]
+  let part = V (None, "P")
 
-  let phase2b =
-    Seq
-      [
-        Send { from = Some coord; to_ = All part; msg = msg "abort" };
-        Assign (part >. "ok", Bool false);
-        Send { from = Some part; to_ = Some coord; msg = msg "abort_ack" };
-        Assign (coord >. "count", plus (Var (coord >. "count")) (Int 1));
-      ]
+  let p = V (None, "p")
+
+  let c = V (None, "c")
+
+  let responded = V (None, "responded")
+
+  let aborted = V (None, "aborted")
 
   let protocol =
-    (* TODO is cardinality associated with each party or each par? *)
     Seq
       [
-        Assign (coord >. "count", Int 0); Assign (coord >. "res", Bool true);
-        Assign (coord >. "n", Int 2); phase1;
-        If
-          ( and_
-              (Var (coord >. "res"))
-              (eq (Var (coord >. "count")) (Var (coord >. "n"))),
-            Seq [Assign (coord >. "count", Int 0); phase2a],
-            Seq [Assign (coord >. "count", Int 0); phase2b] );
+        Forall
+          ( p,
+            part,
+            Seq
+              [
+                Send { from = c; to_ = p; msg = msg "prepare" };
+                Disj
+                  ( Seq
+                      [
+                        Send { from = p; to_ = c; msg = msg "prepared" };
+                        Assign (responded, plus (Var responded) (Set [Var p]));
+                      ],
+                    Seq
+                      [
+                        Send { from = p; to_ = c; msg = msg "abort" };
+                        Assign (aborted, plus (Var aborted) (Set [Var p]));
+                      ] );
+              ] );
+        Disj
+          ( BlockingImply
+              ( eq (Var aborted) (Set []),
+                Forall
+                  ( p,
+                    part,
+                    Seq
+                      [
+                        Send { from = c; to_ = p; msg = msg "commit" };
+                        Send { from = p; to_ = c; msg = msg "commit_ack" };
+                      ] ) ),
+            Forall
+              ( p,
+                part,
+                Seq
+                  [
+                    Send { from = c; to_ = p; msg = msg "abort" };
+                    Send { from = p; to_ = c; msg = msg "abort_ack" };
+                  ] ) );
       ]
 end
 
-module Paxos = struct
+module Test = struct
+  let responded = V (None, "responded")
+
+  let p = V (None, "p")
+
+  let _protocol =
+    Seq
+      [
+        Assign (responded, plus (Var responded) (Set [Var p]));
+        Assign (responded, plus (Var responded) (Set [Var p]));
+      ]
+end
+
+(* module Paxos = struct
   let proposer = Party "proposer"
 
   let acceptor = Party "acceptor"
 
   let protocol = Seq [Assign (proposer >. "count", Int 0)]
 end
+*)
 
-let snapshot_protocol p =
-  Format.printf "%a@.---@." pp_protocol p;
-  eval p
+module Paxos = struct
+  (* let coord = Party "coordinator" *)
+
+  (* let part = Party "participant" *)
+
+  let proposers = V (None, "P")
+
+  let acceptors = V (None, "A")
+
+  let p = V (None, "p")
+
+  let a = V (None, "a")
+
+  let a1 = V (None, "a1")
+
+  (* current proposal number of proposer *)
+  let proposal = V (None, "proposal")
+
+  let value = V (None, "value")
+
+  let majority = V (None, "majority")
+
+  let prepare_responses = V (None, "prepare_responses")
+
+  (* acceptor *)
+  let already_responded = V (None, "already_responded")
+
+  let current_proposal = V (None, "current_proposal")
+
+  let current_value = V (None, "current_value")
+
+  (* messages *)
+  let n = V (None, "n")
+
+  let cv = V (None, "cv")
+
+  let cp = V (None, "cp")
+
+  let pn = V (None, "pn")
+
+  let pv = V (None, "pv")
+
+  let protocol =
+    Exists
+      ( p,
+        proposers,
+        Seq
+          [
+            Assign (proposal, plus (Var proposal) (Int 1));
+            Assign (value, App ("external", []));
+            Assign
+              ( majority,
+                plus (App ("/", [App ("size", [Var acceptors]); Int 2])) (Int 1)
+              ); Assign (prepare_responses, Set []);
+            Forall
+              ( a,
+                acceptors,
+                Seq
+                  [
+                    Send
+                      {
+                        from = p;
+                        to_ = a;
+                        msg =
+                          Message
+                            { typ = "propose"; args = [(n, Var proposal)] };
+                      };
+                    Imply
+                      ( ge (Var n) (Var already_responded),
+                        Seq
+                          [
+                            Assign (already_responded, Var n);
+                            Send
+                              {
+                                from = a;
+                                to_ = p;
+                                msg =
+                                  Message
+                                    {
+                                      typ = "promise";
+                                      args =
+                                        [
+                                          (cp, Var current_proposal);
+                                          (cv, Var current_value);
+                                        ];
+                                    };
+                              };
+                            Imply
+                              ( ge (Var cp) (Int 0),
+                                Seq
+                                  [
+                                    Assign (value, Var cv);
+                                    Assign
+                                      ( prepare_responses,
+                                        plus (Var prepare_responses)
+                                          (Set [Var a]) );
+                                    Imply
+                                      ( ge (Var cp) (Var proposal),
+                                        Assign (proposal, Var cp) );
+                                  ] );
+                          ] );
+                  ] );
+            BlockingImply
+              ( ge (App ("size", [Var prepare_responses])) (Var majority),
+                Forall
+                  ( a1,
+                    prepare_responses,
+                    Seq
+                      [
+                        Send
+                          {
+                            from = p;
+                            to_ = a1;
+                            msg =
+                              Message
+                                {
+                                  typ = "accept";
+                                  args = [(pn, Var proposal); (pv, Var value)];
+                                };
+                          };
+                        Imply
+                          ( geq (Var pn) (Var already_responded),
+                            Send { from = a1; to_ = p; msg = msg "accepted" } );
+                      ] ) );
+          ] )
+end
+
+let snapshot_protocol parties pr =
+  let projections =
+    let res = project parties pr in
+    List.map2
+      (fun (V (_, p), _) r ->
+        let init =
+          match has_initiative (V (None, p)) r with
+          | true -> "has"
+          | false -> "does not have"
+        in
+        Format.sprintf "projection of %s@.%s %s initiative@.@.%a" p p init
+          pp_protocol r)
+      parties res
+    |> String.concat "\n--\n"
+  in
+  Format.printf "protocol:@.@.%a@.---@.projections:@.@.%s@." pp_protocol pr
+    projections
 
 let%expect_test "2pc" =
-  snapshot_protocol Tpc.protocol;
+  let parties = Tpc.[(c, [responded; aborted; p]); (p, [c])] in
+  snapshot_protocol parties Tpc.protocol;
   [%expect
     {|
-    coordinator.count := 0;
-    coordinator.res := true;
-    coordinator.n := 2;
-    some coordinator->all participant: prepare;
-    participant.ok := false;
-    some participant->all coordinator: prepare_ack(commit: true);
-    coordinator.res := coordinator.res /\ coordinator.m_commit;
-    coordinator.count := coordinator.count + 1;
-    if (coordinator.res /\ coordinator.count = coordinator.n) {
-      coordinator.count := 0;
-      some coordinator->all participant: commit;
-      participant.ok := false;
-      some participant->all coordinator: commit_ack;
-      coordinator.count := coordinator.count + 1
-    } else {
-      coordinator.count := 0;
-      some coordinator->all participant: abort;
-      participant.ok := false;
-      some participant->some coordinator: abort_ack;
-      coordinator.count := coordinator.count + 1
-    }
+    protocol:
+
+    (forall p:P.
+       (c->p: prepare;
+        (p->c: prepared;
+         responded = responded + {p})
+        \/
+        (p->c: abort;
+         aborted = aborted + {p}));
+     aborted == {} =>*
+       forall p:P.
+         (c->p: commit;
+          p->c: commit_ack)
+     \/
+     forall p:P.
+       (c->p: abort;
+        p->c: abort_ack))
     ---
-    coordinator.count := 0 (prev. unset)
-    coordinator.res := true (prev. unset)
-    coordinator.n := 2 (prev. unset)
-    some coordinator->all participant: prepare
-    participant.ok := false (prev. unset)
-    some participant->all coordinator: prepare_ack(commit: true)
-    coordinator.m_commit := true (prev. unset)
-    coordinator.res := true (prev. true)
-    coordinator.count := 1 (prev. 0)
-    coordinator.count := 0 (prev. 1)
-    some coordinator->all participant: abort
-    participant.ok := false (prev. false)
-    some participant->some coordinator: abort_ack
-    coordinator.count := 1 (prev. 0)
+    projections:
+
+    projection of c
+    c has initiative
+    (forall p:P.
+       (*c->p: prepare;
+        (p->c*: prepared;
+         c.responded = c.responded + {c.p})
+        \/
+        (p->c*: abort;
+         c.aborted = c.aborted + {c.p}));
+     c.aborted == {} =>*
+       forall p:P.
+         (*c->p: commit;
+          p->c*: commit_ack)
+     \/
+     forall p:P.
+       (*c->p: abort;
+        p->c*: abort_ack))
+    --
+    projection of p
+    p does not have initiative
+    (forall p:P.
+       (c->p*: prepare;
+        (*p->c: prepared)
+        \/
+        (*p->c: abort));
+     forall p:P.
+       (c->p*: abort;
+        *p->c: abort_ack))
   |}]
 
-let%expect_test "paxos" =
-  snapshot_protocol Paxos.protocol;
-  [%expect
-    {|
-    proposer.count := 0
-    ---
-    proposer.count := 0 (prev. unset)
+let%expect_test "2pc" =
+  let msg = Paxos.[n; cv; cp; pn; pv] in
+  let parties =
+    Paxos.
+      [
+        ( p,
+          msg @ [acceptors; proposal; value; majority; prepare_responses; a; a1]
+        ); (a, msg @ [already_responded; current_proposal; current_value; p]);
+        (a1, msg @ [already_responded; current_proposal; current_value; p]);
+      ]
+  in
+  snapshot_protocol parties Paxos.protocol;
+  [%expect {|
   |}]
