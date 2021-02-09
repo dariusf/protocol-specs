@@ -2,12 +2,9 @@ open Containers
 
 type party = Party of string [@@deriving ord, eq]
 
-type var =
-  | V of {
-      party : party;
-      var : string;
-    }
-[@@deriving ord, eq]
+let pp_party fmt (Party p) = Format.fprintf fmt "%s" p
+
+type var = V of party * string [@@deriving ord, eq]
 
 module VMap = struct
   include Map.Make (struct
@@ -32,8 +29,7 @@ let and_ a b = Fun ("/\\", [a; b])
 
 let or_ a b = Fun ("\\/", [a; b])
 
-let pp_var fmt (V { party = Party party; var }) =
-  Format.fprintf fmt "%s.%s" party var
+let pp_var fmt (V (Party p, var)) = Format.fprintf fmt "%s.%s" p var
 
 let rec pp_expr fmt e =
   let open Format in
@@ -55,6 +51,8 @@ type msg =
     }
 [@@deriving show { with_path = false }]
 
+let msg name = Message { typ = name; args = [] }
+
 let pp_msg fmt (Message { typ; args }) =
   Format.fprintf fmt "%s%s" typ
     (match args with
@@ -65,13 +63,25 @@ let pp_msg fmt (Message { typ; args }) =
       |> String.concat ", "
       |> fun a -> "(" ^ a ^ ")")
 
+module Qn = struct
+  type 'a t =
+    | Some of 'a
+    | All of 'a
+
+  let get qp = match qp with Some p -> p | All p -> p
+
+  let pp pr fmt qp =
+    let s = match qp with Some _ -> "some" | All _ -> "all" in
+    Format.fprintf fmt "%s %a" s pr (get qp)
+end
+
 type protocol =
   | Emp
   | Seq of protocol list
   | Par of protocol list
   | Send of {
-      from : party;
-      to_ : party;
+      from : party Qn.t;
+      to_ : party Qn.t;
       msg : msg;
     }
   | Assign of var * expr
@@ -94,8 +104,9 @@ let rec pp_protocol fmt p =
       ~pp_sep:(fun fmt () -> fprintf fmt "@ ||@ ")
       (fun fmt ps -> fprintf fmt "(%a)" pp_protocol ps)
       fmt ps
-  | Send { from = Party f; to_ = Party t; msg } ->
-    fprintf fmt "%s->%s: %a" f t pp_msg msg
+  | Send { from; to_; msg } ->
+    fprintf fmt "%a->%a: %a" (Qn.pp pp_party) from (Qn.pp pp_party) to_ pp_msg
+      msg
   | Assign (v, e) -> fprintf fmt "%a := %a" pp_var v pp_expr e
   | If (c, co, a) ->
     fprintf fmt
@@ -105,7 +116,7 @@ let rec pp_protocol fmt p =
 (** generates some interleaving *)
 let interleave_n xss = List.fold_right (fun c t -> List.interleave c t) xss []
 
-let ( >. ) c s = V { party = c; var = s }
+let ( >. ) c s = V (c, s)
 
 exception Eval_failure of string
 
@@ -181,13 +192,14 @@ let eval p =
              | p -> [p])
       |> interleave_n
       |> fun ps2 -> aux env (Seq ps2)
-    | Send { from = Party a; to_ = Party b; msg } ->
-      Format.printf "%s->%s: %a@." a b pp_msg msg;
+    | Send { from; to_; msg } ->
+      Format.printf "%a->%a: %a@." (Qn.pp pp_party) from (Qn.pp pp_party) to_
+        pp_msg msg;
       let (Message { args; _ }) = msg in
       let assignments =
         List.map
           (fun (name, v) ->
-            let var = V { party = Party b; var = "m_" ^ name } in
+            let var = V (Qn.get to_, "m_" ^ name) in
             Assign (var, v))
           args
       in
@@ -209,25 +221,20 @@ let eval p =
   with Eval_failure s -> Format.printf "evaluation failed: %s@." s
 
 module Tpc = struct
-  let coord = Party "coord"
+  let coord = Party "coordinator"
 
-  let part1 = Party "part1"
+  let part = Party "participant"
 
-  let part2 = Party "part2"
-
-  let participants = [| part1; part2 |]
-
-  let msg name = Message { typ = name; args = [] }
-
-  let phase1 i : protocol =
+  let phase1 =
     Seq
       [
-        Send { from = coord; to_ = participants.(i); msg = msg "prepare" };
-        Assign (participants.(i) >. "ok", Bool false);
+        Send { from = Some coord; to_ = All part; msg = msg "prepare" };
+        Assign (part >. "ok", Bool false);
         Send
           {
-            from = participants.(i);
-            to_ = coord;
+            (* TODO need a way to make this dependent. That? *)
+            from = Some part;
+            to_ = All coord;
             (* decide *)
             msg =
               Message { typ = "prepare_ack"; args = [("commit", Bool true)] };
@@ -238,105 +245,98 @@ module Tpc = struct
         Assign (coord >. "count", plus (Var (coord >. "count")) (Int 1));
       ]
 
-  let phase2a i : protocol =
+  let phase2a =
     Seq
       [
-        Send { from = coord; to_ = participants.(i); msg = msg "commit" };
-        Assign (participants.(i) >. "ok", Bool false);
-        Send { from = participants.(i); to_ = coord; msg = msg "commit_ack" };
+        Send { from = Some coord; to_ = All part; msg = msg "commit" };
+        Assign (part >. "ok", Bool false);
+        Send { from = Some part; to_ = All coord; msg = msg "commit_ack" };
         Assign (coord >. "count", plus (Var (coord >. "count")) (Int 1));
       ]
 
-  let phase2b i : protocol =
+  let phase2b =
     Seq
       [
-        Send { from = coord; to_ = participants.(i); msg = msg "abort" };
-        Assign (participants.(i) >. "ok", Bool false);
-        Send { from = participants.(i); to_ = coord; msg = msg "abort_ack" };
+        Send { from = Some coord; to_ = All part; msg = msg "abort" };
+        Assign (part >. "ok", Bool false);
+        Send { from = Some part; to_ = Some coord; msg = msg "abort_ack" };
         Assign (coord >. "count", plus (Var (coord >. "count")) (Int 1));
       ]
 
   let protocol =
+    (* TODO is cardinality associated with each party or each par? *)
     Seq
       [
         Assign (coord >. "count", Int 0); Assign (coord >. "res", Bool true);
-        Assign (coord >. "n", Int 2); Par [phase1 0; phase1 1];
+        Assign (coord >. "n", Int 2); phase1;
         If
           ( and_
               (Var (coord >. "res"))
               (eq (Var (coord >. "count")) (Var (coord >. "n"))),
-            Seq [Assign (coord >. "count", Int 0); Par [phase2a 0; phase2a 1]],
-            Seq [Assign (coord >. "count", Int 0); Par [phase2b 0; phase2b 1]]
-          );
+            Seq [Assign (coord >. "count", Int 0); phase2a],
+            Seq [Assign (coord >. "count", Int 0); phase2b] );
       ]
 end
 
+module Paxos = struct
+  let proposer = Party "proposer"
+
+  let acceptor = Party "acceptor"
+
+  let protocol = Seq [Assign (proposer >. "count", Int 0)]
+end
+
 let snapshot_protocol p =
-  Format.printf "%a@." pp_protocol p;
+  Format.printf "%a@.---@." pp_protocol p;
   eval p
 
 let%expect_test "2pc" =
   snapshot_protocol Tpc.protocol;
-  [%expect {|
-    coord.count := 0;
-    coord.res := true;
-    coord.n := 2;
-    (coord->part1: prepare;
-     part1.ok := false;
-     part1->coord: prepare_ack(commit: true);
-     coord.res := coord.res /\ coord.m_commit;
-     coord.count := coord.count + 1)
-    ||
-    (coord->part2: prepare;
-     part2.ok := false;
-     part2->coord: prepare_ack(commit: true);
-     coord.res := coord.res /\ coord.m_commit;
-     coord.count := coord.count + 1);
-    if (coord.res /\ coord.count = coord.n) {
-      coord.count := 0;
-      (coord->part1: commit;
-       part1.ok := false;
-       part1->coord: commit_ack;
-       coord.count := coord.count + 1)
-      ||
-      (coord->part2: commit;
-       part2.ok := false;
-       part2->coord: commit_ack;
-       coord.count := coord.count + 1)
+  [%expect
+    {|
+    coordinator.count := 0;
+    coordinator.res := true;
+    coordinator.n := 2;
+    some coordinator->all participant: prepare;
+    participant.ok := false;
+    some participant->all coordinator: prepare_ack(commit: true);
+    coordinator.res := coordinator.res /\ coordinator.m_commit;
+    coordinator.count := coordinator.count + 1;
+    if (coordinator.res /\ coordinator.count = coordinator.n) {
+      coordinator.count := 0;
+      some coordinator->all participant: commit;
+      participant.ok := false;
+      some participant->all coordinator: commit_ack;
+      coordinator.count := coordinator.count + 1
     } else {
-      coord.count := 0;
-      (coord->part1: abort;
-       part1.ok := false;
-       part1->coord: abort_ack;
-       coord.count := coord.count + 1)
-      ||
-      (coord->part2: abort;
-       part2.ok := false;
-       part2->coord: abort_ack;
-       coord.count := coord.count + 1)
+      coordinator.count := 0;
+      some coordinator->all participant: abort;
+      participant.ok := false;
+      some participant->some coordinator: abort_ack;
+      coordinator.count := coordinator.count + 1
     }
-    coord.count := 0 (prev. unset)
-    coord.res := true (prev. unset)
-    coord.n := 2 (prev. unset)
-    coord->part1: prepare
-    coord->part2: prepare
-    part1.ok := false (prev. unset)
-    part2.ok := false (prev. unset)
-    part1->coord: prepare_ack(commit: true)
-    coord.m_commit := true (prev. unset)
-    part2->coord: prepare_ack(commit: true)
-    coord.m_commit := true (prev. true)
-    coord.res := true (prev. true)
-    coord.res := true (prev. true)
-    coord.count := 1 (prev. 0)
-    coord.count := 2 (prev. 1)
-    coord.count := 0 (prev. 2)
-    coord->part1: commit
-    coord->part2: commit
-    part1.ok := false (prev. false)
-    part2.ok := false (prev. false)
-    part1->coord: commit_ack
-    part2->coord: commit_ack
-    coord.count := 1 (prev. 0)
-    coord.count := 2 (prev. 1)
+    ---
+    coordinator.count := 0 (prev. unset)
+    coordinator.res := true (prev. unset)
+    coordinator.n := 2 (prev. unset)
+    some coordinator->all participant: prepare
+    participant.ok := false (prev. unset)
+    some participant->all coordinator: prepare_ack(commit: true)
+    coordinator.m_commit := true (prev. unset)
+    coordinator.res := true (prev. true)
+    coordinator.count := 1 (prev. 0)
+    coordinator.count := 0 (prev. 1)
+    some coordinator->all participant: abort
+    participant.ok := false (prev. false)
+    some participant->some coordinator: abort_ack
+    coordinator.count := 1 (prev. 0)
+  |}]
+
+let%expect_test "paxos" =
+  snapshot_protocol Paxos.protocol;
+  [%expect
+    {|
+    proposer.count := 0
+    ---
+    proposer.count := 0 (prev. unset)
   |}]
