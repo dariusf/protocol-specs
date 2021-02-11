@@ -1,2 +1,3 @@
-
-  let () = print_endline "hello"
+let () =
+  print_endline "hello";
+  Lib.hello ()

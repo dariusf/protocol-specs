@@ -1,4 +1,4 @@
 
 all:
-	dune runtest
+	#dune runtest
 	OCAMLRUNPARAM=b dune exec ./app.exe
