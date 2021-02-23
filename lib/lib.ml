@@ -1,4 +1,5 @@
 open Containers
+module Tracing = Ppx_debug.Tracing
 
 type party = Party of string [@@deriving ord, eq]
 
@@ -291,7 +292,30 @@ let rec eval_expr env e =
   | Var v ->
   try VMap.find v env with Not_found -> fail "%a is unbound" pp_var v
 
+(* let rec pairwise f xs= 
+match xs with
+| [] | [_] -> xs
+| a :: b :: xs -> f a b :: pairwise f( b :: xs) *)
+
+let rec pairwise_foldr f init xs =
+  match xs with
+  | [] | [_] -> init
+  | a :: b :: xs1 -> f a b (pairwise_foldr f init (b :: xs1))
+
+let rec pairwise_foldr1 f xs =
+  match xs with
+  | [] | [_] -> xs
+  | a :: b :: xs1 -> f a b (pairwise_foldr1 f (b :: xs1))
+
+(** caller should return a or info derived from it *)
+let adj_concat_map f xs =
+  let rec aux xs =
+    match xs with [] | [_] -> [xs] | a :: b :: xs1 -> f a b :: aux (b :: xs1)
+  in
+  aux xs |> List.concat
+
 let rec normalize_once p =
+  (* let%trace rec normalize_once : protocol -> protocol = fun p -> *)
   let rec useful = function
     | Emp | Seq [] -> false
     | Forall (_, _, p) | Exists (_, _, p) -> useful p
@@ -301,8 +325,24 @@ let rec normalize_once p =
   match p with
   (* what's this for? *)
   (* | Seq [s] -> normalize_once s *)
-  | Seq s -> Seq (s |> List.map normalize_once |> List.filter useful)
-  | Par s -> Par (s |> List.map normalize_once |> List.filter useful)
+  | Seq s ->
+    let s = s |> List.map normalize_once |> List.filter useful in
+    let s =
+      adj_concat_map
+        (fun a b ->
+          match (a, b) with (Seq a1, Seq b1) -> [Seq (a1 @ b1)] | _ -> [a])
+        s
+    in
+    Seq s
+  | Par s ->
+    let s = s |> List.map normalize_once |> List.filter useful in
+    let s =
+      adj_concat_map
+        (fun a b ->
+          match (a, b) with (Par a1, Par b1) -> [Par (a1 @ b1)] | _ -> [a])
+        s
+    in
+    Par s
   | Disj (a, b) ->
     begin
       match (a, b) with
@@ -376,8 +416,6 @@ let p_env env =
   in
   Format.sprintf "%s;%s" a b
 
-module Tracing = Ppx_debug.Tracing
-
 (*   let add_equality l  r env = *)
 (* let rec solve_subs env = *)
 let%trace rec solve_subs : pvar IMap.t -> pvar IMap.t =
@@ -408,7 +446,7 @@ let%trace rec solve_subs : pvar IMap.t -> pvar IMap.t =
       rol env
     |> solve_subs
 
-let%expect_test "solve_subs" =
+(* let%expect_test "solve_subs" =
   let show a = a |> [%derive.show: (int * pvar) list] |> print_endline in
   solve_subs (IMap.of_list [(1, Mono 2); (2, Mono 4); (4, Party (var "a"))])
   |> IMap.bindings |> show;
@@ -417,7 +455,7 @@ let%expect_test "solve_subs" =
     solve [(1, (Mono 2)); (2, (Mono 4)); (4, (Party a))]
     solve [(1, (Mono 4)); (2, (Party a)); (4, (Party a))]
     solve [(1, (Party a)); (2, (Party a)); (4, (Party a))]
-    [(1, (Party a)); (2, (Party a)); (4, (Party a))] |}]
+    [(1, (Party a)); (2, (Party a)); (4, (Party a))] |}] *)
 
 let%trace get_party : var -> env -> pvar option =
  fun var env ->
@@ -470,16 +508,6 @@ let%trace add_equality : var -> var -> env -> env =
     }
 
 (* { env with var_constraints = IMap.add p1 v2p env.var_constraints |> solve_subs} *)
-
-(* let rec pairwise f xs= 
-match xs with
-| [] | [_] -> xs
-| a :: b :: xs -> f a b :: pairwise f( b :: xs) *)
-
-let rec pairwise_foldr f init xs =
-  match xs with
-  | [] | [_] -> init
-  | a :: b :: xs1 -> f a b (pairwise_foldr f init (b :: xs1))
 
 (* pairwise_foldr (fun a b t -> print_endline a; print_endline b; t) () ["a";"b";"c"];; *)
 
@@ -727,6 +755,22 @@ let has_initiative (V (_, party)) p =
   try aux VMap.empty p |> ignore
   with Eval_failure s -> Format.printf "evaluation failed: %s@." s *)
 
+module Bully = struct
+  let nodes = var "N"
+
+  let n = var "n"
+
+  let env =
+    {
+      parties = [];
+      (* [{ repr = nodes; other_sets = []; vars = [n]; owned_vars = [] }]; *)
+      var_info = VMap.empty;
+      var_constraints = IMap.empty;
+    }
+
+  let protocol = Seq []
+end
+
 module Tpc = struct
   (* let coord = Party "coordinator" *)
 
@@ -923,14 +967,14 @@ module Paxos = struct
     Comment
       ( None,
         "all currently-competing proposers",
-        Forall
-          ( p,
-            proposers,
-            Par
-              [
+        Seq
+          [
+            Forall
+              ( p,
+                proposers,
                 Seq
                   [
-                    Assign (p >. proposal, plus (Var (p >. proposal)) (Int 1));
+                    Assign (p >. proposal, Int 0);
                     Assign (p >. value, App ("external", []));
                     Assign (p >. cp, Tuple (Int 0, Int 0));
                     Assign
@@ -938,127 +982,155 @@ module Paxos = struct
                         plus
                           (App ("/", [App ("size", [Var acceptors]); Int 2]))
                           (Int 1) ); Assign (p >. promise_responses, Set []);
-                    Forall
-                      ( a,
-                        acceptors,
-                        Seq
-                          [
-                            Assign (a >. highest_proposal, Tuple (Int 0, Int 0));
-                            Assign (a >. accepted_proposal, Tuple (Int 0, Int 0));
-                            Assign (a >. accepted_value, Int 0);
-                            Send
-                              {
-                                from = p;
-                                to_ = a;
-                                msg =
-                                  Message
-                                    {
-                                      typ = "prepare";
-                                      args =
-                                        [
-                                          (n, Tuple (Var p, Var (p >. proposal)));
-                                        ];
-                                    };
-                              };
-                            Imply
-                              ( gt (Var n) (Var (a >. highest_proposal)),
-                                Seq
-                                  [
-                                    Assign (a >. highest_proposal, Var n);
-                                    Send
-                                      {
-                                        from = a;
-                                        to_ = p;
-                                        msg =
-                                          Message
-                                            {
-                                              typ = "promise";
-                                              args =
-                                                [
-                                                  ( cp,
-                                                    Var (a >. accepted_proposal)
-                                                  );
-                                                  (cv, Var (a >. accepted_value));
-                                                ];
-                                            };
-                                      };
-                                    Assign
-                                      ( p >. promise_responses,
-                                        plus
-                                          (Var (p >. promise_responses))
-                                          (Set [Var a]) );
-                                    Comment
-                                      ( Some proposers,
-                                        "if a has already accepted something",
+                  ] );
+            Forall
+              ( a,
+                acceptors,
+                Seq
+                  [
+                    Assign (a >. highest_proposal, Tuple (Int 0, Int 0));
+                    Assign (a >. accepted_proposal, Tuple (Int 0, Int 0));
+                    Assign (a >. accepted_value, Int 0);
+                  ] );
+            Forall
+              ( p,
+                proposers,
+                Par
+                  [
+                    Seq
+                      [
+                        Assign
+                          (p >. proposal, plus (Var (p >. proposal)) (Int 1));
+                        Forall
+                          ( a,
+                            acceptors,
+                            Seq
+                              [
+                                Send
+                                  {
+                                    from = p;
+                                    to_ = a;
+                                    msg =
+                                      Message
+                                        {
+                                          typ = "prepare";
+                                          args =
+                                            [
+                                              ( n,
+                                                Tuple
+                                                  (Var p, Var (p >. proposal))
+                                              );
+                                            ];
+                                        };
+                                  };
+                                Imply
+                                  ( gt (Var n) (Var (a >. highest_proposal)),
+                                    Seq
+                                      [
+                                        Assign (a >. highest_proposal, Var n);
+                                        Send
+                                          {
+                                            from = a;
+                                            to_ = p;
+                                            msg =
+                                              Message
+                                                {
+                                                  typ = "promise";
+                                                  args =
+                                                    [
+                                                      ( cp,
+                                                        Var
+                                                          (a
+                                                         >. accepted_proposal)
+                                                      );
+                                                      ( cv,
+                                                        Var (a >. accepted_value)
+                                                      );
+                                                    ];
+                                                };
+                                          };
+                                        Assign
+                                          ( p >. promise_responses,
+                                            plus
+                                              (Var (p >. promise_responses))
+                                              (Set [Var a]) );
+                                        Comment
+                                          ( Some proposers,
+                                            "if a has already accepted \
+                                             something",
+                                            Imply
+                                              ( and_
+                                                  (gt (Var cp)
+                                                     (Tuple (Int 0, Int 0)))
+                                                  (gt (Var cp) (Var (p >. cp))),
+                                                Seq
+                                                  [
+                                                    Assign (p >. cp, Var cp);
+                                                    Assign (p >. value, Var cv);
+                                                  ] ) );
+                                      ] );
+                              ] );
+                      ];
+                    Comment
+                      ( Some proposers,
+                        {|doesn't continue replying with accepts if others outside this set reply|},
+                        BlockingImply
+                          ( gt
+                              (App ("size", [Var (p >. promise_responses)]))
+                              (Var (p >. majority)),
+                            Comment
+                              ( Some proposers,
+                                "it's sufficient to reply to the majority \
+                                 subset",
+                                Forall
+                                  ( a1,
+                                    p >. promise_responses,
+                                    Seq
+                                      [
+                                        Send
+                                          {
+                                            from = p;
+                                            to_ = a1;
+                                            msg =
+                                              Message
+                                                {
+                                                  typ = "propose";
+                                                  args =
+                                                    [
+                                                      (pn, Var (p >. proposal));
+                                                      (pv, Var (p >. value));
+                                                    ];
+                                                };
+                                          };
                                         Imply
-                                          ( and_
-                                              (gt (Var cp)
-                                                 (Tuple (Int 0, Int 0)))
-                                              (gt (Var cp) (Var (p >. cp))),
+                                          ( eq (Var pn)
+                                              (Var (a1 >. highest_proposal)),
                                             Seq
                                               [
-                                                Assign (p >. cp, Var cp);
-                                                Assign (p >. value, Var cv);
-                                              ] ) );
-                                  ] );
-                          ] );
-                  ];
-                Comment
-                  ( Some proposers,
-                    {|doesn't continue replying with accepts if others outside this set reply|},
-                    BlockingImply
-                      ( gt
-                          (App ("size", [Var (p >. promise_responses)]))
-                          (Var (p >. majority)),
-                        Comment
-                          ( Some proposers,
-                            "it's sufficient to reply to the majority subset",
-                            Forall
-                              ( a1,
-                                p >. promise_responses,
-                                Seq
-                                  [
-                                    Send
-                                      {
-                                        from = p;
-                                        to_ = a1;
-                                        msg =
-                                          Message
-                                            {
-                                              typ = "propose";
-                                              args =
-                                                [
-                                                  (pn, Var (p >. proposal));
-                                                  (pv, Var (p >. value));
-                                                ];
-                                            };
-                                      };
-                                    Imply
-                                      ( eq (Var pn)
-                                          (Var (a1 >. highest_proposal)),
-                                        Seq
-                                          [
-                                            Assign
-                                              (a1 >. accepted_proposal, Var pn);
-                                            Assign (a1 >. accepted_value, Var pv);
-                                            Send
-                                              {
-                                                from = a1;
-                                                to_ = p;
-                                                msg = msg "accept";
-                                              };
-                                            Forall
-                                              ( l,
-                                                learners,
+                                                Assign
+                                                  ( a1 >. accepted_proposal,
+                                                    Var pn );
+                                                Assign
+                                                  (a1 >. accepted_value, Var pv);
                                                 Send
                                                   {
                                                     from = a1;
-                                                    to_ = l;
+                                                    to_ = p;
                                                     msg = msg "accept";
-                                                  } );
-                                          ] );
-                                  ] ) ) ) );
-              ] ) )
+                                                  };
+                                                Forall
+                                                  ( l,
+                                                    learners,
+                                                    Send
+                                                      {
+                                                        from = a1;
+                                                        to_ = l;
+                                                        msg = msg "accept";
+                                                      } );
+                                              ] );
+                                      ] ) ) ) );
+                  ] );
+          ] )
 end
 
 let snapshot_protocol name env pr =
@@ -1077,7 +1149,8 @@ let snapshot_protocol name env pr =
     |> String.concat "\n--\n"
   in
   let inf =
-    infer_parties env pr |> ignore;
+    (* TODO toggle this on *)
+    (* infer_parties env pr |> ignore; *)
     (* let inf = infer_parties env pr in *)
     (* p_env inf *)
     "<inferred parties>"
@@ -1103,73 +1176,23 @@ let hello () =
           Tracing.exit ();
           exit 0)) *)
   Tracing.wrap (fun () ->
-      print_endline "abccc";
+      (* print_endline "abccc"; *)
       (* snapshot_protocol "test" Test.env Test.protocol *)
       snapshot_protocol "paxos" Paxos.env Paxos.protocol)
 
-let%expect_test "2pc" =
-  snapshot_protocol "2pc" Tpc.env Tpc.protocol;
+let%expect_test "bully" =
+  snapshot_protocol "bully" Bully.env Bully.protocol;
   [%expect
     {|
     protocol:
 
-    forall c:C.
-      (forall p:P.
-         (c->p: prepare;
-          // participant's internal choice
-          // coordinator's external choice
-          (p->c: prepared;
-           responded = responded + {p})
-          \/
-          (p->c: abort;
-           aborted = aborted + {p}));
-       aborted == {} =>*
-         forall p:P.
-           (c->p: commit;
-            p->c: commit_ack)
-       \/
-       forall p:P.
-         (c->p: abort;
-          p->c: abort_ack))
+    ()
 
     ---
 
     projections:
 
-    projection of C
-    C has initiative
 
-    (forall p:P.
-       (*self->p: prepare;
-        // coordinator's external choice
-        (p->self*: prepared;
-         responded = responded + {p})
-        \/
-        (p->self*: abort;
-         aborted = aborted + {p}));
-     aborted == {} =>*
-       forall p:P.
-         (*self->p: commit;
-          p->self*: commit_ack)
-     \/
-     forall p:P.
-       (*self->p: abort;
-        p->self*: abort_ack))
-    --
-    projection of P
-    P does not have initiative
-
-    forall c:C.
-      ((c->self*: prepare;
-        // participant's internal choice
-        (*self->c: prepared)
-        \/
-        (*self->c: abort));
-       (c->self*: commit;
-        *self->c: commit_ack)
-       \/
-       (c->self*: abort;
-        *self->c: abort_ack))
     <inferred parties>
   |}]
 
@@ -1180,37 +1203,40 @@ let%expect_test "paxos" =
     protocol:
 
     // all currently-competing proposers
-    forall p:P.
-      ((p.proposal = p.proposal + 1;
+    (forall p:P.
+       (p.proposal = 0;
         p.value = external();
         p.cp = <0, 0>;
         p.majority = size(A) / 2 + 1;
-        p.promise_responses = {};
-        forall a:A.
-          (a.highest_proposal = <0, 0>;
-           a.accepted_proposal = <0, 0>;
-           a.accepted_value = 0;
-           p->a: prepare(n=<p, p.proposal>);
-           n > a.highest_proposal =>
-             (a.highest_proposal = n;
-              a->p: promise(cp=a.accepted_proposal, cv=a.accepted_value);
-              p.promise_responses = p.promise_responses + {a};
-              // if a has already accepted something
-              cp > <0, 0> & cp > p.cp =>
-                (p.cp = cp;
-                 p.value = cv)))))
-      *
-      (// doesn't continue replying with accepts if others outside this set reply
-       size(p.promise_responses) > p.majority =>*
-         // it's sufficient to reply to the majority subset
-         forall a1:p.promise_responses.
-           (p->a1: propose(pn=p.proposal, pv=p.value);
-            pn == a1.highest_proposal =>
-              (a1.accepted_proposal = pn;
-               a1.accepted_value = pv;
-               a1->p: accept;
-               forall l:L.
-                 a1->l: accept)))
+        p.promise_responses = {});
+     forall a:A.
+       (a.highest_proposal = <0, 0>;
+        a.accepted_proposal = <0, 0>;
+        a.accepted_value = 0);
+     forall p:P.
+       ((p.proposal = p.proposal + 1;
+         forall a:A.
+           (p->a: prepare(n=<p, p.proposal>);
+            n > a.highest_proposal =>
+              (a.highest_proposal = n;
+               a->p: promise(cp=a.accepted_proposal, cv=a.accepted_value);
+               p.promise_responses = p.promise_responses + {a};
+               // if a has already accepted something
+               cp > <0, 0> & cp > p.cp =>
+                 (p.cp = cp;
+                  p.value = cv)))))
+       *
+       (// doesn't continue replying with accepts if others outside this set reply
+        size(p.promise_responses) > p.majority =>*
+          // it's sufficient to reply to the majority subset
+          forall a1:p.promise_responses.
+            (p->a1: propose(pn=p.proposal, pv=p.value);
+             pn == a1.highest_proposal =>
+               (a1.accepted_proposal = pn;
+                a1.accepted_value = pv;
+                a1->p: accept;
+                forall l:L.
+                  a1->l: accept))))
 
     ---
 
@@ -1219,51 +1245,53 @@ let%expect_test "paxos" =
     projection of P
     P has initiative
 
-    ((p.proposal = p.proposal + 1;
+    ((p.proposal = 0;
       p.value = external();
       p.cp = <0, 0>;
       p.majority = size(A) / 2 + 1;
-      p.promise_responses = {};
-      forall a:A.
-        (*self->a: prepare(<p, p.proposal>);
-         (a->self*: promise(cp, cv);
-          p.promise_responses = p.promise_responses + {a};
-          // if a has already accepted something
-          cp > <0, 0> & cp > p.cp =>
-            (p.cp = cp;
-             p.value = cv))))) *
-    (// doesn't continue replying with accepts if others outside this set reply
-     size(p.promise_responses) > p.majority =>*
-       // it's sufficient to reply to the majority subset
-       forall a1:p.promise_responses.
-         (*self->a1: propose(p.proposal, p.value);
-          (a1->self*: accept)))
+      p.promise_responses = {});
+     ((p.proposal = p.proposal + 1;
+       forall a:A.
+         (*self->a: prepare(<p, p.proposal>);
+          (a->self*: promise(cp, cv);
+           p.promise_responses = p.promise_responses + {a};
+           // if a has already accepted something
+           cp > <0, 0> & cp > p.cp =>
+             (p.cp = cp;
+              p.value = cv)))))
+     *
+     (// doesn't continue replying with accepts if others outside this set reply
+      size(p.promise_responses) > p.majority =>*
+        // it's sufficient to reply to the majority subset
+        forall a1:p.promise_responses.
+          (*self->a1: propose(p.proposal, p.value);
+           (a1->self*: accept))))
     --
     projection of L
     L does not have initiative
 
-    forall p:P.
-      (forall a1:p.promise_responses.
-         ((a1->self*: accept)))
+    (forall p:P.
+       (forall a1:p.promise_responses.
+          ((a1->self*: accept))))
     --
     projection of A
     A has initiative
 
-    forall p:P.
-      (((a.highest_proposal = <0, 0>;
-         a.accepted_proposal = <0, 0>;
-         a.accepted_value = 0;
-         p->self*: prepare(n);
-         n > a.highest_proposal =>
-           (a.highest_proposal = n;
-            *self->p: promise(a.accepted_proposal, a.accepted_value)))))
-      *
-      ((p->self*: propose(pn, pv);
-        pn == a1.highest_proposal =>
-          (a1.accepted_proposal = pn;
-           a1.accepted_value = pv;
-           *self->p: accept;
-           forall l:L.
-             *self->l: accept)))
+    ((a.highest_proposal = <0, 0>;
+      a.accepted_proposal = <0, 0>;
+      a.accepted_value = 0);
+     forall p:P.
+       (((p->self*: prepare(n);
+          n > a.highest_proposal =>
+            (a.highest_proposal = n;
+             *self->p: promise(a.accepted_proposal, a.accepted_value)))))
+       *
+       ((p->self*: propose(pn, pv);
+         pn == a1.highest_proposal =>
+           (a1.accepted_proposal = pn;
+            a1.accepted_value = pv;
+            *self->p: accept;
+            forall l:L.
+              *self->l: accept))))
     <inferred parties>
   |}]
