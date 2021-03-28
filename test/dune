@@ -1,0 +1,8 @@
+;(mdx
+; (files test.md))
+
+;(cram
+; (deps ../protocol.exe))
+
+(cram
+ (deps %{bin:protocol}))

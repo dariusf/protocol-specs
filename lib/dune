@@ -3,4 +3,12 @@
  (libraries pprint containers ppx_debug)
  (inline_tests)
  (preprocess
-  (pps ppx_debug ppx_expect ppx_deriving.show ppx_deriving.ord ppx_deriving.eq)))
+  (pps ppx_debug ppx_expect ppx_deriving.show ppx_deriving.ord
+    ppx_deriving.eq)))
+
+(menhir
+ (modules parser)
+ ;(flags --unused-tokens)
+ )
+
+(ocamllex lexer)

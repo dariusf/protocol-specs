@@ -1,190 +1,6 @@
 open Containers
 module Tracing = Ppx_debug.Tracing
-
-type party = Party of string [@@deriving ord, eq]
-
-let pp_party fmt (Party p) = Format.fprintf fmt "%s" p
-
-type var = V of party option * string [@@deriving ord, eq]
-
-let pp_var fmt (V (p, var)) =
-  match p with
-  | Some p -> Format.fprintf fmt "%a.%s" pp_party p var
-  | None -> Format.fprintf fmt "%s" var
-
-let var s = V (None, s)
-
-(* let ( >. ) (V (_, c)) s = V (Some (Party c), s)  *)
-
-let ( >. ) (V (_, c)) (V (_, s)) = V (Some (Party c), s)
-
-let var_name (V (_, v)) = v
-
-let var_names vars = List.map var_name vars
-
-let pp_const s fmt () = Format.fprintf fmt "%s" s
-
-module VMap = struct
-  module M = Map.Make (struct
-    type t = var
-
-    let compare = compare_var
-  end)
-
-  include M
-
-  let pp e fmt map =
-    Format.fprintf fmt "%a"
-      (M.pp ~pp_start:(pp_const "{") ~pp_stop:(pp_const "}") pp_var e)
-      map
-end
-
-module SMap = struct
-  module M = Map.Make (String)
-  include M
-
-  let pp e fmt map =
-    Format.fprintf fmt "%a"
-      (M.pp ~pp_start:(pp_const "{") ~pp_stop:(pp_const "}") String.pp e)
-      map
-end
-
-module IMap = struct
-  module M = Map.Make (Int)
-  include M
-
-  let pp e fmt map =
-    Format.fprintf fmt "%a"
-      (M.pp ~pp_start:(pp_const "{") ~pp_stop:(pp_const "}") Int.pp e)
-      map
-end
-
-type expr =
-  | Int of int
-  | Bool of bool
-  | Set of expr list
-  | App of string * expr list
-  | Var of var
-  | Tuple of expr * expr
-[@@deriving eq]
-
-let plus a b = App ("+", [a; b])
-
-let eq a b = App ("==", [a; b])
-
-let geq a b = App (">=", [a; b])
-
-let gt a b = App (">", [a; b])
-
-let and_ a b = App ("&", [a; b])
-
-let or_ a b = App ("|", [a; b])
-
-let rec pp_expr fmt e =
-  let open Format in
-  match e with
-  | Int i -> fprintf fmt "%d" i
-  | Bool b -> fprintf fmt "%b" b
-  | App (name, es) ->
-    if List.length es = 2 then
-      fprintf fmt "@[%a@ %s@ %a@]" pp_expr (List.nth es 0) name pp_expr
-        (List.nth es 1)
-    else
-      fprintf fmt "%s(%a)" name (List.pp pp_expr) es
-  | Var v -> pp_var fmt v
-  | Set s -> fprintf fmt "{%a}" (List.pp pp_expr) s
-  | Tuple (a, b) -> fprintf fmt "<%a, %a>" pp_expr a pp_expr b
-
-type msg =
-  | Message of {
-      typ : string;
-      args : (var * expr) list;
-    }
-[@@deriving eq]
-
-type msg_destruct =
-  | MessageD of {
-      typ : string;
-      args : var list;
-    }
-[@@deriving eq]
-
-type msg_construct =
-  | MessageC of {
-      typ : string;
-      args : expr list;
-    }
-[@@deriving eq]
-
-let msg name = Message { typ = name; args = [] }
-
-let msg_destruct (Message { typ; args }) =
-  MessageD { typ; args = List.map fst args }
-
-let msg_construct (Message { typ; args }) =
-  MessageC { typ; args = List.map snd args }
-
-let pp_msg fmt (Message { typ; args }) =
-  Format.fprintf fmt "%s%s" typ
-    (match args with
-    | [] -> ""
-    | _ ->
-      args
-      |> List.map (fun (k, v) -> Format.sprintf "%a=%a" pp_var k pp_expr v)
-      |> String.concat ", "
-      |> fun a -> "(" ^ a ^ ")")
-
-let pp_msg_construct fmt (MessageC { typ; args }) =
-  Format.fprintf fmt "%s%s" typ
-    (match args with
-    | [] -> ""
-    | _ ->
-      args
-      |> List.map (fun v -> Format.sprintf "%a" pp_expr v)
-      |> String.concat ", "
-      |> fun a -> "(" ^ a ^ ")")
-
-let pp_msg_destruct fmt (MessageD { typ; args }) =
-  Format.fprintf fmt "%s%s" typ
-    (match args with
-    | [] -> ""
-    | _ ->
-      args
-      |> List.map (fun k -> Format.sprintf "%a" pp_var k)
-      |> String.concat ", "
-      |> fun a -> "(" ^ a ^ ")")
-
-type protocol =
-  | Emp
-  | Seq of protocol list
-  | Par of protocol list
-  | Disj of protocol * protocol
-  | Send of {
-      from : var;
-      to_ : var;
-      msg : msg;
-    }
-  | Assign of var * expr
-  | Imply of expr * protocol
-  | BlockingImply of expr * protocol
-  (* TODO use bindlib? *)
-  | Forall of var * var * protocol
-  | Exists of var * var * protocol
-  (* extras *)
-  | SendOnly of {
-      from : var;
-      to_ : var;
-      msg : msg_construct;
-    }
-  | ReceiveOnly of {
-      from : var;
-      to_ : var;
-      msg : msg_destruct;
-    }
-  (* cst *)
-  | Comment of var option * string * protocol
-(* cst would have parens too *)
-[@@deriving eq]
+open Ast
 
 let rec pp_protocol fmt p =
   let open Format in
@@ -226,6 +42,107 @@ let rec pp_protocol fmt p =
       pp_protocol p
   | Comment (_, s, p) -> fprintf fmt "@[<v 0>// %s@,%a@]" s pp_protocol p
 
+(** https://hackage.haskell.org/package/base-4.14.1.0/docs/src/Data.Foldable.html#foldr1 *)
+let foldr1 f xs =
+  List.fold_right
+    (fun c t -> match t with None -> Some c | Some d -> Some (f c d))
+    xs None
+  |> Option.get_exn
+
+let rec render_protocol p =
+  let open PPrint in
+  let indent d = blank 2 ^^ nest 2 d in
+  let (arrow, disj, par, if_, when_, in_, forall, exists) =
+    ( string "->",
+      string "\\/",
+      string "||",
+      string "=>",
+      string "=>*",
+      string "in",
+      string "forall",
+      string "exists" )
+  in
+  let spaced d = terminate space d in
+  let nl = break 1 in
+  let render_var (V (p, v)) =
+    match p with
+    | None -> string v
+    | Some (Party p) -> concat [string p; dot; string v]
+  in
+  let rec render_expr e =
+    match e with
+    | Int i -> string (string_of_int i)
+    | Bool b -> string (string_of_bool b)
+    | Set es -> braces (List.map render_expr es |> separate (spaced comma))
+    | List es -> brackets (List.map render_expr es |> separate (spaced comma))
+    | Map es ->
+      braces
+        (List.map
+           (fun (k, v) -> concat [string k; spaced colon; render_expr v])
+           es
+        |> separate (spaced comma))
+    | App (f, args) ->
+      precede (string f)
+        (parens (List.map render_expr args |> separate (spaced comma)))
+    | Var v -> render_var v
+    | Tuple (_, _) -> failwith "tuples"
+  in
+  match p with
+  | Emp -> failwith "emp?"
+  | Seq ps ->
+    (* foldr1 (fun c t -> c ^^ char ';' ^/^ t) (List.map render_protocol ps) *)
+    separate (semi ^^ nl) (List.map render_protocol ps)
+  | Par ps ->
+    separate
+      (nl ^^ par ^^ nl)
+      (ps |> List.map render_protocol |> List.map indent)
+  | Disj (a, b) ->
+    separate
+      (nl ^^ disj ^^ nl)
+      ([a; b] |> List.map render_protocol |> List.map indent)
+  | Send { from; to_; msg = Message { typ; args } } ->
+    concat
+      [
+        render_var from; arrow; render_var to_; colon; space; string typ;
+        parens
+          (separate (spaced comma)
+             (List.map
+                (fun (v, e) -> concat [render_var v; equals; render_expr e])
+                args));
+      ]
+  | Assign (v, e) -> separate space [render_var v; equals; render_expr e]
+  | Imply (b, p) ->
+    nest 2 (concat [render_expr b; space; if_; nl; render_protocol p])
+  | BlockingImply (b, p) ->
+    nest 2 (concat [render_expr b; space; when_; nl; render_protocol p])
+  | Forall (v, s, p) ->
+    nest 2
+      (concat
+         [
+           forall; space; render_var v; space; in_; space; render_var s; dot;
+           nl; render_protocol p;
+         ])
+  | Exists (v, s, p) ->
+    nest 2
+      (concat
+         [
+           exists; space; render_var v; space; in_; render_var s; dot; nl;
+           render_protocol p;
+         ])
+  | SendOnly { from; to_; msg = MessageC { typ; args } } ->
+    concat
+      [
+        star; render_var from; arrow; render_var to_; colon; space; string typ;
+        parens (separate (spaced comma) (List.map render_expr args));
+      ]
+  | ReceiveOnly { from; to_; msg = MessageD { typ; args } } ->
+    concat
+      [
+        render_var from; arrow; render_var to_; star; colon; space; string typ;
+        parens (separate (spaced comma) (List.map render_var args));
+      ]
+  | Comment (_, _, _) -> failwith "comment"
+
 (* | If (c, co, a) ->
    fprintf fmt
      "@[<v 0>if (%a) {@;<0 2>@[<v 0>%a@]@,} else {@;<0 2>@[<v 0>%a@]@,}@]"
@@ -252,6 +169,8 @@ let rec eval_expr env e =
   match e with
   | Int _ | Bool _ -> e
   | Set s -> Set (s |> List.map (eval_expr env))
+  | List s -> List (s |> List.map (eval_expr env))
+  | Map s -> Map (List.map (fun (a, b) -> (a, eval_expr env b)) s)
   | Tuple (a, b) -> Tuple (eval_expr env a, eval_expr env b)
   | App (name, args) ->
     begin
@@ -307,10 +226,17 @@ let rec pairwise_foldr1 f xs =
   | [] | [_] -> xs
   | a :: b :: xs1 -> f a b (pairwise_foldr1 f (b :: xs1))
 
-(** caller should return a or info derived from it *)
+(** caller should return the left arg or info derived from it *)
 let adj_concat_map f xs =
   let rec aux xs =
     match xs with [] | [_] -> [xs] | a :: b :: xs1 -> f a b :: aux (b :: xs1)
+  in
+  aux xs |> List.concat
+
+(** each element is processed exactly once, like map. f has to produce information summarising both elements *)
+let map_pairs f xs =
+  let rec aux xs =
+    match xs with [] | [_] -> [xs] | a :: b :: xs1 -> f a b :: aux xs1
   in
   aux xs |> List.concat
 
@@ -328,21 +254,21 @@ let rec normalize_once p =
   | Seq s ->
     let s = s |> List.map normalize_once |> List.filter useful in
     let s =
-      adj_concat_map
+      map_pairs
         (fun a b ->
-          match (a, b) with (Seq a1, Seq b1) -> [Seq (a1 @ b1)] | _ -> [a])
+          match (a, b) with (Seq a1, Seq b1) -> [Seq (a1 @ b1)] | _ -> [a; b])
         s
     in
-    Seq s
+    Seq (s |> List.concat_map (fun p -> match p with Seq ps -> ps | _ -> [p]))
   | Par s ->
     let s = s |> List.map normalize_once |> List.filter useful in
     let s =
-      adj_concat_map
+      map_pairs
         (fun a b ->
-          match (a, b) with (Par a1, Par b1) -> [Par (a1 @ b1)] | _ -> [a])
+          match (a, b) with (Par a1, Par b1) -> [Par (a1 @ b1)] | _ -> [a; b])
         s
     in
-    Par s
+    Par (s |> List.concat_map (fun p -> match p with Par ps -> ps | _ -> [p]))
   | Disj (a, b) ->
     begin
       match (a, b) with
@@ -366,6 +292,7 @@ let rec normalize_once p =
 
 let rec normalize p =
   let p1 = normalize_once p in
+  (* print_endline "normalize"; *)
   if equal_protocol p p1 then
     p1
   else
@@ -515,7 +442,8 @@ let rec vars_in e =
   match e with
   | Int _ | Bool _ -> []
   | Var v -> [v]
-  | App (_, s) | Set s -> List.concat_map vars_in s
+  | App (_, s) | Set s | List s -> List.concat_map vars_in s
+  | Map s -> List.concat_map vars_in (List.map snd s)
   | Tuple (a, b) -> List.concat_map vars_in [a; b]
 
 (* let infer_parties env p = *)
@@ -1149,7 +1077,7 @@ let snapshot_protocol name env pr =
     |> String.concat "\n--\n"
   in
   let inf =
-    (* TODO toggle this on *)
+    (* TODO toggle this *)
     (* infer_parties env pr |> ignore; *)
     (* let inf = infer_parties env pr in *)
     (* p_env inf *)
@@ -1166,7 +1094,7 @@ let snapshot_protocol name env pr =
   snapshot_protocol "test" Test.env Test.protocol;
   [%expect {| |}] *)
 
-let hello () =
+let print file =
   (* at_exit (fun () ->
       ); *)
   (* Sys.set_signal Sys.sigint
@@ -1175,10 +1103,40 @@ let hello () =
           print_endline "exit";
           Tracing.exit ();
           exit 0)) *)
-  Tracing.wrap (fun () ->
-      (* print_endline "abccc"; *)
-      (* snapshot_protocol "test" Test.env Test.protocol *)
-      snapshot_protocol "paxos" Paxos.env Paxos.protocol)
+  (* Ex.hello () *)
+  (* let file = "sample.txt" in *)
+  Containers.IO.with_in file (fun ic ->
+      (* stdin *)
+      let lexer = Lexing.from_channel ~with_positions:true ic in
+      (* 4.11 *)
+      (* Lexing.set_filename lexer file; *)
+      try
+        let p = lexer |> Parser.p Parsing.f in
+        p
+        (* |> eval |> string_of_int *)
+        (* |> Exp.show *)
+        (* |> Format.sprintf "%a" pp_protocol |> print_endline *)
+        |> render_protocol
+        |> PPrint.ToChannel.pretty 0.8 120 stdout;
+        print_endline "\n---";
+        p |> normalize |> render_protocol
+        |> PPrint.ToChannel.pretty 0.8 120 stdout;
+        print_endline "\n---";
+        p |> normalize |> show_protocol |> print_endline;
+        print_endline ""
+      with Parser.Error ->
+        (* with e -> *)
+        let pos = lexer.Lexing.lex_curr_p in
+        let tok = Lexing.lexeme lexer in
+        (* (Printexc.to_string e) *)
+        Format.printf "parse error near \"%s\", %s, line %d, col %d@." tok
+          pos.pos_fname pos.pos_lnum
+          (pos.pos_cnum - pos.pos_bol))
+
+(* Tracing.wrap (fun () ->
+    (* print_endline "abccc"; *)
+    (* snapshot_protocol "test" Test.env Test.protocol *)
+    snapshot_protocol "paxos" Paxos.env Paxos.protocol) *)
 
 let%expect_test "bully" =
   snapshot_protocol "bully" Bully.env Bully.protocol;
@@ -1245,46 +1203,46 @@ let%expect_test "paxos" =
     projection of P
     P has initiative
 
-    ((p.proposal = 0;
-      p.value = external();
-      p.cp = <0, 0>;
-      p.majority = size(A) / 2 + 1;
-      p.promise_responses = {});
+    (p.proposal = 0;
+     p.value = external();
+     p.cp = <0, 0>;
+     p.majority = size(A) / 2 + 1;
+     p.promise_responses = {};
      ((p.proposal = p.proposal + 1;
        forall a:A.
          (*self->a: prepare(<p, p.proposal>);
-          (a->self*: promise(cp, cv);
-           p.promise_responses = p.promise_responses + {a};
-           // if a has already accepted something
-           cp > <0, 0> & cp > p.cp =>
-             (p.cp = cp;
-              p.value = cv)))))
+          a->self*: promise(cp, cv);
+          p.promise_responses = p.promise_responses + {a};
+          // if a has already accepted something
+          cp > <0, 0> & cp > p.cp =>
+            (p.cp = cp;
+             p.value = cv))))
      *
      (// doesn't continue replying with accepts if others outside this set reply
       size(p.promise_responses) > p.majority =>*
         // it's sufficient to reply to the majority subset
         forall a1:p.promise_responses.
           (*self->a1: propose(p.proposal, p.value);
-           (a1->self*: accept))))
+           a1->self*: accept)))
     --
     projection of L
     L does not have initiative
 
     (forall p:P.
        (forall a1:p.promise_responses.
-          ((a1->self*: accept))))
+          (a1->self*: accept)))
     --
     projection of A
     A has initiative
 
-    ((a.highest_proposal = <0, 0>;
-      a.accepted_proposal = <0, 0>;
-      a.accepted_value = 0);
+    (a.highest_proposal = <0, 0>;
+     a.accepted_proposal = <0, 0>;
+     a.accepted_value = 0;
      forall p:P.
-       (((p->self*: prepare(n);
-          n > a.highest_proposal =>
-            (a.highest_proposal = n;
-             *self->p: promise(a.accepted_proposal, a.accepted_value)))))
+       ((p->self*: prepare(n);
+         n > a.highest_proposal =>
+           (a.highest_proposal = n;
+            *self->p: promise(a.accepted_proposal, a.accepted_value))))
        *
        ((p->self*: propose(pn, pv);
          pn == a1.highest_proposal =>

@@ -1,0 +1,8 @@
+(executable
+ (name protocol)
+ (public_name protocol)
+ (libraries lib cmdliner))
+
+;(install
+;(section bin)
+;(files (protocol.exe as protocol)))

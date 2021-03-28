@@ -1,3 +1,0 @@
-(executable
- (name app)
- (libraries lib))
