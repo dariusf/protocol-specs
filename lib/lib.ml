@@ -82,8 +82,14 @@ let rec render_protocol p =
            es
         |> separate (spaced comma))
     | App (f, args) ->
-      precede (string f)
-        (parens (List.map render_expr args |> separate (spaced comma)))
+      if List.length args = 2 then
+        parens
+          (separate
+             (enclose space space (string f))
+             (List.map render_expr args))
+      else
+        precede (string f)
+          (parens (List.map render_expr args |> separate (spaced comma)))
     | Var v -> render_var v
     | Tuple (_, _) -> failwith "tuples"
   in
