@@ -69,7 +69,23 @@ let rec render_protocol p =
     | None -> string v
     | Some (Party p) -> concat [string p; dot; string v]
   in
-  let rec render_expr e =
+  let is_alpha = function 'a' .. 'z' | 'A' .. 'Z' -> true | _ -> false in
+  (* this should be kept in sync with the parser *)
+  let get_prec op =
+    match op with
+    | "==" -> 5
+    | "<" | "<=" | ">" | ">=" -> 6
+    | "+" | "-" -> 7
+    | "/" | "*" -> 8
+    | "&" | "|" -> 9
+    | "!" -> 10
+    | _ -> 0
+  in
+  let get_assoc _ = `Left in
+  (* prec is the precedence of the context, so we make sure to
+     parenthesize when passing an expression with lower precedence into one with higher precedence. see https://stackoverflow.com/a/43639618. starting with 0 means we
+     never parenthesize at the top level. *)
+  let rec render_expr ?(prec = 0) e =
     match e with
     | Int i -> string (string_of_int i)
     | Bool b -> string (string_of_bool b)
@@ -82,11 +98,22 @@ let rec render_protocol p =
            es
         |> separate (spaced comma))
     | App (f, args) ->
-      if List.length args = 2 then
+      if List.length args = 2 && not (is_alpha f.[0]) then
+        let n = get_prec f in
+        let[@warning "-8"] [left; right] = args in
+        let (leftp, rightp) =
+          match get_assoc f with `Left -> (n, n + 1) | `Right -> (n + 1, n)
+        in
+        let parens =
+          if prec > n then
+            parens
+          else
+            Fun.id
+        in
         parens
           (separate
              (enclose space space (string f))
-             (List.map render_expr args))
+             [render_expr ~prec:leftp left; render_expr ~prec:rightp right])
       else
         precede (string f)
           (parens (List.map render_expr args |> separate (spaced comma)))

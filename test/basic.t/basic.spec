@@ -16,3 +16,5 @@
   1 => a.b = 1; b.c = 2
 ||
   forall a in b a.b = 1; c.a = 2 \/ a.a = 1
+||
+  a.a = (a & (b | c))

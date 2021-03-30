@@ -72,7 +72,7 @@ type expr =
   | App of string * expr list
   | Var of var
   | Tuple of expr * expr
-[@@deriving eq]
+[@@deriving eq, show]
 
 let plus a b = App ("+", [a; b])
 
