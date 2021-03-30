@@ -1,5 +1,6 @@
 {
 open Parser
+exception SyntaxError
 }
 
 let digit = ['0'-'9']
@@ -53,6 +54,7 @@ rule f = parse
   | "[" { LBRACKET }
   | "]" { RBRACKET }
   | "//" { comments lexbuf }
+  | _ { raise SyntaxError }
   | eof { EOF }
 
 and comments = parse

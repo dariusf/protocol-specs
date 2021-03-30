@@ -1090,48 +1090,23 @@ let snapshot_protocol name env pr =
   IO.File.(write_exn (make ("/tmp/" ^ name ^ ".txt")) s);
   print_endline s
 
-(* let%expect_test "test" =
-  snapshot_protocol "test" Test.env Test.protocol;
-  [%expect {| |}] *)
-
 let print file =
-  (* at_exit (fun () ->
-      ); *)
-  (* Sys.set_signal Sys.sigint
-     (Sys.Signal_handle
-        (fun _signum ->
-          print_endline "exit";
-          Tracing.exit ();
-          exit 0)) *)
-  (* Ex.hello () *)
-  (* let file = "sample.txt" in *)
-  Containers.IO.with_in file (fun ic ->
-      (* stdin *)
-      let lexer = Lexing.from_channel ~with_positions:true ic in
-      (* 4.11 *)
-      (* Lexing.set_filename lexer file; *)
-      try
-        let p = lexer |> Parser.p Parsing.f in
-        p
-        (* |> eval |> string_of_int *)
-        (* |> Exp.show *)
-        (* |> Format.sprintf "%a" pp_protocol |> print_endline *)
-        |> render_protocol
-        |> PPrint.ToChannel.pretty 0.8 120 stdout;
-        print_endline "\n---";
-        p |> normalize |> render_protocol
-        |> PPrint.ToChannel.pretty 0.8 120 stdout;
-        print_endline "\n---";
-        p |> normalize |> show_protocol |> print_endline;
-        print_endline ""
-      with Parser.Error ->
-        (* with e -> *)
-        let pos = lexer.Lexing.lex_curr_p in
-        let tok = Lexing.lexeme lexer in
-        (* (Printexc.to_string e) *)
-        Format.printf "parse error near \"%s\", %s, line %d, col %d@." tok
-          pos.pos_fname pos.pos_lnum
-          (pos.pos_cnum - pos.pos_bol))
+  let p = Parsing.parse_mono file in
+  (* let p = Parsing.parse_inc file in *)
+  match p with
+  | Ok p ->
+    p
+    (* |> eval |> string_of_int *)
+    (* |> Exp.show *)
+    (* |> Format.sprintf "%a" pp_protocol |> print_endline *)
+    |> render_protocol
+    |> PPrint.ToChannel.pretty 0.8 120 stdout;
+    print_endline "\n---";
+    p |> normalize |> render_protocol |> PPrint.ToChannel.pretty 0.8 120 stdout;
+    print_endline "\n---";
+    p |> normalize |> show_protocol |> print_endline;
+    print_endline ""
+  | Error s -> print_endline s
 
 (* Tracing.wrap (fun () ->
     (* print_endline "abccc"; *)

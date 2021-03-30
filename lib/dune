@@ -1,6 +1,6 @@
 (library
  (name lib)
- (libraries pprint containers ppx_debug)
+ (libraries pprint containers ppx_debug menhirLib)
  (inline_tests)
  (preprocess
   (pps ppx_debug ppx_expect ppx_deriving.show ppx_deriving.ord
@@ -8,7 +8,16 @@
 
 (menhir
  (modules parser)
+ (flags --table)
  ;(flags --unused-tokens)
  )
+
+; (rule
+;  (targets parser_messages.ml)
+;  (deps parser.messages parser.mly)
+;  (action
+;   (with-stdout-to
+;    %{targets}
+;    (run menhir --compile-errors %{deps}))))
 
 (ocamllex lexer)
