@@ -47,15 +47,18 @@ let help_cmd =
   ( Term.(ret (const help $ Arg.man_format $ Term.choice_names $ topic)),
     Term.info "help" ~doc ~exits:Term.default_exits ~man )
 
-let print file =
-  (* print_endline "hello"; *)
-  Lib.print file;
+let print party_specs file =
+  Lib.print party_specs file;
   `Ok ()
 
 let print_cmd =
   let file =
-    let doc = "file" in
-    Arg.(required & pos 0 (some string) None & info [] ~docv:"FILE" ~doc)
+    Arg.(required & pos 0 (some string) None & info [] ~docv:"FILE" ~doc:"file")
+  in
+  let party =
+    Arg.(
+      value
+      & opt_all string [] (info ~docv:"PARTY" ~doc:"party variables" ["party"]))
   in
   let doc = "pretty-prints a specification" in
   let man =
@@ -64,7 +67,7 @@ let print_cmd =
       `Blocks help_secs;
     ]
   in
-  ( Term.(ret (const print $ file)),
+  ( Term.(ret (const print $ party $ file)),
     Term.info "print" ~doc ~exits:Term.default_exits ~man )
 
 let cmds = [print_cmd; help_cmd]

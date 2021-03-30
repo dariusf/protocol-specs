@@ -29,9 +29,9 @@ Simplest possible cram test
         pn == a1.highest_proposal =>
           a1.accepted_proposal = pn;
           a1.accepted_value = pv;
-          a1->p: accept();
+          a1->p: accept;
           forall l in L.
-            a1->l: accept()
+            a1->l: accept
   ---
     forall p in P.
       p.proposal = 0;
@@ -61,9 +61,9 @@ Simplest possible cram test
         pn == a1.highest_proposal =>
           a1.accepted_proposal = pn;
           a1.accepted_value = pv;
-          a1->p: accept();
+          a1->p: accept;
           forall l in L.
-            a1->l: accept()
+            a1->l: accept
   ---
   (Ast.Par
      [(Ast.Forall (p, P,

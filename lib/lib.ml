@@ -137,11 +137,14 @@ let rec render_protocol p =
     concat
       [
         render_var from; arrow; render_var to_; colon; space; string typ;
-        parens
-          (separate (spaced comma)
-             (List.map
-                (fun (v, e) -> concat [render_var v; equals; render_expr e])
-                args));
+        (match args with
+        | [] -> empty
+        | _ ->
+          parens
+            (separate (spaced comma)
+               (List.map
+                  (fun (v, e) -> concat [render_var v; equals; render_expr e])
+                  args)));
       ]
   | Assign (v, e) -> separate space [render_var v; equals; render_expr e]
   | Imply (b, p) ->
@@ -166,13 +169,17 @@ let rec render_protocol p =
     concat
       [
         star; render_var from; arrow; render_var to_; colon; space; string typ;
-        parens (separate (spaced comma) (List.map render_expr args));
+        (match args with
+        | [] -> empty
+        | _ -> parens (separate (spaced comma) (List.map render_expr args)));
       ]
   | ReceiveOnly { from; to_; msg = MessageD { typ; args } } ->
     concat
       [
         render_var from; arrow; render_var to_; star; colon; space; string typ;
-        parens (separate (spaced comma) (List.map render_var args));
+        (match args with
+        | [] -> empty
+        | _ -> parens (separate (spaced comma) (List.map render_var args)));
       ]
   | Comment (_, _, _) -> failwith "comment"
 
@@ -716,22 +723,6 @@ let has_initiative (V (_, party)) p =
   try aux VMap.empty p |> ignore
   with Eval_failure s -> Format.printf "evaluation failed: %s@." s *)
 
-module Bully = struct
-  let nodes = var "N"
-
-  let n = var "n"
-
-  let env =
-    {
-      parties = [];
-      (* [{ repr = nodes; other_sets = []; vars = [n]; owned_vars = [] }]; *)
-      var_info = VMap.empty;
-      var_constraints = IMap.empty;
-    }
-
-  let protocol = Seq []
-end
-
 module Tpc = struct
   (* let coord = Party "coordinator" *)
 
@@ -777,31 +768,25 @@ module Tpc = struct
                 Seq
                   [
                     Send { from = c; to_ = p; msg = msg "prepare" };
-                    Comment
-                      ( Some participants,
-                        "participant's internal choice",
-                        Comment
-                          ( Some coordinator,
-                            "coordinator's external choice",
-                            Disj
-                              ( Seq
-                                  [
-                                    Send
-                                      {
-                                        from = p;
-                                        to_ = c;
-                                        msg = msg "prepared";
-                                      };
-                                    Assign
-                                      ( responded,
-                                        plus (Var responded) (Set [Var p]) );
-                                  ],
-                                Seq
-                                  [
-                                    Send { from = p; to_ = c; msg = msg "abort" };
-                                    Assign
-                                      (aborted, plus (Var aborted) (Set [Var p]));
-                                  ] ) ) );
+                    (* Comment *)
+                    (* ( Some participants,
+                       "participant's internal choice",
+                       Comment
+                         ( Some coordinator,
+                           "coordinator's external choice", *)
+                    Disj
+                      ( Seq
+                          [
+                            Send { from = p; to_ = c; msg = msg "prepared" };
+                            Assign
+                              (responded, plus (Var responded) (Set [Var p]));
+                          ],
+                        Seq
+                          [
+                            Send { from = p; to_ = c; msg = msg "abort" };
+                            Assign (aborted, plus (Var aborted) (Set [Var p]));
+                          ] )
+                    (* ) ) *);
                   ] );
             Disj
               ( BlockingImply
@@ -1123,44 +1108,108 @@ let snapshot_protocol name env pr =
   IO.File.(write_exn (make ("/tmp/" ^ name ^ ".txt")) s);
   print_endline s
 
-let print file =
-  let p = Parsing.parse_mono file in
-  (* let p = Parsing.parse_inc file in *)
-  match p with
-  | Ok p ->
-    p
-    (* |> eval |> string_of_int *)
-    (* |> Exp.show *)
-    (* |> Format.sprintf "%a" pp_protocol |> print_endline *)
-    |> render_protocol
-    |> PPrint.ToChannel.pretty 0.8 120 stdout;
-    print_endline "\n---";
-    p |> normalize |> render_protocol |> PPrint.ToChannel.pretty 0.8 120 stdout;
-    print_endline "\n---";
-    p |> normalize |> show_protocol |> print_endline;
-    print_endline ""
-  | Error s -> print_endline s
+let parse_party_spec s =
+  let parts = String.split ~by:":" s in
+  let[@warning "-8"] [[repr]; vars; owned_vars] =
+    List.map (String.split ~by:",") parts
+  in
+  {
+    repr = var repr;
+    vars = List.map var vars;
+    owned_vars = List.map var owned_vars;
+    other_sets = [];
+  }
+
+let print party_specs file =
+  (* Tpc.protocol |> render_protocol |> PPrint.ToChannel.pretty 0.8 120 stdout; *)
+  match party_specs with
+  | _ :: _ ->
+    let parties = List.map parse_party_spec party_specs in
+    Format.printf "parties %s@." ([%derive.show: party_info list] parties)
+  | [] ->
+    let p = Parsing.parse_mono file in
+    (* let p = Parsing.parse_inc file in *)
+    (match p with
+    | Ok p ->
+      p
+      (* |> eval |> string_of_int *)
+      (* |> Exp.show *)
+      (* |> Format.sprintf "%a" pp_protocol |> print_endline *)
+      |> render_protocol
+      |> PPrint.ToChannel.pretty 0.8 120 stdout;
+      print_endline "\n---";
+      p |> normalize |> render_protocol
+      |> PPrint.ToChannel.pretty 0.8 120 stdout;
+      print_endline "\n---";
+      p |> normalize |> show_protocol |> print_endline;
+      print_endline ""
+    | Error s -> print_endline s)
 
 (* Tracing.wrap (fun () ->
     (* print_endline "abccc"; *)
     (* snapshot_protocol "test" Test.env Test.protocol *)
     snapshot_protocol "paxos" Paxos.env Paxos.protocol) *)
 
-let%expect_test "bully" =
-  snapshot_protocol "bully" Bully.env Bully.protocol;
+let%expect_test "2pc" =
+  snapshot_protocol "2pc" Tpc.env Tpc.protocol;
   [%expect
     {|
     protocol:
 
-    ()
+    forall c:C.
+      (forall p:P.
+         (c->p: prepare;
+          (p->c: prepared;
+           responded = responded + {p})
+          \/
+          (p->c: abort;
+           aborted = aborted + {p}));
+       aborted == {} =>*
+         forall p:P.
+           (c->p: commit;
+            p->c: commit_ack)
+       \/
+       forall p:P.
+         (c->p: abort;
+          p->c: abort_ack))
 
     ---
 
     projections:
 
+    projection of C
+    C has initiative
 
-    <inferred parties>
-  |}]
+    (forall p:P.
+       (*self->p: prepare;
+        (p->self*: prepared;
+         responded = responded + {p})
+        \/
+        (p->self*: abort;
+         aborted = aborted + {p}));
+     aborted == {} =>*
+       forall p:P.
+         (*self->p: commit;
+          p->self*: commit_ack)
+     \/
+     forall p:P.
+       (*self->p: abort;
+        p->self*: abort_ack))
+    --
+    projection of P
+    P does not have initiative
+
+    forall c:C.
+      (c->self*: prepare;
+       (*self->c: prepared)
+       \/
+       (*self->c: abort);
+       (c->self*: commit;
+        *self->c: commit_ack)
+       \/
+       (c->self*: abort;
+        *self->c: abort_ack))
+    <inferred parties> |}]
 
 let%expect_test "paxos" =
   snapshot_protocol "paxos" Paxos.env Paxos.protocol;
