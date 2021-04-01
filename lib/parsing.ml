@@ -1,3 +1,4 @@
+open Containers
 module P = Parser
 
 let show_token t =
@@ -43,41 +44,37 @@ let show_token t =
   | LT -> "<"
 
 let convert_space_to_parens f =
-  let indent = ref [] in
+  let size = 2 in
+  (* this is the number of parens that are open, or the number of spaces / size *)
+  let indent = ref 0 in
   let bof = ref true in
   let rec aux lexbuf =
-    (* Format.printf "---aux@."; *)
     match f lexbuf with
-    | P.SPACE _ when not !bof ->
-      (* print_endline "ignored space"; *)
-      aux lexbuf
+    | P.SPACE _ when not !bof -> aux lexbuf
     | P.SPACE n when !bof ->
-      (* print_endline "space bof"; *)
-      indent := n :: !indent;
+      (* we use absolute indentation here to support indenting infix arguments *)
+      let parens = List.init (n / size) (fun _ -> P.LPAREN) in
+      indent := n / size;
       bof := false;
-      [P.LPAREN]
+      parens
     | P.INDENT n ->
       bof := false;
-      (* Format.printf "indent %d@." n; *)
-      let k = match !indent with [] -> 0 | h :: _ -> h in
-      if n > k then (
-        (* Format.printf "up %s@." ([%derive.show: int list] !indent); *)
-        indent := n :: !indent;
-        [P.LPAREN])
-      else if n < k then (
-        let l1 = List.length !indent in
-        indent := Containers.List.drop_while (fun m -> m > n) !indent;
-        let l2 = List.length !indent in
-        assert (l1 - l2 > 0);
-        (* Format.printf "down %d %s@." (l1 - l2) ([%derive.show: int list] !indent); *)
-        List.init (l1 - l2) (fun _ -> P.RPAREN))
+      let m = n / size in
+      let k = !indent in
+      if m > k then (
+        let parens = List.init (m - k) (fun _ -> P.LPAREN) in
+        indent := m;
+        parens)
+      else if m < k then (
+        indent := m;
+        List.init (k - m) (fun _ -> P.RPAREN))
       else (* equal, nothing to do *)
         aux lexbuf
     | P.EOF ->
       bof := false;
-      (* print_endline "eof"; *)
-      let close = List.map (fun _ -> P.RPAREN) !indent in
-      indent := [];
+      let close = List.init !indent (fun _ -> P.RPAREN) in
+      (* Format.printf "eof %d@." !indent; *)
+      indent := 0;
       close @ [P.EOF]
     | e ->
       (* Format.printf "else %s@." (show_token e); *)
@@ -107,28 +104,28 @@ let echo f lexbuf =
 
 let f = Lexer.f |> convert_space_to_parens |> flatten |> echo
 
-let parse_mono file =
-  Containers.IO.with_in file (fun ic ->
-      (* stdin *)
-      let lexer = Lexing.from_channel ~with_positions:true ic in
-      (* 4.11 *)
-      (* Lexing.set_filename lexer file; *)
-      try Ok (lexer |> Parser.p f) with
-      | Parser.Error ->
-        let pos = lexer.Lexing.lex_curr_p in
-        let tok = Lexing.lexeme lexer in
-        (* (Printexc.to_string e) *)
-        Error
-          (Format.sprintf "parse error near \"%s\", %s, line %d, col %d@." tok
-             pos.pos_fname pos.pos_lnum
-             (pos.pos_cnum - pos.pos_bol + 1))
-      | Lexer.SyntaxError ->
-        let pos = lexer.Lexing.lex_curr_p in
-        (* (Printexc.to_string e) *)
-        Error
-          (Format.sprintf "unrecognized token, %s, line %d, col %d@."
-             pos.pos_fname pos.pos_lnum
-             (pos.pos_cnum - pos.pos_bol + 1)))
+let parse_mono_ic ic =
+  let lexer = Lexing.from_channel ~with_positions:true ic in
+  (* 4.11 *)
+  (* Lexing.set_filename lexer file; *)
+  try Ok (lexer |> Parser.p f) with
+  | Parser.Error ->
+    let pos = lexer.Lexing.lex_curr_p in
+    let tok = Lexing.lexeme lexer in
+    (* (Printexc.to_string e) *)
+    Error
+      (Format.sprintf "parse error near \"%s\", %s, line %d, col %d@." tok
+         pos.pos_fname pos.pos_lnum
+         (pos.pos_cnum - pos.pos_bol + 1))
+  | Lexer.SyntaxError ->
+    let pos = lexer.Lexing.lex_curr_p in
+    (* (Printexc.to_string e) *)
+    Error
+      (Format.sprintf "unrecognized token, %s, line %d, col %d@." pos.pos_fname
+         pos.pos_lnum
+         (pos.pos_cnum - pos.pos_bol + 1))
+
+let parse_mono file = Containers.IO.with_in file parse_mono_ic
 
 (* https://baturin.org/blog/declarative-parse-error-reporting-with-menhir/ *)
 open Lexing

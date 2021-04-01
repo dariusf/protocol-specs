@@ -49,7 +49,7 @@ let foldr1 f xs =
     xs None
   |> Option.get_exn
 
-let rec render_protocol p =
+let render_protocol p =
   let open PPrint in
   let indent d = blank 2 ^^ nest 2 d in
   let (arrow, disj, par, if_, when_, in_, forall, exists) =
@@ -71,7 +71,7 @@ let rec render_protocol p =
   in
   let is_alpha = function 'a' .. 'z' | 'A' .. 'Z' -> true | _ -> false in
   (* this should be kept in sync with the parser *)
-  let get_prec op =
+  let get_expr_prec op =
     match op with
     | "==" -> 5
     | "<" | "<=" | ">" | ">=" -> 6
@@ -81,7 +81,7 @@ let rec render_protocol p =
     | "!" -> 10
     | _ -> 0
   in
-  let get_assoc _ = `Left in
+  let get_expr_assoc _ = `Left in
   (* prec is the precedence of the context, so we make sure to
      parenthesize when passing an expression with lower precedence into one with higher precedence. see https://stackoverflow.com/a/43639618. starting with 0 means we
      never parenthesize at the top level. *)
@@ -99,10 +99,12 @@ let rec render_protocol p =
         |> separate (spaced comma))
     | App (f, args) ->
       if List.length args = 2 && not (is_alpha f.[0]) then
-        let n = get_prec f in
+        let n = get_expr_prec f in
         let[@warning "-8"] [left; right] = args in
         let (leftp, rightp) =
-          match get_assoc f with `Left -> (n, n + 1) | `Right -> (n + 1, n)
+          match get_expr_assoc f with
+          | `Left -> (n, n + 1)
+          | `Right -> (n + 1, n)
         in
         let parens =
           if prec > n then
@@ -118,75 +120,93 @@ let rec render_protocol p =
         precede (string f)
           (parens (List.map render_expr args |> separate (spaced comma)))
     | Var v -> render_var v
-    | Tuple (_, _) -> failwith "tuples"
+    | Tuple (_, _) -> failwith "tuples?"
   in
-  match p with
-  | Emp -> failwith "emp?"
-  | Seq ps ->
-    (* foldr1 (fun c t -> c ^^ char ';' ^/^ t) (List.map render_protocol ps) *)
-    separate (semi ^^ nl) (List.map render_protocol ps)
-  | Par ps ->
-    separate
-      (nl ^^ par ^^ nl)
-      (ps |> List.map render_protocol |> List.map indent)
-  | Disj (a, b) ->
-    separate
-      (nl ^^ disj ^^ nl)
-      ([a; b] |> List.map render_protocol |> List.map indent)
-  | Send { from; to_; msg = Message { typ; args } } ->
-    concat
-      [
-        render_var from; arrow; render_var to_; colon; space; string typ;
-        (match args with
-        | [] -> empty
-        | _ ->
-          parens
-            (separate (spaced comma)
-               (List.map
-                  (fun (v, e) -> concat [render_var v; equals; render_expr e])
-                  args)));
-      ]
-  | Assign (v, e) -> separate space [render_var v; equals; render_expr e]
-  | Imply (b, p) ->
-    nest 2 (concat [render_expr b; space; if_; nl; render_protocol p])
-  | BlockingImply (b, p) ->
-    nest 2 (concat [render_expr b; space; when_; nl; render_protocol p])
-  | Forall (v, s, p) ->
-    nest 2
-      (concat
-         [
-           forall; space; render_var v; space; in_; space; render_var s; dot;
-           nl; render_protocol p;
-         ])
-  | Exists (v, s, p) ->
-    nest 2
-      (concat
-         [
-           exists; space; render_var v; space; in_; render_var s; dot; nl;
-           render_protocol p;
-         ])
-  | SendOnly { from; to_; msg = MessageC { typ; args } } ->
-    concat
-      [
-        star; render_var from; arrow; render_var to_; colon; space; string typ;
-        (match args with
-        | [] -> empty
-        | _ -> parens (separate (spaced comma) (List.map render_expr args)));
-      ]
-  | ReceiveOnly { from; to_; msg = MessageD { typ; args } } ->
-    concat
-      [
-        render_var from; arrow; render_var to_; star; colon; space; string typ;
-        (match args with
-        | [] -> empty
-        | _ -> parens (separate (spaced comma) (List.map render_var args)));
-      ]
-  | Comment (_, _, _) -> failwith "comment"
+  let rec render_protocol p =
+    match p with
+    | Emp -> failwith "emp?"
+    | Seq ps ->
+      let l = List.length ps in
 
-(* | If (c, co, a) ->
-   fprintf fmt
-     "@[<v 0>if (%a) {@;<0 2>@[<v 0>%a@]@,} else {@;<0 2>@[<v 0>%a@]@,}@]"
-     pp_expr c pp_protocol co pp_protocol a *)
+      (* instead of the whole precedence setup we have for
+         expressions, we special-case the printing in here,
+         as number of precedence levels is fixed and small.
+         this also handles positioning semicolons at the
+         end of blocks. *)
+      ps
+      |> List.mapi (fun i c ->
+             if i = l - 1 then
+               (c, `None)
+             else
+               match c with Par _ | Disj _ -> (c, `Indent) | _ -> (c, `Trail))
+      |> List.map (fun (c, ind) ->
+             let c = render_protocol c in
+             match ind with
+             | `None -> c
+             | `Trail -> c ^^ semi ^^ nl
+             | `Indent -> indent c ^^ nl ^^ semi ^^ nl)
+      |> concat
+    | Par ps ->
+      separate
+        (nl ^^ par ^^ nl)
+        (ps |> List.map render_protocol |> List.map indent)
+    | Disj (a, b) ->
+      separate
+        (nl ^^ disj ^^ nl)
+        ([a; b] |> List.map render_protocol |> List.map indent)
+    | Send { from; to_; msg = Message { typ; args } } ->
+      concat
+        [
+          render_var from; arrow; render_var to_; colon; space; string typ;
+          (match args with
+          | [] -> empty
+          | _ ->
+            parens
+              (separate (spaced comma)
+                 (List.map
+                    (fun (v, e) -> concat [render_var v; equals; render_expr e])
+                    args)));
+        ]
+    | Assign (v, e) -> separate space [render_var v; equals; render_expr e]
+    | Imply (b, p) ->
+      nest 2 (concat [render_expr b; space; if_; nl; render_protocol p])
+    | BlockingImply (b, p) ->
+      nest 2 (concat [render_expr b; space; when_; nl; render_protocol p])
+    | Forall (v, s, p) ->
+      nest 2
+        (concat
+           [
+             forall; space; render_var v; space; in_; space; render_var s; nl;
+             render_protocol p;
+           ])
+    | Exists (v, s, p) ->
+      nest 2
+        (concat
+           [
+             exists; space; render_var v; space; in_; render_var s; nl;
+             render_protocol p;
+           ])
+    | SendOnly { from; to_; msg = MessageC { typ; args } } ->
+      concat
+        [
+          star; render_var from; arrow; render_var to_; colon; space;
+          string typ;
+          (match args with
+          | [] -> empty
+          | _ -> parens (separate (spaced comma) (List.map render_expr args)));
+        ]
+    | ReceiveOnly { from; to_; msg = MessageD { typ; args } } ->
+      concat
+        [
+          render_var from; arrow; render_var to_; star; colon; space;
+          string typ;
+          (match args with
+          | [] -> empty
+          | _ -> parens (separate (spaced comma) (List.map render_var args)));
+        ]
+    | Comment (_, _, _) -> failwith "comment"
+  in
+  render_protocol p
 
 (** generates some interleaving *)
 let interleave_n xss = List.fold_right (fun c t -> List.interleave c t) xss []
@@ -1120,14 +1140,18 @@ let parse_party_spec s =
     other_sets = [];
   }
 
-let print party_specs file =
-  (* Tpc.protocol |> render_protocol |> PPrint.ToChannel.pretty 0.8 120 stdout; *)
+let print party_specs ast no_normalize file =
   match party_specs with
   | _ :: _ ->
     let parties = List.map parse_party_spec party_specs in
     Format.printf "parties %s@." ([%derive.show: party_info list] parties)
   | [] ->
-    let p = Parsing.parse_mono file in
+    let p =
+      if String.equal file "-" then
+        Parsing.parse_mono_ic stdin
+      else
+        Parsing.parse_mono file
+    in
     (* let p = Parsing.parse_inc file in *)
     (match p with
     | Ok p ->
@@ -1135,14 +1159,12 @@ let print party_specs file =
       (* |> eval |> string_of_int *)
       (* |> Exp.show *)
       (* |> Format.sprintf "%a" pp_protocol |> print_endline *)
-      |> render_protocol
-      |> PPrint.ToChannel.pretty 0.8 120 stdout;
-      print_endline "\n---";
-      p |> normalize |> render_protocol
-      |> PPrint.ToChannel.pretty 0.8 120 stdout;
-      print_endline "\n---";
-      p |> normalize |> show_protocol |> print_endline;
-      print_endline ""
+      |> (if no_normalize then Fun.id else normalize)
+      |> Fun.Infix.(
+           if ast then
+             show_protocol %> print_endline
+           else
+             render_protocol %> PPrint.ToChannel.pretty 0.8 120 stdout)
     | Error s -> print_endline s)
 
 (* Tracing.wrap (fun () ->

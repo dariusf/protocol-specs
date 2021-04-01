@@ -72,7 +72,7 @@ type expr =
   | App of string * expr list
   | Var of var
   | Tuple of expr * expr
-[@@deriving eq, show]
+[@@deriving eq, show { with_path = false }]
 
 let plus a b = App ("+", [a; b])
 
@@ -197,4 +197,4 @@ type protocol =
   (* cst *)
   | Comment of var option * string * protocol
 (* cst would have parens too *)
-[@@deriving eq, show]
+[@@deriving eq, show { with_path = false }]

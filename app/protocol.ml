@@ -47,28 +47,40 @@ let help_cmd =
   ( Term.(ret (const help $ Arg.man_format $ Term.choice_names $ topic)),
     Term.info "help" ~doc ~exits:Term.default_exits ~man )
 
-let print party_specs file =
-  Lib.print party_specs file;
+let print party_specs ast no_normalize file =
+  Lib.print party_specs ast no_normalize file;
   `Ok ()
 
 let print_cmd =
   let file =
-    Arg.(required & pos 0 (some string) None & info [] ~docv:"FILE" ~doc:"file")
+    Arg.(value & pos 0 string "-" & info [] ~docv:"FILE" ~doc:"file")
   in
   let party =
     Arg.(
       value
-      & opt_all string [] (info ~docv:"PARTY" ~doc:"party variables" ["party"]))
+      & opt_all string []
+          (info ~docv:"PARTY" ~doc:"provide a specification of party variables"
+             ["party"]))
   in
-  let doc = "pretty-prints a specification" in
+  let ast =
+    Arg.(value & flag (info ~docv:"AST" ~doc:"dumps the AST" ["ast"]))
+  in
+  let no_normalize =
+    Arg.(
+      value
+      & flag
+          (info ~docv:"NO_NORMALIZE"
+             ~doc:"disables normalization; for debugging" ["no-normalize"]))
+  in
   let man =
     [
-      `S Manpage.s_description; `P "Pretty-prints a specification.";
+      `S Manpage.s_description; `P "Renders a specification in various forms.";
       `Blocks help_secs;
     ]
   in
-  ( Term.(ret (const print $ party $ file)),
-    Term.info "print" ~doc ~exits:Term.default_exits ~man )
+  ( Term.(ret (const print $ party $ ast $ no_normalize $ file)),
+    Term.info "print" ~doc:"renders a specification" ~exits:Term.default_exits
+      ~man )
 
 let cmds = [print_cmd; help_cmd]
 
