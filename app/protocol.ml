@@ -47,13 +47,20 @@ let help_cmd =
   ( Term.(ret (const help $ Arg.man_format $ Term.choice_names $ topic)),
     Term.info "help" ~doc ~exits:Term.default_exits ~man )
 
-let print party_specs ast no_normalize file =
-  Lib.print party_specs ast no_normalize file;
+let print project party_specs ast no_normalize file =
+  Lib.print project party_specs ast no_normalize file;
   `Ok ()
 
 let print_cmd =
   let file =
     Arg.(value & pos 0 string "-" & info [] ~docv:"FILE" ~doc:"file")
+  in
+  let project =
+    Arg.(
+      value
+      & opt (some string) None
+          (info ~docv:"PROJECT" ~doc:"project protocol for a specific party"
+             ["project"]))
   in
   let party =
     Arg.(
@@ -78,7 +85,7 @@ let print_cmd =
       `Blocks help_secs;
     ]
   in
-  ( Term.(ret (const print $ party $ ast $ no_normalize $ file)),
+  ( Term.(ret (const print $ project $ party $ ast $ no_normalize $ file)),
     Term.info "print" ~doc:"renders a specification" ~exits:Term.default_exits
       ~man )
 

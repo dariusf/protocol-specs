@@ -1082,6 +1082,7 @@ let parse_party_spec s =
   let[@warning "-8"] [[repr]; vars; owned_vars] =
     List.map (String.split ~by:",") parts
   in
+  (* don't handle error *)
   {
     repr = var repr;
     vars = List.map var vars;
@@ -1089,32 +1090,52 @@ let parse_party_spec s =
     other_sets = [];
   }
 
-let print party_specs ast no_normalize file =
-  match party_specs with
-  | _ :: _ ->
-    let parties = List.map parse_party_spec party_specs in
-    Format.printf "parties %s@." ([%derive.show: party_info list] parties)
-  | [] ->
-    let p =
-      if String.equal file "-" then
-        Parsing.parse_mono_ic stdin
-      else
-        Parsing.parse_mono file
+let print project_party party_specs ast no_normalize file =
+  let protocol =
+    let prot =
+      (* let p = Parsing.parse_inc file in *)
+      match
+        if String.equal file "-" then
+          Parsing.parse_mono_ic stdin
+        else
+          Parsing.parse_mono file
+      with
+      | Ok p -> p
+      | Error s -> failwith s
     in
-    (* let p = Parsing.parse_inc file in *)
-    (match p with
-    | Ok p ->
-      p
-      (* |> eval |> string_of_int *)
-      (* |> Exp.show *)
-      (* |> Format.sprintf "%a" pp_protocol |> print_endline *)
-      |> (if no_normalize then Fun.id else normalize)
-      |> Fun.Infix.(
-           if ast then
-             show_protocol %> print_endline
-           else
-             render_protocol %> PPrint.ToChannel.pretty 0.8 120 stdout)
-    | Error s -> print_endline s)
+    match project_party with
+    | Some p_party ->
+      begin
+        match party_specs with
+        | [] -> failwith "party specs are required for projection"
+        | _ ->
+          let parties = List.map parse_party_spec party_specs in
+          (* Format.printf "parties %s@." ([%derive.show: party_info list] parties) *)
+          let env =
+            { parties; var_info = VMap.empty; var_constraints = IMap.empty }
+          in
+          let projected = project env prot in
+          (match
+             List.find_idx
+               (fun pr -> String.equal p_party (var_name pr.repr))
+               parties
+           with
+          | None -> failwith "could not find such a party"
+          | Some (i, _) -> List.nth projected i)
+      end
+    | None -> prot
+  in
+
+  protocol
+  (* |> eval |> string_of_int *)
+  (* |> Exp.show *)
+  (* |> Format.sprintf "%a" pp_protocol |> print_endline *)
+  |> (if no_normalize then Fun.id else normalize)
+  |> Fun.Infix.(
+       if ast then
+         show_protocol %> print_endline
+       else
+         render_protocol %> PPrint.ToChannel.pretty 0.8 120 stdout)
 
 (* Tracing.wrap (fun () ->
     (* print_endline "abccc"; *)
