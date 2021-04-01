@@ -86,28 +86,6 @@ let and_ a b = App ("&", [a; b])
 
 let or_ a b = App ("|", [a; b])
 
-let rec pp_expr fmt e =
-  let open Format in
-  match e with
-  | Int i -> fprintf fmt "%d" i
-  | Bool b -> fprintf fmt "%b" b
-  | App (name, es) ->
-    if List.length es = 2 then
-      fprintf fmt "@[%a@ %s@ %a@]" pp_expr (List.nth es 0) name pp_expr
-        (List.nth es 1)
-    else
-      fprintf fmt "%s(%a)" name (List.pp pp_expr) es
-  | Var v -> pp_var fmt v
-  | Set s -> fprintf fmt "{%a}" (List.pp pp_expr) s
-  | List s -> fprintf fmt "[%a]" (List.pp pp_expr) s
-  | Map s ->
-    fprintf fmt "{%a}"
-      (List.pp
-         (Pair.pp ~pp_sep:(pp_const ": ") ~pp_start:(pp_const "")
-            ~pp_stop:(pp_const "") pp_literal pp_expr))
-      s
-  | Tuple (a, b) -> fprintf fmt "<%a, %a>" pp_expr a pp_expr b
-
 type msg =
   | Message of {
       typ : string;

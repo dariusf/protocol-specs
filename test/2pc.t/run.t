@@ -56,14 +56,18 @@ The classic two-phase commit protocol.
                  (Disj (
                     (Seq
                        [Send {from = p; to_ = c; msg = prepared};
-                         (Assign (responded, responded + {p}))]),
+                         (Assign (responded,
+                            (App ("+", [(Var responded); (Set [(Var p)])]))))
+                         ]),
                     (Seq
                        [Send {from = p; to_ = c; msg = abort};
-                         (Assign (aborted, aborted + {p}))])
+                         (Assign (aborted,
+                            (App ("+", [(Var aborted); (Set [(Var p)])]))))
+                         ])
                     ))
                  ])
             ));
-          (BlockingImply (aborted == {},
+          (BlockingImply ((App ("==", [(Var aborted); (Set [])])),
              (Disj (
                 (Forall (p, P,
                    (Seq

@@ -80,52 +80,81 @@ Single-decree Paxos
   (Seq
      [(Forall (p, P,
          (Seq
-            [(Assign (p.proposal, 0)); (Assign (p.value, external()));
-              (Assign (p.cp, [0, 0])); (Assign (p.majority, size(A) / 2 + 1));
-              (Assign (p.promise_responses, {}))])
+            [(Assign (p.proposal, (Int 0)));
+              (Assign (p.value, (App ("external", []))));
+              (Assign (p.cp, (List [(Int 0); (Int 0)])));
+              (Assign (p.majority,
+                 (App ("+",
+                    [(App ("/", [(App ("size", [(Var A)])); (Int 2)])); (
+                      Int 1)]
+                    ))
+                 ));
+              (Assign (p.promise_responses, (Set [])))])
          ));
        (Forall (a, A,
           (Seq
-             [(Assign (a.highest_proposal, [0, 0]));
-               (Assign (a.accepted_proposal, [0, 0]));
-               (Assign (a.accepted_value, 0))])
+             [(Assign (a.highest_proposal, (List [(Int 0); (Int 0)])));
+               (Assign (a.accepted_proposal, (List [(Int 0); (Int 0)])));
+               (Assign (a.accepted_value, (Int 0)))])
           ));
        (Forall (p, P,
           (Par
              [(Seq
-                 [(Assign (p.proposal, p.proposal + 1));
+                 [(Assign (p.proposal, (App ("+", [(Var p.proposal); (Int 1)]))
+                     ));
                    (Forall (a, A,
                       (Seq
                          [Send {from = p; to_ = a;
-                            msg = prepare(n=[p,
-  p.proposal])};
-                           (Imply (n > a.highest_proposal,
+                            msg = prepare(n=(List [(Var p); (Var p.proposal)]))};
+                           (Imply (
+                              (App (">", [(Var n); (Var a.highest_proposal)])),
                               (Seq
-                                 [(Assign (a.highest_proposal, n));
+                                 [(Assign (a.highest_proposal, (Var n)));
                                    Send {from = a; to_ = p;
                                      msg =
-                                     promise(cp=a.accepted_proposal, cv=a.accepted_value)};
+                                     promise(cp=(Var a.accepted_proposal), cv=(Var a.accepted_value))};
                                    (Assign (p.promise_responses,
-                                      p.promise_responses + {a}));
-                                   (Imply (cp > [0, 0] & cp > p.cp,
+                                      (App ("+",
+                                         [(Var p.promise_responses);
+                                           (Set [(Var a)])]
+                                         ))
+                                      ));
+                                   (Imply (
+                                      (App (">",
+                                         [(App (">",
+                                             [(Var cp);
+                                               (App ("&",
+                                                  [(List [(Int 0); (Int 0)]);
+                                                    (Var cp)]
+                                                  ))
+                                               ]
+                                             ));
+                                           (Var p.cp)]
+                                         )),
                                       (Seq
-                                         [(Assign (p.cp, cp));
-                                           (Assign (p.value, cv))])
+                                         [(Assign (p.cp, (Var cp)));
+                                           (Assign (p.value, (Var cv)))])
                                       ))
                                    ])
                               ))
                            ])
                       ))
                    ]);
-               (BlockingImply (size(p.promise_responses) > p.majority,
+               (BlockingImply (
+                  (App (">",
+                     [(App ("size", [(Var p.promise_responses)]));
+                       (Var p.majority)]
+                     )),
                   (Forall (a1, p.promise_responses,
                      (Seq
                         [Send {from = p; to_ = a1;
-                           msg = propose(pn=p.proposal, pv=p.value)};
-                          (Imply (pn == a1.highest_proposal,
+                           msg = propose(pn=(Var p.proposal), pv=(Var p.value))};
+                          (Imply (
+                             (App ("==", [(Var pn); (Var a1.highest_proposal)]
+                                )),
                              (Seq
-                                [(Assign (a1.accepted_proposal, pn));
-                                  (Assign (a1.accepted_value, pv));
+                                [(Assign (a1.accepted_proposal, (Var pn)));
+                                  (Assign (a1.accepted_value, (Var pv)));
                                   Send {from = a1; to_ = p; msg = accept};
                                   (Forall (l, L,
                                      Send {from = a1; to_ = l; msg = accept}))
