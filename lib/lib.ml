@@ -208,7 +208,6 @@ let render_protocol p =
   in
   render_protocol p
 
-(** generates some interleaving *)
 let interleave_n xss = List.fold_right (fun c t -> List.interleave c t) xss []
 
 exception Eval_failure of string
@@ -692,56 +691,6 @@ let has_initiative (V (_, party)) p =
     | Comment _ -> false
   in
   aux p
-
-(* | _ -> parties |> List.map (fun _ -> pr) *)
-
-(* fail "nyi" *)
-
-(* let eval p =
-  let rec aux env p =
-    (* Format.printf "eval %a@." pp_protocol p; *)
-    match p with
-    | Emp -> env
-    | Seq ps ->
-      (* Format.printf "seq@."; *)
-      List.fold_left aux env ps
-    | Par ps ->
-      (* Format.printf "par@."; *)
-      ps
-      |> List.map (fun p ->
-             match p with
-             | Par _ -> fail "nested par not allowed"
-             | Seq ps1 -> ps1
-             | p -> [p])
-      |> interleave_n
-      |> fun ps2 -> aux env (Seq ps2)
-    | Send { from; to_; msg } ->
-      Format.printf "%a->%a: %a@." (Qn.pp pp_party) from (Qn.pp pp_party) to_
-        pp_msg msg;
-      let (Message { args; _ }) = msg in
-      let assignments =
-        List.map
-          (fun (name, v) ->
-            let var = V (Qn.get to_, "m_" ^ name) in
-            Assign (var, v))
-          args
-      in
-      aux env (Seq assignments)
-    | Assign (v, e) ->
-      let prev =
-        VMap.find_opt v env
-        |> Option.map (Format.sprintf "%a" pp_expr)
-        |> Option.get_or ~default:"unset"
-      in
-      let e = eval_expr env e in
-      Format.printf "%a := %a (prev. %s)@." pp_var v pp_expr e prev;
-      VMap.add v e env
-    | If (c, co, alt) ->
-      let c = eval_expr env c in
-      (match c with Bool true -> aux env co | _ -> aux env alt)
-  in
-  try aux VMap.empty p |> ignore
-  with Eval_failure s -> Format.printf "evaluation failed: %s@." s *)
 
 module Tpc = struct
   (* let coord = Party "coordinator" *)
