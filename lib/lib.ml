@@ -200,13 +200,6 @@ let rec pairwise_foldr f init xs =
   | [] | [_] -> init
   | a :: b :: xs1 -> f a b (pairwise_foldr f init (b :: xs1))
 
-(** each element is processed exactly once, like map. f has to produce information summarising both elements *)
-let map_pairs f xs =
-  let rec aux xs =
-    match xs with [] | [_] -> [xs] | a :: b :: xs1 -> f a b :: aux xs1
-  in
-  aux xs |> List.concat
-
 let rec normalize_once p =
   (* let%trace rec normalize_once : protocol -> protocol = fun p -> *)
   let rec useful = function
@@ -220,21 +213,9 @@ let rec normalize_once p =
   (* | Seq [s] -> normalize_once s *)
   | Seq s ->
     let s = s |> List.map normalize_once |> List.filter useful in
-    let s =
-      map_pairs
-        (fun a b ->
-          match (a, b) with (Seq a1, Seq b1) -> [Seq (a1 @ b1)] | _ -> [a; b])
-        s
-    in
     Seq (s |> List.concat_map (fun p -> match p with Seq ps -> ps | _ -> [p]))
   | Par s ->
     let s = s |> List.map normalize_once |> List.filter useful in
-    let s =
-      map_pairs
-        (fun a b ->
-          match (a, b) with (Par a1, Par b1) -> [Par (a1 @ b1)] | _ -> [a; b])
-        s
-    in
     Par (s |> List.concat_map (fun p -> match p with Par ps -> ps | _ -> [p]))
   | Disj (a, b) ->
     begin
