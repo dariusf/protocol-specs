@@ -1079,15 +1079,17 @@ let snapshot_protocol name env pr =
 
 let parse_party_spec s =
   let parts = String.split ~by:":" s in
-  let[@warning "-8"] [[repr]; vars; owned_vars] =
-    List.map (String.split ~by:",") parts
+  let[@warning "-8"] [[repr]; vars; owned_vars; other_sets] =
+    parts
+    |> List.map (String.split ~by:",")
+    |> List.map (List.filter (Fun.negate String.is_empty))
   in
   (* don't handle error *)
   {
     repr = var repr;
     vars = List.map var vars;
     owned_vars = List.map var owned_vars;
-    other_sets = [];
+    other_sets = List.map var other_sets;
   }
 
 let print project_party party_specs ast no_normalize file =

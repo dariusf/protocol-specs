@@ -19,7 +19,7 @@ The classic two-phase commit protocol.
             c->p: abort;
             p->c: abort_ack
 
-  $ protocol print 2pc.spec --party C:c:responded,aborted,p --party P:p:c --project C
+  $ protocol print 2pc.spec --party C:c:responded,aborted,p: --party P:p:c: --project C
   forall p in P
     *self->p: prepare;
         p->self*: prepared;
@@ -37,7 +37,7 @@ The classic two-phase commit protocol.
           *self->p: abort;
           p->self*: abort_ack
 
-  $ protocol print 2pc.spec --party C:c:responded,aborted,p --party P:p:c --project P
+  $ protocol print 2pc.spec --party C:c:responded,aborted,p: --party P:p:c: --project P
   forall c in C
     c->self*: prepare;
         *self->c: prepared
