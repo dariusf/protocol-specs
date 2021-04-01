@@ -2,46 +2,6 @@ open Containers
 module Tracing = Ppx_debug.Tracing
 open Ast
 
-let rec pp_protocol fmt p =
-  let open Format in
-  match p with
-  | Emp -> fprintf fmt "emp"
-  | Seq ps ->
-    List.pp
-      ~pp_start:(fun fmt () -> fprintf fmt "(@[<v 0>")
-      ~pp_stop:(fun fmt () -> fprintf fmt "@])")
-      ~pp_sep:(fun fmt () -> fprintf fmt ";@,")
-      pp_protocol fmt ps
-  | Par ps ->
-    List.pp
-      ~pp_start:(fun fmt () -> fprintf fmt "")
-      ~pp_stop:(fun fmt () -> fprintf fmt "")
-      ~pp_sep:(fun fmt () -> fprintf fmt "@ *@ ")
-      (fun fmt ps -> fprintf fmt "(%a)" pp_protocol ps)
-      fmt ps
-  | Send { from; to_; msg } ->
-    fprintf fmt "%a->%a: %a" pp_var from pp_var to_ pp_msg msg
-  | SendOnly { from; to_; msg } ->
-    fprintf fmt "*%a->%a: %a" pp_var from pp_var to_ pp_msg_construct msg
-  | ReceiveOnly { from; to_; msg } ->
-    fprintf fmt "%a->%a*: %a" pp_var from pp_var to_ pp_msg_destruct msg
-  | Assign (v, e) -> fprintf fmt "%a = %a" pp_var v pp_expr e
-  | Disj (a, b) ->
-    fprintf fmt "@[<v 0>%a@,\\/@,%a@]" pp_protocol a pp_protocol b
-  | Imply (e, p) ->
-    fprintf fmt "@[<v 0>%a =>@;<0 2>@[@,%a@]@]" pp_expr e pp_protocol p
-  | BlockingImply (e, p) ->
-    fprintf fmt "@[<v 0>%a =>*@;<0 2>@[@,%a@]@]" pp_expr e pp_protocol p
-  | Forall (v, s, p) ->
-    (* fprintf fmt "@[<v 0>forall %a:%a.@;<0 2>@[%a@]@]" pp_var v pp_var s pp_protocol p *)
-    Boxes.block fmt
-      ~enter:(fun m -> m "forall %a:%a." pp_var v pp_var s)
-      ~content:(fun m -> m "%a" pp_protocol p)
-  | Exists (v, s, p) ->
-    fprintf fmt "@[<v 0>exists %a:%a.@;<0 2>@[%a@]@]" pp_var v pp_var s
-      pp_protocol p
-  | Comment (_, s, p) -> fprintf fmt "@[<v 0>// %s@,%a@]" s pp_protocol p
-
 (** https://hackage.haskell.org/package/base-4.14.1.0/docs/src/Data.Foldable.html#foldr1 *)
 let foldr1 f xs =
   List.fold_right
@@ -231,89 +191,14 @@ let render_protocol p =
   in
   render_protocol p
 
-let interleave_n xss = List.fold_right (fun c t -> List.interleave c t) xss []
-
 exception Eval_failure of string
 
-(* let fail s = raise (Eval_failure (Format.sprintf s)) *)
 let fail s = Format.ksprintf ~f:(fun m -> raise (Eval_failure m)) s
-
-let dump_env pr e =
-  VMap.bindings e
-  |> List.map (fun (a, b) -> Format.sprintf "%a->%a" pp_var a pr b)
-  |> String.concat "; "
-
-let dump_env_ env = Format.printf "%s@." (dump_env pp_expr env)
-
-let rec eval_expr env e =
-  (* Format.printf "eval_expr %a@." pp_expr e; *)
-  (* dump_env_ env; *)
-  match e with
-  | Int _ | Bool _ -> e
-  | Set s -> Set (s |> List.map (eval_expr env))
-  | List s -> List (s |> List.map (eval_expr env))
-  | Map s -> Map (List.map (fun (a, b) -> (a, eval_expr env b)) s)
-  | Tuple (a, b) -> Tuple (eval_expr env a, eval_expr env b)
-  | App (name, args) ->
-    begin
-      match name with
-      | "+" ->
-        List.fold_right
-          (fun a b ->
-            match (eval_expr env a, eval_expr env b) with
-            | (Int a, Int b) -> Int (a + b)
-            | (a, b) ->
-              fail "invalid args to %s: %a, %a" name pp_expr a pp_expr b)
-          args (Int 0)
-      | "==" when List.length args = 2 ->
-        let (a, b) = (List.hd args, List.hd (List.tl args)) in
-        let a = eval_expr env a in
-        let b = eval_expr env b in
-        Bool (equal_expr a b)
-      | "&" ->
-        List.fold_right
-          (fun a b ->
-            match (eval_expr env a, eval_expr env b) with
-            | (Bool a, Bool b) -> Bool (a && b)
-            | (a1, b1) ->
-              (* extra *)
-              fail "invalid args to %s: %a -> %a, %a -> %a" name pp_expr a
-                pp_expr a1 pp_expr b pp_expr b1)
-          args (Bool true)
-      | "|" ->
-        List.fold_right
-          (fun a b ->
-            match (eval_expr env a, eval_expr env b) with
-            | (Bool a, Bool b) -> Bool (a || b)
-            | (a, b) ->
-              fail "invalid args to %s: %a, %a" name pp_expr a pp_expr b)
-          args (Bool false)
-      | _ -> fail "invalid operator %s" name
-    end
-  | Var v ->
-  try VMap.find v env with Not_found -> fail "%a is unbound" pp_var v
-
-(* let rec pairwise f xs= 
-match xs with
-| [] | [_] -> xs
-| a :: b :: xs -> f a b :: pairwise f( b :: xs) *)
 
 let rec pairwise_foldr f init xs =
   match xs with
   | [] | [_] -> init
   | a :: b :: xs1 -> f a b (pairwise_foldr f init (b :: xs1))
-
-let rec pairwise_foldr1 f xs =
-  match xs with
-  | [] | [_] -> xs
-  | a :: b :: xs1 -> f a b (pairwise_foldr1 f (b :: xs1))
-
-(** caller should return the left arg or info derived from it *)
-let adj_concat_map f xs =
-  let rec aux xs =
-    match xs with [] | [_] -> [xs] | a :: b :: xs1 -> f a b :: aux (b :: xs1)
-  in
-  aux xs |> List.concat
 
 (** each element is processed exactly once, like map. f has to produce information summarising both elements *)
 let map_pairs f xs =
@@ -515,10 +400,6 @@ let%trace add_equality : var -> var -> env -> env =
       env with
       var_constraints = IMap.add p2 v1p env.var_constraints |> solve_subs;
     }
-
-(* { env with var_constraints = IMap.add p1 v2p env.var_constraints |> solve_subs} *)
-
-(* pairwise_foldr (fun a b t -> print_endline a; print_endline b; t) () ["a";"b";"c"];; *)
 
 let rec vars_in e =
   match e with
@@ -1176,164 +1057,3 @@ let test () =
     (* print_endline "abccc"; *)
     (* snapshot_protocol "test" Test.env Test.protocol *)
     snapshot_protocol "paxos" Paxos.env Paxos.protocol) *)
-
-let%expect_test "2pc" =
-  snapshot_protocol "2pc" Tpc.env Tpc.protocol;
-  [%expect
-    {|
-    protocol:
-
-    forall c:C.
-      (forall p:P.
-         (c->p: prepare;
-          (p->c: prepared;
-           responded = responded + {p})
-          \/
-          (p->c: abort;
-           aborted = aborted + {p}));
-       aborted == {} =>*
-         forall p:P.
-           (c->p: commit;
-            p->c: commit_ack)
-       \/
-       forall p:P.
-         (c->p: abort;
-          p->c: abort_ack))
-
-    ---
-
-    projections:
-
-    projection of C
-    C has initiative
-
-    (forall p:P.
-       (*self->p: prepare;
-        (p->self*: prepared;
-         responded = responded + {p})
-        \/
-        (p->self*: abort;
-         aborted = aborted + {p}));
-     aborted == {} =>*
-       forall p:P.
-         (*self->p: commit;
-          p->self*: commit_ack)
-     \/
-     forall p:P.
-       (*self->p: abort;
-        p->self*: abort_ack))
-    --
-    projection of P
-    P does not have initiative
-
-    forall c:C.
-      (c->self*: prepare;
-       (*self->c: prepared)
-       \/
-       (*self->c: abort);
-       (c->self*: commit;
-        *self->c: commit_ack)
-       \/
-       (c->self*: abort;
-        *self->c: abort_ack))
-    <inferred parties> |}]
-
-let%expect_test "paxos" =
-  snapshot_protocol "paxos" Paxos.env Paxos.protocol;
-  [%expect
-    {|
-    protocol:
-
-    // all currently-competing proposers
-    (forall p:P.
-       (p.proposal = 0;
-        p.value = external();
-        p.cp = <0, 0>;
-        p.majority = size(A) / 2 + 1;
-        p.promise_responses = {});
-     forall a:A.
-       (a.highest_proposal = <0, 0>;
-        a.accepted_proposal = <0, 0>;
-        a.accepted_value = 0);
-     forall p:P.
-       ((p.proposal = p.proposal + 1;
-         forall a:A.
-           (p->a: prepare(n=<p, p.proposal>);
-            n > a.highest_proposal =>
-              (a.highest_proposal = n;
-               a->p: promise(cp=a.accepted_proposal, cv=a.accepted_value);
-               p.promise_responses = p.promise_responses + {a};
-               // if a has already accepted something
-               cp > <0, 0> & cp > p.cp =>
-                 (p.cp = cp;
-                  p.value = cv)))))
-       *
-       (// doesn't continue replying with accepts if others outside this set reply
-        size(p.promise_responses) > p.majority =>*
-          // it's sufficient to reply to the majority subset
-          forall a1:p.promise_responses.
-            (p->a1: propose(pn=p.proposal, pv=p.value);
-             pn == a1.highest_proposal =>
-               (a1.accepted_proposal = pn;
-                a1.accepted_value = pv;
-                a1->p: accept;
-                forall l:L.
-                  a1->l: accept))))
-
-    ---
-
-    projections:
-
-    projection of P
-    P has initiative
-
-    (p.proposal = 0;
-     p.value = external();
-     p.cp = <0, 0>;
-     p.majority = size(A) / 2 + 1;
-     p.promise_responses = {};
-     ((p.proposal = p.proposal + 1;
-       forall a:A.
-         (*self->a: prepare(<p, p.proposal>);
-          a->self*: promise(cp, cv);
-          p.promise_responses = p.promise_responses + {a};
-          // if a has already accepted something
-          cp > <0, 0> & cp > p.cp =>
-            (p.cp = cp;
-             p.value = cv))))
-     *
-     (// doesn't continue replying with accepts if others outside this set reply
-      size(p.promise_responses) > p.majority =>*
-        // it's sufficient to reply to the majority subset
-        forall a1:p.promise_responses.
-          (*self->a1: propose(p.proposal, p.value);
-           a1->self*: accept)))
-    --
-    projection of L
-    L does not have initiative
-
-    (forall p:P.
-       (forall a1:p.promise_responses.
-          (a1->self*: accept)))
-    --
-    projection of A
-    A has initiative
-
-    (a.highest_proposal = <0, 0>;
-     a.accepted_proposal = <0, 0>;
-     a.accepted_value = 0;
-     forall p:P.
-       ((p->self*: prepare(n);
-         n > a.highest_proposal =>
-           (a.highest_proposal = n;
-            *self->p: promise(a.accepted_proposal, a.accepted_value))))
-       *
-       ((p->self*: propose(pn, pv);
-         pn == a1.highest_proposal =>
-           (a1.accepted_proposal = pn;
-            a1.accepted_value = pv;
-            *self->p: accept;
-            forall l:L.
-              *self->l: accept))))
-    <inferred parties>
-  |}]

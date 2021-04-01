@@ -43,60 +43,6 @@ let show_token t =
   | LE -> "<="
   | LT -> "<"
 
-let convert_space_to_parens f =
-  let size = 2 in
-  (* this is the number of parens that are open, or the number of spaces / size *)
-  let indent = ref 0 in
-  let bof = ref true in
-  let rec aux lexbuf =
-    match f lexbuf with
-    | P.SPACE _ when not !bof -> aux lexbuf
-    | P.SPACE n when !bof ->
-      (* we use absolute indentation here to support indenting infix arguments *)
-      let parens = List.init (n / size) (fun _ -> P.LPAREN) in
-      indent := n / size;
-      bof := false;
-      parens
-    | P.INDENT n ->
-      bof := false;
-      let m = n / size in
-      let k = !indent in
-      if m > k then (
-        let parens = List.init (m - k) (fun _ -> P.LPAREN) in
-        indent := m;
-        parens)
-      else if m < k then (
-        indent := m;
-        List.init (k - m) (fun _ -> P.RPAREN))
-      else (* equal, nothing to do *)
-        aux lexbuf
-    | P.EOF ->
-      bof := false;
-      let close = List.init !indent (fun _ -> P.RPAREN) in
-      (* Format.printf "eof %d@." !indent; *)
-      indent := 0;
-      close @ [P.EOF]
-    | e ->
-      (* Format.printf "else %s@." (show_token e); *)
-      bof := false;
-      [e]
-  in
-  aux
-
-let flatten f =
-  let xs = ref [] in
-  fun lexbuf ->
-    match !xs with
-    | x :: xs' ->
-      xs := xs';
-      x
-    | [] ->
-    match f lexbuf with
-    | x :: xs' ->
-      xs := xs';
-      x
-    | [] -> failwith "Lexer did nto return EOF token"
-
 let echo f lexbuf =
   let t = f lexbuf in
   Format.printf "tok %s@." (show_token t);
