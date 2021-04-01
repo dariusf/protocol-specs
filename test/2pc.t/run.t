@@ -10,13 +10,13 @@ The classic two-phase commit protocol.
         p->c: abort;
         aborted = aborted + {p}));
     (aborted == {} =>*
-       forall p in P
-         c->p: commit;
-         p->c: commit_ack
-       \/
-       forall p in P
-         c->p: abort;
-         p->c: abort_ack)
+       (forall p in P
+          c->p: commit;
+          p->c: commit_ack
+        \/
+        forall p in P
+          c->p: abort;
+          p->c: abort_ack))
 
   $ protocol print 2pc.spec --party C:c:responded,aborted,p: --party P:p:c: --project C
   (forall p in P
@@ -27,13 +27,13 @@ The classic two-phase commit protocol.
       p->self*: abort;
       aborted = aborted + {p}));
   (aborted == {} =>*
-     forall p in P
-       *self->p: commit;
-       p->self*: commit_ack
-     \/
-     forall p in P
-       *self->p: abort;
-       p->self*: abort_ack)
+     (forall p in P
+        *self->p: commit;
+        p->self*: commit_ack
+      \/
+      forall p in P
+        *self->p: abort;
+        p->self*: abort_ack))
 
   $ protocol print 2pc.spec --party C:c:responded,aborted,p: --party P:p:c: --project P
   forall c in C
@@ -83,3 +83,5 @@ The classic two-phase commit protocol.
              ))
           ])
      ))
+
+  $ protocol print 2pc.spec > 2pc1.spec && protocol print 2pc1.spec | protocol print > 2pc2.spec && git diff --no-index 2pc1.spec 2pc2.spec

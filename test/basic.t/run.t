@@ -1,27 +1,4 @@
-Examples to stress-test the parser.
-
-  $ protocol print <<EOF
-  > a.b = 1;
-  > b.c = 1
-  > EOF
-  a.b = 1;
-  b.c = 1
-
-  $ protocol print <<EOF
-  > (a.b = 1 || a.d = 2); b.c = 1
-  > EOF
-  (a.b = 1
-   ||
-   a.d = 2);
-  b.c = 1
-
-  $ protocol print <<EOF
-  > (a.b = 1 \/ a.d = 2); b.c = 1
-  > EOF
-  (a.b = 1
-   \/
-   a.d = 2);
-  b.c = 1
+These two have the same precedence and associativity.
 
   $ protocol print <<EOF
   > a.b = 1 \/ a.d = 2 || b.c = 1
@@ -41,12 +18,54 @@ Examples to stress-test the parser.
   \/
   b.c = 1
 
+Low-precedence expressions in a higher-precedence context should remain parenthesized.
+
+  $ protocol print <<EOF
+  > (a.b = 1 || a.d = 2); b.c = 1
+  > EOF
+  (a.b = 1
+   ||
+   a.d = 2);
+  b.c = 1
+
+  $ protocol print <<EOF
+  > b.c = 1; (a.b = 1 || a.d = 2)
+  > EOF
+  b.c = 1;
+  (a.b = 1
+   ||
+   a.d = 2)
+
+  $ protocol print <<EOF
+  > (a.b = 1 \/ a.d = 2); b.c = 1
+  > EOF
+  (a.b = 1
+   \/
+   a.d = 2);
+  b.c = 1
+
+  $ protocol print <<EOF
+  > b.c = 1; (a.b = 1 \/ a.d = 2)
+  > EOF
+  b.c = 1;
+  (a.b = 1
+   \/
+   a.d = 2)
+
   $ protocol print <<EOF
   > (forall a in A b.b = 2); a.a = 1
   > EOF
   (forall a in A
      b.b = 2);
   a.a = 1
+
+  $ protocol print <<EOF
+  > forall a in A (b.b = 2 || a.a = 1)
+  > EOF
+  forall a in A
+    (b.b = 2
+     ||
+     a.a = 1)
 
   $ protocol print <<EOF
   > forall a in A b.b = 2; b.c = 3 \/ a.a = 1; b.b = 2

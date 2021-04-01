@@ -149,17 +149,27 @@ let render_protocol p =
     | Assign (v, e) -> separate space [render_var v; equals; render_expr e]
     | Imply (b, p) ->
       parens_multiline_if ~pctx ~n
-      @@ nest 2 (concat [render_expr b; space; if_; nl; render_protocol p])
+      @@ nest 2
+           (concat
+              [
+                render_expr b; space; if_; nl;
+                render_protocol ~pctx:{ pctx with prec = n } p;
+              ])
     | BlockingImply (b, p) ->
       parens_multiline_if ~pctx ~n
-      @@ nest 2 (concat [render_expr b; space; when_; nl; render_protocol p])
+      @@ nest 2
+           (concat
+              [
+                render_expr b; space; when_; nl;
+                render_protocol ~pctx:{ pctx with prec = n } p;
+              ])
     | Forall (v, s, p) ->
       parens_multiline_if ~pctx ~n
       @@ nest 2
            (concat
               [
                 forall; space; render_var v; space; in_; space; render_var s;
-                nl; render_protocol p;
+                nl; render_protocol ~pctx:{ pctx with prec = n } p;
               ])
     | Exists (v, s, p) ->
       parens_multiline_if ~pctx ~n
@@ -167,7 +177,7 @@ let render_protocol p =
            (concat
               [
                 exists; space; render_var v; space; in_; render_var s; nl;
-                render_protocol p;
+                render_protocol ~pctx:{ pctx with prec = n } p;
               ])
     | SendOnly { from; to_; msg = MessageC { typ; args } } ->
       concat
