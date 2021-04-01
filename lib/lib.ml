@@ -1139,6 +1139,16 @@ let print project_party party_specs ast no_normalize file =
        else
          render_protocol %> PPrint.ToChannel.pretty 0.8 120 stdout)
 
+module U = UnionFind.Make (UnionFind.StoreMap)
+
+let test () =
+  let store = U.new_store () in
+  let (s, r) = U.make store 1 in
+  let (s, r1) = U.make s 2 in
+  (* let s = U.set s r 3 in *)
+  let s = U.union max s r r1 in
+  (U.get s r |> snd, U.get s r1 |> snd)
+
 (* Tracing.wrap (fun () ->
     (* print_endline "abccc"; *)
     (* snapshot_protocol "test" Test.env Test.protocol *)

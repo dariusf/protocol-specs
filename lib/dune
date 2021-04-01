@@ -1,6 +1,6 @@
 (library
  (name lib)
- (libraries pprint containers ppx_debug menhirLib)
+ (libraries unionFind pprint containers ppx_debug menhirLib)
  (inline_tests)
  (preprocess
   (pps ppx_debug ppx_expect ppx_deriving.show ppx_deriving.ord

@@ -48,7 +48,10 @@ let help_cmd =
     Term.info "help" ~doc ~exits:Term.default_exits ~man )
 
 let print project party_specs ast no_normalize file =
-  Lib.print project party_specs ast no_normalize file;
+  begin
+    try Lib.print project party_specs ast no_normalize file
+    with Failure s -> Format.printf "an error occurred: %s@." s
+  end;
   `Ok ()
 
 let print_cmd =

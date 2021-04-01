@@ -49,3 +49,5 @@ The classic two-phase commit protocol.
     \/
       c->self*: abort;
       *self->c: abort_ack
+
+  $ protocol print --ast 2pc.spec
