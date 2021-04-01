@@ -17,4 +17,10 @@
 ||
   forall a in b a.b = 1; c.a = 2 \/ a.a = 1
 ||
+  (a.a = 1 || a.b = 2); a.c = 3
+||
+  (a.a = 1 \/ a.b = 2); a.c = 3
+||
+  (forall a in b a.b = 1; c.a = 2); a.a = 1
+||
   a.a = (a & (b | c))

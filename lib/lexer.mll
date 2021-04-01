@@ -6,16 +6,13 @@ exception SyntaxError
 let digit = ['0'-'9']
 let ident = ['a'-'z' 'A'-'Z'] ['a'-'z' 'A'-'Z' '0'-'9' '_']*
 let num = (digit | ['1'-'9'] digit*)
-let spaces = ' '+
-let indent = '\n' ' '*
-(* let newline = '\n'+ *)
-let tabs = ['\t']
+let tabs = ['\t' ' ']
 
 rule f = parse
-  | spaces as s { SPACE (String.length s) }
+  (* | spaces as s { SPACE (String.length s) } *)
   (* -1 for the newline *)
-  | indent as s { Lexing.new_line lexbuf; INDENT (String.length s - 1) }
-  (* | newline { NEWLINE } *)
+  (* | indent as s { Lexing.new_line lexbuf; INDENT (String.length s - 1) } *)
+  | '\n' { Lexing.new_line lexbuf; f lexbuf }
   | tabs+ { f lexbuf }
   | num as n { INT (int_of_string n) }
   | "forall" { FORALL }

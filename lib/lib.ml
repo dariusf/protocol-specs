@@ -49,9 +49,21 @@ let foldr1 f xs =
     xs None
   |> Option.get_exn
 
+(** printing contexts *)
+type pctx = {
+  (* precedence of the expression in which the current ast node appears *)
+  prec : int;
+  (* whether or not nodr is last in a sequence of some kind *)
+  last : bool;
+}
+
+let map_last f xs =
+  let l = List.length xs in
+  List.mapi (fun i x -> f (i = l - 1) x) xs
+
 let render_protocol p =
   let open PPrint in
-  let indent d = blank 2 ^^ nest 2 d in
+  (* let indent d = blank 2 ^^ nest 2 d in *)
   let (arrow, disj, par, if_, when_, in_, forall, exists) =
     ( string "->",
       string "\\/",
@@ -122,38 +134,45 @@ let render_protocol p =
     | Var v -> render_var v
     | Tuple (_, _) -> failwith "tuples?"
   in
-  let rec render_protocol p =
+  let get_protocol_prec p =
+    match p with
+    | Seq _ -> 5
+    | Imply _ | BlockingImply (_, _) -> 4
+    | Forall _ | Exists _ -> 3
+    | Par _ | Disj _ -> 2
+    | _ -> 0
+  in
+  let parens_multiline d = parens (nest 1 d) in
+  let parens_multiline_if ~pctx ~n =
+    if pctx.prec > n (* not sure if this is correct *)
+                     (* && not pctx.last *)
+    then
+      parens_multiline
+    else
+      Fun.id
+  in
+  let rec render_protocol ?(pctx = { prec = 0; last = false }) p =
+    let n = get_protocol_prec p in
     match p with
     | Emp -> failwith "emp?"
     | Seq ps ->
-      let l = List.length ps in
-
-      (* instead of the whole precedence setup we have for
-         expressions, we special-case the printing in here,
-         as number of precedence levels is fixed and small.
-         this also handles positioning semicolons at the
-         end of blocks. *)
-      ps
-      |> List.mapi (fun i c ->
-             if i = l - 1 then
-               (c, `None)
-             else
-               match c with Par _ | Disj _ -> (c, `Indent) | _ -> (c, `Trail))
-      |> List.map (fun (c, ind) ->
-             let c = render_protocol c in
-             match ind with
-             | `None -> c
-             | `Trail -> c ^^ semi ^^ nl
-             | `Indent -> indent c ^^ nl ^^ semi ^^ nl)
-      |> concat
+      separate (semi ^^ nl)
+        (ps
+        |> map_last (fun last p -> render_protocol ~pctx:{ prec = n; last } p))
     | Par ps ->
-      separate
-        (nl ^^ par ^^ nl)
-        (ps |> List.map render_protocol |> List.map indent)
+      parens_multiline_if ~pctx ~n
+      @@ separate
+           (nl ^^ par ^^ nl)
+           (ps
+           |> map_last (fun last p ->
+                  render_protocol ~pctx:{ prec = n; last } p))
     | Disj (a, b) ->
-      separate
-        (nl ^^ disj ^^ nl)
-        ([a; b] |> List.map render_protocol |> List.map indent)
+      parens_multiline_if ~pctx ~n
+      @@ separate
+           (nl ^^ disj ^^ nl)
+           ([a; b]
+           |> map_last (fun last p ->
+                  render_protocol ~pctx:{ prec = n; last } p))
     | Send { from; to_; msg = Message { typ; args } } ->
       concat
         [
@@ -169,23 +188,27 @@ let render_protocol p =
         ]
     | Assign (v, e) -> separate space [render_var v; equals; render_expr e]
     | Imply (b, p) ->
-      nest 2 (concat [render_expr b; space; if_; nl; render_protocol p])
+      parens_multiline_if ~pctx ~n
+      @@ nest 2 (concat [render_expr b; space; if_; nl; render_protocol p])
     | BlockingImply (b, p) ->
-      nest 2 (concat [render_expr b; space; when_; nl; render_protocol p])
+      parens_multiline_if ~pctx ~n
+      @@ nest 2 (concat [render_expr b; space; when_; nl; render_protocol p])
     | Forall (v, s, p) ->
-      nest 2
-        (concat
-           [
-             forall; space; render_var v; space; in_; space; render_var s; nl;
-             render_protocol p;
-           ])
+      parens_multiline_if ~pctx ~n
+      @@ nest 2
+           (concat
+              [
+                forall; space; render_var v; space; in_; space; render_var s;
+                nl; render_protocol p;
+              ])
     | Exists (v, s, p) ->
-      nest 2
-        (concat
-           [
-             exists; space; render_var v; space; in_; render_var s; nl;
-             render_protocol p;
-           ])
+      parens_multiline_if ~pctx ~n
+      @@ nest 2
+           (concat
+              [
+                exists; space; render_var v; space; in_; render_var s; nl;
+                render_protocol p;
+              ])
     | SendOnly { from; to_; msg = MessageC { typ; args } } ->
       concat
         [

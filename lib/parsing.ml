@@ -99,10 +99,10 @@ let flatten f =
 
 let echo f lexbuf =
   let t = f lexbuf in
-  (* Format.printf "tok %s@." (show_token t); *)
+  Format.printf "tok %s@." (show_token t);
   t
 
-let f = Lexer.f |> convert_space_to_parens |> flatten |> echo
+let f = Lexer.f
 
 let parse_mono_ic ic =
   let lexer = Lexing.from_channel ~with_positions:true ic in
