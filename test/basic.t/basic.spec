@@ -23,4 +23,4 @@
 ||
   (forall a in b a.b = 1; c.a = 2); a.a = 1
 ||
-  a.a = (a & (b | c))
+  a.a = d & a & (b | c)

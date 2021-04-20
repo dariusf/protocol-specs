@@ -157,7 +157,7 @@ Note that the parens are only added when necessary.
      c.a = 2);
   a.a = 1
   ||
-  a.a = a & (b | c)
+  a.a = d & a & (b | c)
 
   $ protocol print --ast basic.spec
   (Par
@@ -187,6 +187,11 @@ Note that the parens are only added when necessary.
           [(Forall (a, b,
               (Seq [(Assign (a.b, (Int 1))); (Assign (c.a, (Int 2)))])));
             (Assign (a.a, (Int 1)))]);
-       (Assign (a.a, (App ("&", [(Var a); (App ("|", [(Var b); (Var c)]))]))))])
+       (Assign (a.a,
+          (App ("&",
+             [(App ("&", [(Var d); (Var a)])); (App ("|", [(Var b); (Var c)]))]
+             ))
+          ))
+       ])
 
   $ protocol print basic.spec > basic1.spec && protocol print basic1.spec | protocol print > basic2.spec && git diff --no-index basic1.spec basic2.spec
