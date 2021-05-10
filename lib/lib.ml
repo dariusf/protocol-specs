@@ -1,5 +1,7 @@
 open Containers
-module Tracing = Ppx_debug.Tracing
+
+(* module Tracing = Ppx_debug.Tracing *)
+
 open Ast
 
 (** https://hackage.haskell.org/package/base-4.14.1.0/docs/src/Data.Foldable.html#foldr1 *)
@@ -7,7 +9,7 @@ let foldr1 f xs =
   List.fold_right
     (fun c t -> match t with None -> Some c | Some d -> Some (f c d))
     xs None
-  |> Option.get_exn
+  |> Option.get_exn_or "foldr1: empty"
 
 (** printing contexts *)
 type pctx = {
@@ -104,8 +106,10 @@ let render_protocol p =
   in
   let parens_multiline d = parens (nest 1 d) in
   let parens_multiline_if ~pctx ~n =
-    if pctx.prec > n (* not sure if this is correct *)
-                     (* && not pctx.last *)
+    if
+      pctx.prec > n
+      (* not sure if this is correct *)
+      (* && not pctx.last *)
     then
       parens_multiline
     else
@@ -302,9 +306,9 @@ let p_env env =
   Format.sprintf "%s;%s" a b
 
 (*   let add_equality l  r env = *)
-(* let rec solve_subs env = *)
-let%trace rec solve_subs : pvar IMap.t -> pvar IMap.t =
- fun env ->
+let rec solve_subs env =
+  (* let%trace rec solve_subs : pvar IMap.t -> pvar IMap.t = *)
+  (* fun env -> *)
   let p_env env = env |> IMap.bindings |> [%derive.show: (int * pvar) list] in
   Format.printf "solve %s@." (p_env env);
   (* right sides that occur on the left
@@ -342,16 +346,16 @@ let%trace rec solve_subs : pvar IMap.t -> pvar IMap.t =
     solve [(1, (Party a)); (2, (Party a)); (4, (Party a))]
     [(1, (Party a)); (2, (Party a)); (4, (Party a))] |}] *)
 
-let%trace get_party : var -> env -> pvar option =
- fun var env ->
-  (* let get_party var env = *)
+(* let%trace get_party : var -> env -> pvar option = *)
+(* fun var env -> *)
+let get_party var env =
   let open Option.Infix in
   let* v = VMap.find_opt var env.var_info in
   IMap.find_opt v env.var_constraints
 
-let%trace put_party : var -> pvar -> env -> pvar * env =
- fun var p env ->
-  (* let put_party var p env = *)
+(* let%trace put_party : var -> pvar -> env -> pvar * env = *)
+(* fun var p env -> *)
+let put_party var p env =
   let v = fresh () in
   ( Mono v,
     {
@@ -360,15 +364,15 @@ let%trace put_party : var -> pvar -> env -> pvar * env =
       var_constraints = IMap.add v p env.var_constraints;
     } )
 
-(* let init_party var env = *)
-let%trace init_party : var -> env -> pvar * env =
- fun var env ->
+let init_party var env =
+  (* let%trace init_party : var -> env -> pvar * env = *)
+  (* fun var env -> *)
   let v = fresh () in
   (Mono v, { env with var_info = VMap.add var v env.var_info })
 
-(* let add_equality v1 v2 env = *)
-let%trace add_equality : var -> var -> env -> env =
- fun v1 v2 env ->
+let add_equality v1 v2 env =
+  (* let%trace add_equality : var -> var -> env -> env = *)
+  (* fun v1 v2 env -> *)
   print_endline "equality";
   let v1p = get_party v1 env in
   let (v1p, env) =
@@ -400,9 +404,9 @@ let rec vars_in e =
   | Map s -> List.concat_map vars_in (List.map snd s)
   | Tuple (a, b) -> List.concat_map vars_in [a; b]
 
-(* let infer_parties env p = *)
-let%trace infer_parties : env -> protocol -> env =
- fun env p ->
+let infer_parties env p =
+  (* let%trace infer_parties : env -> protocol -> env = *)
+  (* fun env p -> *)
   let find_party v =
     env.parties
     |> List.filter (fun p -> List.mem ~eq:equal_var v p.vars)
