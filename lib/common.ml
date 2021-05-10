@@ -1,0 +1,26 @@
+open Containers
+
+exception Eval_failure of string
+
+let fail s = Format.ksprintf ~f:(fun m -> raise (Eval_failure m)) s
+
+let rec pairwise_foldr f init xs =
+  match xs with
+  | [] | [_] -> init
+  | a :: b :: xs1 -> f a b (pairwise_foldr f init (b :: xs1))
+
+(** https://hackage.haskell.org/package/base-4.14.1.0/docs/src/Data.Foldable.html#foldr1 *)
+let foldr1 f xs =
+  List.fold_right
+    (fun c t -> match t with None -> Some c | Some d -> Some (f c d))
+    xs None
+  |> Option.get_exn_or "foldr1: empty"
+
+let map_last f xs =
+  let l = List.length xs in
+  List.mapi (fun i x -> f (i = l - 1) x) xs
+
+let rec transpose xss =
+  match xss with
+  | (_ :: _) :: _ -> List.map List.hd xss :: transpose (List.map List.tl xss)
+  | _ -> []
