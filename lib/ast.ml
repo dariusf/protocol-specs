@@ -1,4 +1,5 @@
 open Containers
+open Common
 
 type party = Party of string [@@deriving ord, eq]
 
@@ -6,24 +7,18 @@ let pp_party fmt (Party p) = Format.fprintf fmt "%s" p
 
 type var = V of party option * string [@@deriving ord, eq]
 
-let pp_var fmt (V (p, var)) =
-  match p with
-  | Some p -> Format.fprintf fmt "%a.%s" pp_party p var
-  | None -> Format.fprintf fmt "%s" var
-
-let var s = V (None, s)
-
-(* let ( >. ) (V (_, c)) s = V (Some (Party c), s)  *)
-
-let ( >. ) (V (_, c)) (V (_, s)) = V (Some (Party c), s)
-
 let var_name (V (_, v)) = v
 
 let var_names vars = List.map var_name vars
 
 let pp_const s fmt () = Format.fprintf fmt "%s" s
 
-let pp_literal fmt s = Format.fprintf fmt "%s" s
+let pp_var fmt (V (p, var)) =
+  match p with
+  | Some p -> Format.fprintf fmt "%a.%s" pp_party p var
+  | None -> Format.fprintf fmt "%s" var
+
+let var s = V (None, s)
 
 module VMap = struct
   module M = Map.Make (struct
@@ -63,16 +58,66 @@ module IMap = struct
       map
 end
 
-type expr =
+type typ =
+  | TyParty of UF.t
+  | TySet of typ
+  | TyList of typ
+  | TyVar of UF.t
+  | TyInt
+  | TyBool
+  | TyFn of typ list * typ
+[@@deriving show { with_path = false }, eq]
+
+type meta = { loc : loc }
+
+type ownership =
+  | Global
+  | Party of UF.t
+[@@deriving show { with_path = false }, eq]
+
+type var_info = {
+  typ : typ;
+  own : ownership;
+}
+[@@deriving show { with_path = false }, eq]
+
+type tmeta = {
+  loc : loc;
+  info : var_info;
+}
+[@@deriving show { with_path = false }, eq]
+
+type 'a _expr = {
+  meta : 'a;
+  expr : 'a _expr';
+}
+
+and 'a _expr' =
   | Int of int
   | Bool of bool
-  | Set of expr list
-  | List of expr list
-  | Map of (string * expr) list
-  | App of string * expr list
+  | Set of 'a _expr list
+  | List of 'a _expr list
+  | Map of (string * 'a _expr) list
+  | App of string * 'a _expr list
   | Var of var
-  | Tuple of expr * expr
-[@@deriving eq, show { with_path = false }]
+  | Tuple of 'a _expr * 'a _expr
+[@@deriving show { with_path = false }, eq]
+
+type expr = loc _expr [@@deriving show { with_path = false }, eq]
+
+type texpr = tmeta _expr [@@deriving show { with_path = false }, eq]
+
+let with_pos start stop expr =
+  Lexing.
+    {
+      meta =
+        {
+          start =
+            { line = start.pos_lnum; col = start.pos_cnum - start.pos_bol };
+          stop = { line = stop.pos_lnum; col = stop.pos_cnum - stop.pos_bol };
+        };
+      expr;
+    }
 
 let plus a b = App ("+", [a; b])
 
@@ -86,26 +131,26 @@ let and_ a b = App ("&", [a; b])
 
 let or_ a b = App ("|", [a; b])
 
-type msg =
+type ('e, 'v) msg =
   | Message of {
       typ : string;
-      args : (var * expr) list;
+      args : ('v * 'e) list;
     }
-[@@deriving eq]
+[@@deriving show { with_path = false }, eq]
 
-type msg_destruct =
+type 'v msg_destruct =
   | MessageD of {
       typ : string;
-      args : var list;
+      args : 'v list;
     }
-[@@deriving eq]
+[@@deriving show { with_path = false }, eq]
 
-type msg_construct =
+type 'e msg_construct =
   | MessageC of {
       typ : string;
-      args : expr list;
+      args : 'e list;
     }
-[@@deriving eq]
+[@@deriving show { with_path = false }, eq]
 
 let msg name = Message { typ = name; args = [] }
 
@@ -115,64 +160,103 @@ let msg_destruct (Message { typ; args }) =
 let msg_construct (Message { typ; args }) =
   MessageC { typ; args = List.map snd args }
 
-let pp_msg fmt (Message { typ; args }) =
-  Format.fprintf fmt "%s%s" typ
-    (match args with
-    | [] -> ""
-    | _ ->
-      args
-      |> List.map (fun (k, v) -> Format.sprintf "%a=%a" pp_var k pp_expr v)
-      |> String.concat ", "
-      |> fun a -> "(" ^ a ^ ")")
+type ('a, 'e, 'v) _protocol = {
+  pmeta : 'a;
+  p : ('a, 'e, 'v) _protocol';
+}
 
-let pp_msg_construct fmt (MessageC { typ; args }) =
-  Format.fprintf fmt "%s%s" typ
-    (match args with
-    | [] -> ""
-    | _ ->
-      args
-      |> List.map (fun v -> Format.sprintf "%a" pp_expr v)
-      |> String.concat ", "
-      |> fun a -> "(" ^ a ^ ")")
-
-let pp_msg_destruct fmt (MessageD { typ; args }) =
-  Format.fprintf fmt "%s%s" typ
-    (match args with
-    | [] -> ""
-    | _ ->
-      args
-      |> List.map (fun k -> Format.sprintf "%a" pp_var k)
-      |> String.concat ", "
-      |> fun a -> "(" ^ a ^ ")")
-
-type protocol =
+and ('a, 'e, 'v) _protocol' =
   | Emp
-  | Seq of protocol list
-  | Par of protocol list
-  | Disj of protocol * protocol
+  | Seq of ('a, 'e, 'v) _protocol list
+  | Par of ('a, 'e, 'v) _protocol list
+  | Disj of ('a, 'e, 'v) _protocol * ('a, 'e, 'v) _protocol
   | Send of {
-      from : var;
-      to_ : var;
-      msg : msg;
+      from : 'v;
+      to_ : 'v;
+      msg : ('e, 'v) msg;
     }
-  | Assign of var * expr
-  | Imply of expr * protocol
-  | BlockingImply of expr * protocol
+  | Assign of 'v * 'e
+  | Imply of 'e * ('a, 'e, 'v) _protocol
+  | BlockingImply of 'e * ('a, 'e, 'v) _protocol
   (* TODO use bindlib? *)
-  | Forall of var * var * protocol
-  | Exists of var * var * protocol
+  | Forall of 'v * 'e * ('a, 'e, 'v) _protocol
+  | Exists of 'v * 'e * ('a, 'e, 'v) _protocol
   (* extras *)
   | SendOnly of {
-      from : var;
-      to_ : var;
-      msg : msg_construct;
+      from : 'v;
+      to_ : 'v;
+      msg : 'e msg_construct;
     }
   | ReceiveOnly of {
-      from : var;
-      to_ : var;
-      msg : msg_destruct;
+      from : 'v;
+      to_ : 'v;
+      msg : 'v msg_destruct;
     }
   (* cst *)
-  | Comment of var option * string * protocol
+  | Comment of var option * string * ('a, 'e, 'v) _protocol
 (* cst would have parens too *)
-[@@deriving eq, show { with_path = false }]
+[@@deriving show { with_path = false }, eq]
+
+let must_be_var e =
+  match e.expr with
+  | Var v -> v
+  | _ -> failwith (Format.sprintf "%a must be a var" pp_expr e)
+
+let must_be_var_t e =
+  match e.expr with
+  | Var v -> v
+  | _ -> failwith (Format.sprintf "%a must be a var" pp_texpr e)
+
+type protocol = (loc, expr, expr) _protocol
+[@@deriving show { with_path = false }, eq]
+
+type tprotocol = (loc, texpr, texpr) _protocol
+[@@deriving show { with_path = false }, eq]
+
+let p_with_pos start stop p =
+  Lexing.
+    {
+      pmeta =
+        {
+          start =
+            { line = start.pos_lnum; col = start.pos_cnum - start.pos_bol };
+          stop = { line = stop.pos_lnum; col = stop.pos_cnum - stop.pos_bol };
+        };
+      p;
+    }
+
+type party_info = {
+  (* representative set, will be nonempty *)
+  repr : var;
+}
+[@@deriving show { with_path = false }, eq]
+
+let empty_party_info repr =
+  {
+    repr
+  }
+
+type scheme = Forall of UF.t list * typ
+[@@deriving show { with_path = false }]
+
+type env = {
+  (* known parties and types *)
+  parties : party_info IMap.t;
+  types : typ IMap.t;
+  (* tracks the types of variables, will have pointers into above fields *)
+  bindings : var_info SMap.t;
+  local_bindings : var_info SMap.t;
+  polymorphic : scheme SMap.t;
+}
+[@@deriving show { with_path = false }]
+
+let empty_env =
+  {
+    parties = IMap.empty;
+    types = IMap.empty;
+    bindings = SMap.empty;
+    local_bindings = SMap.empty;
+    polymorphic = SMap.empty;
+  }
+
+let party_list parties = parties |> IMap.values |> List.of_iter

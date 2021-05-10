@@ -47,11 +47,8 @@ let help_cmd =
   ( Term.(ret (const help $ Arg.man_format $ Term.choice_names $ topic)),
     Term.info "help" ~doc ~exits:Term.default_exits ~man )
 
-let print project party_specs ast no_normalize file =
-  begin
-    try Lib.print project party_specs ast no_normalize file
-    with Failure s -> Format.printf "an error occurred: %s@." s
-  end;
+let print project parties ast types file =
+  Ppx_debug.Tracing.wrap (fun () -> Lib.print project parties ast types file);
   `Ok ()
 
 let print_cmd =
@@ -65,22 +62,20 @@ let print_cmd =
           (info ~docv:"PROJECT" ~doc:"project protocol for a specific party"
              ["project"]))
   in
-  let party =
+  let parties =
     Arg.(
       value
-      & opt_all string []
-          (info ~docv:"PARTY" ~doc:"provide a specification of party variables"
-             ["party"]))
+      & opt (some string) None
+          (info ~docv:"PARTIES" ~doc:"indicate party sets" ["parties"]))
   in
   let ast =
     Arg.(value & flag (info ~docv:"AST" ~doc:"dumps the AST" ["ast"]))
   in
-  let no_normalize =
+  let types =
     Arg.(
       value
       & flag
-          (info ~docv:"NO_NORMALIZE"
-             ~doc:"disables normalization; for debugging" ["no-normalize"]))
+          (info ~docv:"TYPES" ~doc:"print values annotated with types" ["types"]))
   in
   let man =
     [
@@ -88,7 +83,7 @@ let print_cmd =
       `Blocks help_secs;
     ]
   in
-  ( Term.(ret (const print $ project $ party $ ast $ no_normalize $ file)),
+  ( Term.(ret (const print $ project $ parties $ ast $ types $ file)),
     Term.info "print" ~doc:"renders a specification" ~exits:Term.default_exits
       ~man )
 

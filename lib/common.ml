@@ -1,8 +1,35 @@
 open Containers
 
-exception Eval_failure of string
 
-let fail s = Format.ksprintf ~f:(fun m -> raise (Eval_failure m)) s
+type pos = {
+  line : int;
+  col : int;
+}
+[@@deriving show { with_path = false }, eq]
+
+type loc = {
+  start : pos;
+  stop : pos;
+}
+[@@deriving show { with_path = false }, eq]
+
+exception Check_failure of string
+
+let fail ~loc s =
+  Format.ksprintf
+    ~f:(fun m ->
+      raise
+        (Check_failure
+           (Format.sprintf "error at line %d, col %d:\n@[<h>%s@]" loc.start.line
+              loc.start.col m)))
+    s
+
+let bug s = Format.ksprintf ~f:failwith s
+
+let nyi s =
+  Format.ksprintf
+    ~f:(fun m -> failwith (Format.sprintf "not yet implemented: %s" m))
+    s
 
 let rec pairwise_foldr f init xs =
   match xs with
@@ -24,3 +51,5 @@ let rec transpose xss =
   match xss with
   | (_ :: _) :: _ -> List.map List.hd xss :: transpose (List.map List.tl xss)
   | _ -> []
+
+module UF = UF.Int

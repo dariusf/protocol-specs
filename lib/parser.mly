@@ -1,3 +1,7 @@
+%{
+  open Ast
+%}
+
 %token <int> SPACE
 %token <int> INDENT
 %token EOF
@@ -15,16 +19,16 @@
 %right forall_exists
 %left SEMI (* this being after if/when makes it the reverse of what ocaml does: semicolons get nested inside conditionals  *)
 
+%left OR
+%left AND
 %left EQEQ
 %left LT LE GT GE
 %left PLUS MINUS
 %left DIV STAR
-%left OR
-%left AND
 %nonassoc NOT
 
-%start <Ast.expr> f
-%start <Ast.protocol> p
+%start <expr> f
+%start <protocol> p
 
 %%
 
@@ -47,47 +51,47 @@ map_kvp :
   | v = IDENT; COLON; e = expr; { (v, e) }
 
 expr :
-  | n = INT; { Ast.Int n }
+  | n = INT; { with_pos $startpos $endpos (Int n) }
 
   | i = IDENT;
-    { Ast.Var (V (None, i)) }
+    { with_pos $startpos $endpos (Var (V (None, i))) }
   | p = IDENT; DOT; i = IDENT;
-    { Ast.Var (V (Some (Party p), i)) }
+    { with_pos $startpos $endpos (Var (V (Some (Party p), i))) }
   | f = IDENT; args = delimited(LPAREN, separated_list(COMMA, expr), RPAREN)
-    { Ast.App (f, args) }
+    { with_pos $startpos $endpos (App (f, args)) }
 
   (* ugh using the macros causes shift/reduce conflicts but inlining this doesn't! *)
   (*
   | party = terminated(IDENT?, DOT); i = IDENT;
-    { Ast.Var (V (Option.map (fun p -> Ast.Party p) party, i)) }
+    { Var (V (Option.map (fun p -> Party p) party, i)) }
 *)
 
   (*%prec dot*)
   (*
   | party = terminated(expr?, DOT); i = IDENT;
   (*%prec dot*)
-    { Ast.Var (V (Option.map (fun p -> Ast.Party p) party, i)) }
+    { Var (V (Option.map (fun p -> Party p) party, i)) }
   *)
-  | TRUE; { Ast.Bool true }
-  | FALSE; { Ast.Bool false }
-  | a = expr; o = binop; b = expr; { Ast.App (o, [a; b]) }
-  | NOT; e = expr; { Ast.App ("!", [e]) }
-  | es = delimited(LCURLY, separated_list(COMMA, expr), RCURLY) { Ast.Set es }
-  | es = delimited(LBRACKET, separated_nonempty_list(COMMA, expr), RBRACKET) { Ast.List es }
+  | TRUE; { with_pos $startpos $endpos (Bool true) }
+  | FALSE; { with_pos $startpos $endpos (Bool false) }
+  | a = expr; o = binop; b = expr; { with_pos $startpos $endpos (App (o, [a; b])) }
+  | NOT; e = expr; { with_pos $startpos $endpos (App ("!", [e])) }
+  | es = delimited(LCURLY, separated_list(COMMA, expr), RCURLY) { with_pos $startpos $endpos (Set es) }
+  | es = delimited(LBRACKET, separated_nonempty_list(COMMA, expr), RBRACKET) { with_pos $startpos $endpos (List es) }
   (* empty set/map are ambiguous *)
-  | es = delimited(LCURLY, separated_nonempty_list(COMMA, map_kvp), RCURLY) { Ast.Map es }
+  | es = delimited(LCURLY, separated_nonempty_list(COMMA, map_kvp), RCURLY) { with_pos $startpos $endpos (Map es) }
   | LPAREN; e = expr; RPAREN; { e }
 
 p : pr = protocol; EOF { pr }
 
-msg_kvp :
-  | v = IDENT; EQ; e = expr; { (V (None, v), e) }
-
 var :
   | var = IDENT;
-    { Ast.V (None, var) }
+    { with_pos $startpos $endpos (Var (V (None, var))) }
   | party = IDENT; DOT; var = IDENT;
-    { Ast.V (Some (Party party), var) }
+    { with_pos $startpos $endpos (Var (V (Some (Party party), var))) }
+
+msg_kvp :
+  | v = var; EQ; e = expr; { (v, e) }
 
 protocol :
   (*| party = terminated(IDENT?, DOT) var = IDENT; EQ; e = expr;*)
@@ -98,26 +102,26 @@ protocol :
   | party = IDENT; DOT; var = IDENT; EQ; e = expr;
     { Ast.Assign (V (Some (Party party), var), e) }
 *)
-  | v = var; EQ; e = expr; { Ast.Assign (v, e) }
-  | p1 = IDENT; ARROW; p2 = IDENT; COLON; m = IDENT; args = loption(delimited(LPAREN, separated_nonempty_list(COMMA, msg_kvp), RPAREN));
-    { Ast.Send { from = V (None, p1); to_ = V (None, p2); msg = Message { typ = m; args = args } } }
-  | STAR; p1 = IDENT; ARROW; p2 = IDENT; COLON; m = IDENT; es = loption(delimited(LPAREN, separated_nonempty_list(COMMA, expr), RPAREN));
-    { Ast.SendOnly { from = V (None, p1); to_ = V (None, p2); msg = MessageC { typ = m; args = es } } }
-  | p1 = IDENT; ARROW; p2 = IDENT; STAR; COLON; m = IDENT; is = loption(delimited(LPAREN, separated_nonempty_list(COMMA, IDENT), RPAREN));
-    { Ast.ReceiveOnly { from = V (None, p1); to_ = V (None, p2); msg = MessageD { typ = m; args = is |> List.map (fun i -> Ast.V (None, i)) } } }
-  (*| ps = separated_nonempty_list(SEMI, protocol) { Ast.Seq ps }*)
-  | p1 = protocol; SEMI; p2 = protocol; { Ast.Seq [p1; p2] }
-  | p1 = protocol; PAR; p2 = protocol; { Ast.Par [p1; p2] }
-  (*| ps = separated_nonempty_list(PAR, protocol) { Ast.Par ps }*)
-  | p1 = protocol; DISJ; p2 = protocol; { Ast.Disj (p1, p2) }
-  | b = expr; IF; p = protocol; { Ast.Imply (b, p) }
-  | b = expr; WHEN; p = protocol; { Ast.BlockingImply (b, p) }
+  | v = var; EQ; e = expr; { p_with_pos $startpos $endpos (Assign (v, e)) }
+  | p1 = var; ARROW; p2 = var; COLON; m = IDENT; args = loption(delimited(LPAREN, separated_nonempty_list(COMMA, msg_kvp), RPAREN));
+    { p_with_pos $startpos $endpos (Send { from = p1; to_ = p2; msg = Message { typ = m; args = args } }) }
+  | STAR; p1 = var; ARROW; p2 = var; COLON; m = IDENT; es = loption(delimited(LPAREN, separated_nonempty_list(COMMA, expr), RPAREN));
+    { p_with_pos $startpos $endpos (SendOnly { from = p1; to_ = p2; msg = MessageC { typ = m; args = es } }) }
+  | p1 = var; ARROW; p2 = var; STAR; COLON; m = IDENT; is = loption(delimited(LPAREN, separated_nonempty_list(COMMA, var), RPAREN));
+    { p_with_pos $startpos $endpos (ReceiveOnly { from = p1; to_ = p2; msg = MessageD { typ = m; args = is } }) }
+  (*| ps = separated_nonempty_list(SEMI, protocol) { p_with_pos $startpos $endpos (Seq ps) }*)
+  | p1 = protocol; SEMI; p2 = protocol; { p_with_pos $startpos $endpos (Seq [p1; p2]) }
+  | p1 = protocol; PAR; p2 = protocol; { p_with_pos $startpos $endpos (Par [p1; p2]) }
+  (*| ps = separated_nonempty_list(PAR, protocol) { p_with_pos $startpos $endpos (Par ps) }*)
+  | p1 = protocol; DISJ; p2 = protocol; { p_with_pos $startpos $endpos (Disj (p1, p2)) }
+  | b = expr; IF; p = protocol; { p_with_pos $startpos $endpos (Imply (b, p)) }
+  | b = expr; WHEN; p = protocol; { p_with_pos $startpos $endpos (BlockingImply (b, p)) }
   (*
   | FORALL; v = IDENT; IN; s = var; DOT; p = protocol; %prec forall_exists
-    { Ast.Forall (V (None, v), s, p) }
+    { p_with_pos $startpos $endpos (Forall (V (None, v), s, p)) }
 *)
-  | FORALL; v = IDENT; IN; s = var; p = protocol; %prec forall_exists
-    { Ast.Forall (V (None, v), s, p) }
-  | EXISTS; v = IDENT; IN; s = IDENT; DOT; p = protocol; %prec forall_exists
-    { Ast.Exists (V (None, v), V (None, s), p) }
+  | FORALL; v = var; IN; s = var; p = protocol; %prec forall_exists
+    { p_with_pos $startpos $endpos (Forall (v, s, p)) }
+  | EXISTS; v = var; IN; s = var; p = protocol; %prec forall_exists
+    { p_with_pos $startpos $endpos (Exists (v, s, p)) }
   | LPAREN; p = protocol; RPAREN; { p }

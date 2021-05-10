@@ -27,8 +27,6 @@
    (= 5.2.1))
   (cmdliner
    (= 1.0.4))
-  (unionFind
-   (= 20200320))
   (pprint
    (= 20200410))
   (containers

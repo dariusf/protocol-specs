@@ -38,6 +38,7 @@ rule f = parse
   | "=" { EQ }
   | "==" { EQEQ }
   | "+" { PLUS }
+  | "*" { STAR }
   | "-" { MINUS }
   | "/" { DIV }
   | ">" { GT }

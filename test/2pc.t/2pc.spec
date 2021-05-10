@@ -6,10 +6,10 @@ forall c in C
     // participant's internal choice
     // coordinator's external choice
     (p->c: prepared;
-    responded = responded + {p}
+    responded = union(responded, {p})
     \/
     p->c: abort;
-    aborted = aborted + {p}));
+    aborted = union(aborted, {p})));
   aborted == {} =>*
     (forall p in P
       c->p: commit;

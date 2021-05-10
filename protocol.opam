@@ -10,7 +10,6 @@ depends: [
   "ppx_expect" {with-test}
   "ppx_deriving" {= "5.2.1"}
   "cmdliner" {= "1.0.4"}
-  "unionFind" {= "20200320"}
   "pprint" {= "20200410"}
   "containers" {> "3.0"}
   "menhir" {= "20210419"}

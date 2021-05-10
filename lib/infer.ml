@@ -1,11 +1,9 @@
 open Containers
 open Common
 open Ast
+module Tracing = Ppx_debug.Tracing
 
-type pvar =
-  | Mono of int
-  | Party of var
-[@@deriving show { with_path = false }]
+let debug = false
 
 let fresh =
   let n = ref 0 in
@@ -14,212 +12,624 @@ let fresh =
     incr n;
     r
 
-(* is a party vs belongs to a party *)
+let rec subst ~from ~to_ in_ =
+  if equal_typ from in_ then
+    to_
+  else
+    match in_ with
+    | TyParty _ | TyVar _ | TyInt | TyBool -> in_
+    | TySet c -> TySet (subst ~from ~to_ c)
+    | TyList c -> TyList (subst ~from ~to_ c)
+    | TyFn (args, r) ->
+      TyFn (List.map (subst ~from ~to_) args, subst ~from ~to_ r)
 
-type party_info = {
-  (* representative set *)
-  repr : var;
-  (* other subsets of repr *)
-  other_sets : var list;
-  (* elements of repr *)
-  vars : var list;
-  (* variables owned by this party *)
-  owned_vars : var list;
-}
-[@@deriving show { with_path = false }]
-
-type env = {
-  parties : party_info list;
-  var_info : int VMap.t;
-  var_constraints : pvar IMap.t;
-}
-[@@deriving show { with_path = false }]
-
-let p_env env =
-  let a = env.var_info |> VMap.bindings |> [%derive.show: (var * int) list] in
-  let b =
-    env.var_constraints |> IMap.bindings |> [%derive.show: (int * pvar) list]
+let instantiate (Forall (vs, t)) =
+  let fresh_vars =
+    List.map (fun v -> (TyVar v, TyVar (UF.elt (fresh ())))) vs
   in
-  Format.sprintf "%s;%s" a b
+  List.fold_right (fun (from, to_) t -> subst ~from ~to_ t) fresh_vars t
 
-(*   let add_equality l  r env = *)
-let rec solve_subs env =
-  (* let%trace rec solve_subs : pvar IMap.t -> pvar IMap.t = *)
-  (* fun env -> *)
-  let p_env env = env |> IMap.bindings |> [%derive.show: (int * pvar) list] in
-  Format.printf "solve %s@." (p_env env);
-  (* right sides that occur on the left
-     1->2
-     2->4
-     this returns (1, 2, 4)
-  *)
-  let rol =
-    IMap.bindings env
-    |> List.filter_map (fun (k, v) ->
-           match v with
-           | Party _ -> None
-           | Mono i -> IMap.find_opt i env |> Option.map (fun rr -> (k, i, rr)))
+let explain_env env =
+  let ppi fmt { typ; own } =
+    Format.fprintf fmt "typ = %a; ownership = %a" (Print.pp_typ ~env) typ
+      (Print.pp_ownership ~env) own
   in
-  match rol with
-  | [] -> env
-  | _ ->
-    List.fold_right
-      (fun (l, r, rr) t ->
-        match rr with
-        | Party _ -> IMap.add l rr t
-        | Mono j when j > r -> IMap.add l (Mono j) t
-        | Mono _ -> IMap.add l (Mono r) t)
-      rol env
-    |> solve_subs
+  [
+    "---- parties";
+    env.parties |> party_list
+    |> List.map (fun p -> Format.sprintf "%a" pp_party_info p)
+    |> String.concat "\n"; "---- types";
+    env.types |> IMap.bindings
+    |> List.map (fun (k, v) -> Format.sprintf "%d: %a" k pp_typ v)
+    |> String.concat "\n"; "---- vars";
+    env.bindings |> SMap.bindings
+    (* |> List.map (fun (v, t) -> Format.asprintf "%s : %a" v pp_var_info t) *)
+    |> List.map (fun (v, t) -> Format.asprintf "%s : %a" v ppi t)
+    |> String.concat "\n"; "---- local vars";
+    env.local_bindings |> SMap.bindings
+    (* |> List.map (fun (v, t) -> Format.asprintf "%s : %a" v pp_var_info t) *)
+    |> List.map (fun (v, t) -> Format.asprintf "%s : %a" v ppi t)
+    |> String.concat "\n"; "----------------";
+  ]
+  |> String.concat "\n\n"
 
-(* let%expect_test "solve_subs" =
-  let show a = a |> [%derive.show: (int * pvar) list] |> print_endline in
-  solve_subs (IMap.of_list [(1, Mono 2); (2, Mono 4); (4, Party (var "a"))])
-  |> IMap.bindings |> show;
-  [%expect
-    {|
-    solve [(1, (Mono 2)); (2, (Mono 4)); (4, (Party a))]
-    solve [(1, (Mono 4)); (2, (Party a)); (4, (Party a))]
-    solve [(1, (Party a)); (2, (Party a)); (4, (Party a))]
-    [(1, (Party a)); (2, (Party a)); (4, (Party a))] |}] *)
-
-(* let%trace get_party : var -> env -> pvar option = *)
-(* fun var env -> *)
-let get_party var env =
-  let open Option.Infix in
-  let* v = VMap.find_opt var env.var_info in
-  IMap.find_opt v env.var_constraints
-
-(* let%trace put_party : var -> pvar -> env -> pvar * env = *)
-(* fun var p env -> *)
-let put_party var p env =
-  let v = fresh () in
-  ( Mono v,
-    {
-      env with
-      var_info = VMap.add var v env.var_info;
-      var_constraints = IMap.add v p env.var_constraints;
-    } )
-
-let init_party var env =
-  (* let%trace init_party : var -> env -> pvar * env = *)
-  (* fun var env -> *)
-  let v = fresh () in
-  (Mono v, { env with var_info = VMap.add var v env.var_info })
-
-let add_equality v1 v2 env =
-  (* let%trace add_equality : var -> var -> env -> env = *)
-  (* fun v1 v2 env -> *)
-  print_endline "equality";
-  let v1p = get_party v1 env in
-  let (v1p, env) =
-    match v1p with None -> init_party v1 env | Some p -> (p, env)
-  in
-  let v2p = get_party v2 env in
-  let (v2p, env) =
-    match v2p with None -> init_party v2 env | Some p -> (p, env)
-  in
-  match (v1p, v2p) with
-  | (Party p1, Party p2) when equal_var p1 p2 -> env
-  | (Party _, Party _) -> fail "parties different"
-  | (Mono p1, Mono _) | (Mono p1, Party _) ->
-    {
-      env with
-      var_constraints = IMap.add p1 v2p env.var_constraints |> solve_subs;
-    }
-  | (Party _, Mono p2) ->
-    {
-      env with
-      var_constraints = IMap.add p2 v1p env.var_constraints |> solve_subs;
-    }
-
-let rec vars_in e =
-  match e with
-  | Int _ | Bool _ -> []
-  | Var v -> [v]
-  | App (_, s) | Set s | List s -> List.concat_map vars_in s
-  | Map s -> List.concat_map vars_in (List.map snd s)
-  | Tuple (a, b) -> List.concat_map vars_in [a; b]
-
-let infer_parties env p =
-  (* let%trace infer_parties : env -> protocol -> env = *)
-  (* fun env p -> *)
-  let find_party v =
-    env.parties
-    |> List.filter (fun p -> List.mem ~eq:equal_var v p.vars)
-    |> List.map (fun p -> p.repr)
-    |> List.hd
-  in
-  let rec aux p env =
-    Format.printf "infer %s %a@." (p_env env) pp_protocol p;
-    match p with
-    | Emp -> env
-    | Send { from; to_; msg = Message { args; _ } } ->
-      let sender = find_party from in
-      let receiver = find_party to_ in
-      let sender_vars = args |> List.map snd |> List.concat_map vars_in in
-      let receiver_vars = args |> List.map fst in
-      env
-      |> List.fold_right
-           (fun c t ->
-             let v = get_party c t in
-             match v with
-             | None ->
-               let (_, env) = put_party c (Party sender) env in
-               env
-             | Some _ -> env)
-           sender_vars
-      |> List.fold_right
-           (fun c t ->
-             let v = get_party c t in
-             match v with
-             | None ->
-               let (_, env) = put_party c (Party receiver) env in
-               env
-             | Some _ -> env)
-           receiver_vars
-    | Assign (v, e) ->
-      let rhs = vars_in e in
-      pairwise_foldr add_equality env (v :: rhs)
-    | Imply (c, p) | BlockingImply (c, p) ->
-      let env = pairwise_foldr add_equality env (vars_in c) in
-      aux p env
-    | Seq s -> List.fold_right aux s env
-    | Par ps -> List.fold_right aux ps env
-    | Disj (a, b) -> List.fold_right aux [a; b] env
-    | Forall (_, _, p1) | Exists (_, _, p1) | Comment (_, _, p1) -> aux p1 env
-    | SendOnly _ -> fail "infer_parties doesn't expect send only"
-    | ReceiveOnly _ -> fail "infer_parties doesn't expect receive only"
-  in
-
-  aux p env
-
-(* let rec qualify_expr ((V (_, pn), vars) as party) e =
-  match e with
-  | Int _ | Bool _ -> e
-  | Var (V (None, vn)) ->
-    if List.mem ~eq:String.equal vn (var_names vars) then
-      Var (V (Some (Party pn), vn))
+let unify_party_variables a b env =
+  let (a2, b2) = (UF.value a, UF.value b) in
+  match (IMap.find_opt a2 env.parties, IMap.find_opt b2 env.parties) with
+  | (None, None) ->
+    UF.union a b;
+    Ok env
+  | (Some a3, None) ->
+    UF.union a b;
+    let parties = IMap.add b2 a3 env.parties in
+    Ok { env with parties }
+  | (None, Some b3) ->
+    UF.union a b;
+    let parties = IMap.add b2 b3 env.parties in
+    Ok { env with parties }
+  | (Some a3, Some b3) ->
+    if equal_party_info a3 b3 then
+      Ok env
     else
-      fail "variable %a does not belong to %s" pp_expr e pn
-  | Var (V (Some _, _)) -> e
-  | Set s -> Set (List.map (qualify_expr party) s)
-  | App (n, s) -> App (n, List.map (qualify_expr party) s) *)
+      Error
+        (`Does_not_unify
+          (Format.sprintf "could not unify parties %a and %a" pp_var a3.repr
+             pp_var b3.repr))
 
-let is_owned_by { owned_vars; vars; _ } (V (p, v)) =
-  match p with
-  | Some (Party p1) when List.mem ~eq:String.equal p1 (var_names vars) ->
-    (* given *)
-    (* TODO what if not in owned vars? *)
-    true
-  | None when List.mem ~eq:String.equal v (var_names owned_vars) ->
-    (* inferred *)
-    true
-  | _ -> false
+let%trace rec unify :
+    typ ->
+    typ ->
+    env ->
+    ( env,
+      [> `Does_not_unify of string
+      | `Parties_instantiated_but_different of string
+      ] )
+    result =
+ fun a b env ->
+  let open Result.Infix in
+  if debug then
+    Format.printf "unify: %a and %a @." pp_typ a pp_typ b;
+  match (a, b) with
+  | (TyInt, TyInt) | (TyBool, TyBool) -> Ok env
+  | (TyParty a1, TyParty b1) -> unify_party_variables a1 b1 env
+  | (TyVar a, TyVar b) ->
+    let unify_type_variables a b env =
+      let (a1, b1) = (UF.value a, UF.value b) in
+      match (IMap.find_opt a1 env.types, IMap.find_opt b1 env.types) with
+      | (Some a2, Some b2) ->
+        (* this recursive call is the reason this is separate from unify_party_variables *)
+        unify a2 b2 env
+      | (Some t, None) ->
+        let types = env.types in
+        (* let types = IMap.remove a2 env.types in *)
+        UF.union a b;
+        let types = IMap.add (UF.value a) t types in
+        Ok { env with types }
+      | (None, Some t) ->
+        let types = env.types in
+        (* let types = IMap.remove b2 env.types in *)
+        UF.union a b;
+        let types = IMap.add (UF.value a) t types in
+        Ok { env with types }
+      | (None, None) ->
+        UF.union a b;
+        Ok env
+    in
+    unify_type_variables a b env
+  | (TySet sa, TySet sb) -> unify sa sb env
+  | (TyFn (a1, r1), TyFn (a2, r2)) ->
+    if List.length a1 = List.length a2 then
+      List.fold_right2
+        (fun a b t ->
+          let* env = t in
+          unify a b env)
+        (a1 @ [r1])
+        (a2 @ [r2])
+        (Ok env)
+    else
+      Error (`Does_not_unify "argument lists have different lengths")
+  | (TyVar a1, b1) | (b1, TyVar a1) ->
+    (* if one is a variable, look it up and bind it or unify what is already there *)
+    let a2 = UF.value a1 in
+    (match IMap.find_opt a2 env.types with
+    | None -> Ok { env with types = IMap.add a2 b1 env.types }
+    | Some t -> unify t b1 env)
+    (* env *)
+  | (_, _) ->
+    Error
+      (`Does_not_unify
+        (Format.sprintf "%a and %a do not unify" (Print.pp_typ ~env) a
+           (Print.pp_typ ~env) b))
+
+let dump_env env = Format.printf "%s@." (explain_env env)
+
+let lookup_fn env f = SMap.find_opt f env.polymorphic
+
+let lookup env v =
+  SMap.find_opt v env.local_bindings
+  |> Option.or_ ~else_:(SMap.find_opt v env.bindings)
+
+let lookup_var ~loc env v =
+  match lookup env v with
+  | Some vi -> vi
+  | None ->
+    (* fresh_var env v *)
+    (* dump_env env; *)
+    fail ~loc "unbound variable %s" v
+
+let fresh_type () =
+  let tv = UF.elt (fresh ()) in
+  TyVar tv
+
+let fresh_ownership () =
+  let r = UF.elt (fresh ()) in
+  Party r
+
+(** this binds a variable, unlike lookup_var, which expects the variable to already exist *)
+let fresh_var env v =
+  let own = fresh_ownership () in
+  let typ = fresh_type () in
+  let vi = { typ; own } in
+  let bindings = SMap.add v vi env.bindings in
+  ({ env with bindings }, vi)
+
+(** this isn't entirely unification determined by form because Global doesn't unify with anything *)
+let%trace unify_ownership :
+    ownership ->
+    ownership ->
+    env ->
+    (ownership * env, [> `Does_not_unify of string ]) result =
+ fun a b env ->
+  if debug then
+    Format.printf "unify_ownership: %a and %a @." pp_ownership a pp_ownership b;
+  match (a, b) with
+  | (Global, o1) | (o1, Global) -> Ok (o1, env)
+  | (Party p, Party q) ->
+    let open Result.Infix in
+    let* env = unify_party_variables p q env in
+    Ok (a, env)
+
+let rec concretize env t =
+  match t with
+  | TyParty p -> TyParty (UF.find p)
+  | TyInt | TyBool -> t
+  | TySet s -> TySet (concretize env s)
+  | TyList l -> TyList (concretize env l)
+  | TyFn (args, ret) -> TyFn (List.map (concretize env) args, concretize env ret)
+  | TyVar v ->
+  match IMap.find_opt (UF.value v) env.types with
+  | None -> t
+  | Some t1 -> concretize env t1
+
+let%trace unify_type_owner :
+    env ->
+    typ ->
+    ownership ->
+    ( env,
+      [> `Does_not_unify of string
+      | `Parties_instantiated_but_different of string
+      | `Type_not_party
+      ] )
+    result =
+ fun env t o ->
+  (* let open Result.Infix in *)
+  if debug then
+    Format.printf "unify_type_owner: %a and %a @." pp_typ t pp_ownership o;
+  match (t, o) with
+  | (TyParty _, Global) -> Ok env
+  | (TyParty t, Party o) -> unify_party_variables t o env
+  | (TyVar _, Party o) -> unify t (TyParty o) env
+  | (_, _) -> Error `Type_not_party
+
+let%trace rec infer_all : expr list -> env -> texpr list * ownership * env =
+ fun exprs env ->
+  List.fold_right
+    (fun c (tes, own, env) ->
+      let (te, env) = infer_parties_expr c env in
+      match unify_ownership own te.meta.info.own env with
+      | Ok (own1, env) -> (te :: tes, own1, env)
+      | Error (`Does_not_unify s) -> fail ~loc:te.meta.loc "%s" s)
+    exprs ([], Global, env)
+
+and infer_parties_expr : expr -> env -> texpr * env =
+ fun expr env ->
+  if debug then (
+    dump_env env;
+    Format.printf "infer_parties_expr %a@." pp_expr expr);
+  match expr.expr with
+  | Int i ->
+    ( {
+        meta = { loc = expr.meta; info = { typ = TyInt; own = Global } };
+        expr = Int i;
+      },
+      env )
+  | Bool b ->
+    ( {
+        meta = { loc = expr.meta; info = { typ = TyBool; own = Global } };
+        expr = Bool b;
+      },
+      env )
+  | Var (V (p, v)) ->
+    let { own; typ } = lookup_var ~loc:expr.meta env v in
+    let te = Var (V (p, v)) in
+    let texpr =
+      { meta = { loc = expr.meta; info = { typ; own } }; expr = te }
+    in
+    (* check if a party is given for this variable *)
+    (match p with
+    | None -> (texpr, env)
+    | Some (Party p1) ->
+      let vi = lookup_var ~loc:expr.meta env p1 in
+      (match unify_type_owner env vi.typ own with
+      | Ok env -> (texpr, env)
+      | Error (`Parties_instantiated_but_different s) ->
+        fail ~loc:expr.meta "variable %s not owned by given party: %s" v s
+      | Error `Type_not_party -> fail ~loc:expr.meta "type not party"
+      | Error (`Does_not_unify s) -> fail ~loc:expr.meta "does not unify: %s" s))
+  | App (fn, args) ->
+    (match lookup_fn env fn with
+    | None -> fail ~loc:expr.meta "function %s not bound" fn
+    | Some f ->
+    match instantiate f with
+    | TyFn (targs, ret) ->
+      let (tes, own, env) = infer_all args env in
+
+      let env =
+        List.fold_right2
+          (fun a b t ->
+            match unify a b.meta.info.typ t with
+            | Ok env -> env
+            | Error (`Does_not_unify s)
+            | Error (`Parties_instantiated_but_different s) ->
+              fail ~loc:b.meta.loc "could not unify arg %a: %s"
+                (Print.pp_texpr ~env) b s)
+          targs tes env
+      in
+
+      let rtyp = fresh_type () in
+      let env =
+        match unify rtyp ret env with
+        | Ok env -> env
+        | Error (`Does_not_unify s)
+        | Error (`Parties_instantiated_but_different s) ->
+          fail ~loc:expr.meta "could not unify result type: %s" s
+      in
+      ( {
+          meta = { loc = expr.meta; info = { own; typ = rtyp } };
+          expr = App (fn, tes);
+        },
+        env )
+    | _ -> fail ~loc:expr.meta "%s is not a function" fn)
+  | Set s | List s ->
+    begin
+      match s with
+      | [] ->
+        ( {
+            meta =
+              {
+                loc = expr.meta;
+                info =
+                  {
+                    own = fresh_ownership ();
+                    typ =
+                      (match expr.expr with
+                      | Set _ -> TySet (fresh_type ())
+                      | List _ -> TyList (fresh_type ())
+                      | _ -> bug "unexpected");
+                  };
+              };
+            expr =
+              (match expr.expr with
+              | Set _ -> Set []
+              | List _ -> List []
+              | _ -> bug "unexpected");
+          },
+          env )
+      | _ ->
+        let (tes, own, env) = infer_all s env in
+        let (typ, env) =
+          List.fold_right
+            (fun c (t, env) ->
+              match t with
+              | None -> (Some c, env)
+              | Some t ->
+              match unify c t env with
+              | Ok env -> (Some c, env)
+              | Error (`Does_not_unify s)
+              | Error (`Parties_instantiated_but_different s) ->
+                fail ~loc:expr.meta "%s" s)
+            (List.map (fun (te : texpr) -> te.meta.info.typ) tes)
+            (None, env)
+        in
+        let typ =
+          match expr.expr with
+          | List _ ->
+            TyList (typ |> Option.get_exn_or "nonempty list should have a type")
+          | Set _ ->
+            TySet (typ |> Option.get_exn_or "nonempty set should have a type")
+          | _ -> bug "unexpected"
+        in
+        ( { meta = { loc = expr.meta; info = { own; typ } }; expr = Set tes },
+          env )
+    end
+  | Map _ ->
+    (* infer_all (List.map snd b) env *)
+    nyi "infer_parties_expr map"
+  | Tuple (_, _) ->
+    (* infer_all [a; b] env *)
+    nyi "infer_parties_expr tuple"
+
+let%trace rec infer_parties : protocol -> env -> tprotocol * env =
+ fun p env ->
+  if debug then (
+    dump_env env;
+    Format.printf "infer %a@." pp_protocol p);
+  match p.p with
+  | Emp -> ({ p with p = Emp }, env)
+  | Send { from; to_; msg = Message { args; typ = mtype } } ->
+    let (fm, tm) = (from.meta, to_.meta) in
+    let (V (fp, from)) = must_be_var from in
+    let (V (tp, to_)) = must_be_var to_ in
+
+    let f_vi = lookup_var ~loc:p.pmeta env from in
+    let t_vi = lookup_var ~loc:p.pmeta env to_ in
+
+    (* check that sender knows about itself *)
+    let env =
+      match unify_type_owner env f_vi.typ f_vi.own with
+      | Ok env -> env
+      | Error `Type_not_party ->
+        fail ~loc:p.pmeta "sender %s of wrong type %a, should be a party" from
+          (Print.pp_typ ~env) f_vi.typ
+      | Error (`Does_not_unify _)
+      | Error (`Parties_instantiated_but_different _) ->
+        fail ~loc:p.pmeta
+          "sender %s does not know of itself (of %a but known only to %a)" from
+          (Print.pp_typ ~env) f_vi.typ (Print.pp_ownership ~env) f_vi.own
+    in
+
+    (* check that sender knows about recipient *)
+    let env =
+      match unify_ownership t_vi.own f_vi.own env with
+      | Ok (_, env) -> env
+      | Error (`Does_not_unify s) ->
+        (* dump_env env; *)
+        fail ~loc:p.pmeta "sender does not know of recipient: %s" s
+    in
+
+    (* expressions must be owned by sender *)
+    let (targs, env) =
+      List.fold_right
+        (fun (k, arg) (targs, env) ->
+          let (targ, env) = infer_parties_expr arg env in
+
+          let env =
+            match unify_type_owner env f_vi.typ targ.meta.info.own with
+            | Ok env -> env
+            | Error (`Parties_instantiated_but_different s) ->
+              fail ~loc:p.pmeta "%s" s
+            | Error (`Does_not_unify s) -> fail ~loc:p.pmeta "%s" s
+            | Error `Type_not_party ->
+              fail ~loc:p.pmeta "sender does not know of message arguments"
+          in
+          (* variables are fresh and owned by recipient *)
+          let vo = fresh_ownership () in
+          (* use the same type, but ownership based on recipient *)
+          let vi = { targ.meta.info with own = vo } in
+          let env =
+            match unify_type_owner env t_vi.typ vo with
+            | Ok env -> env
+            | Error (`Does_not_unify s) -> fail ~loc:p.pmeta "%s" s
+            | Error (`Parties_instantiated_but_different s) ->
+              fail ~loc:p.pmeta "%s" s
+            | Error `Type_not_party ->
+              fail ~loc:p.pmeta "recipient does not know of variables"
+          in
+          let (V (pv, v)) = must_be_var k in
+          let local_bindings = SMap.add v vi env.local_bindings in
+          let env = { env with local_bindings } in
+          let k1 =
+            { expr = Var (V (pv, v)); meta = { loc = k.meta; info = vi } }
+          in
+
+          ((k1, targ) :: targs, env))
+        args ([], env)
+    in
+
+    (* sender is now owned by recipient *)
+    let recipient =
+      match t_vi.typ with
+      | TyParty p -> Party p
+      | _ ->
+        failwith "recipient is not a party, should have been caught earlier"
+    in
+    (* but only locally *)
+    let env =
+      {
+        env with
+        local_bindings =
+          SMap.add from { f_vi with own = recipient } env.local_bindings;
+      }
+    in
+    (* receiver is also owned by receiver *)
+    let env =
+      {
+        env with
+        local_bindings =
+          SMap.add to_ { t_vi with own = recipient } env.local_bindings;
+      }
+    in
+
+    ( {
+        p with
+        p =
+          Send
+            {
+              from =
+                {
+                  meta = { loc = fm; info = { typ = f_vi.typ; own = f_vi.own } };
+                  expr = Var (V (fp, from));
+                };
+              to_ =
+                {
+                  meta = { loc = tm; info = { typ = t_vi.typ; own = t_vi.own } };
+                  expr = Var (V (tp, to_));
+                };
+              msg = Message { args = targs; typ = mtype };
+            };
+      },
+      env )
+  | Assign (v, e) ->
+    let vm = v.meta in
+    let (V (vp, v)) = must_be_var v in
+
+    let (env, { own = olhs; typ = tlhs }) =
+      (* whether or not to look up existing variables controls if the a subsequent assignment to a variable can fill in a previously-abstract type *)
+      match lookup env v with None -> fresh_var env v | Some vi -> (env, vi)
+    in
+    let (trhs, env) = infer_parties_expr e env in
+    let env =
+      match unify tlhs trhs.meta.info.typ env with
+      | Ok env -> env
+      | Error (`Parties_instantiated_but_different _)
+      | Error (`Does_not_unify _) ->
+        fail ~loc:vm "could not unify sides of assignment"
+    in
+    (* right and left sides must be owned by same party *)
+    (match unify_ownership olhs trhs.meta.info.own env with
+    | Error (`Does_not_unify s) -> fail ~loc:vm "%s" s
+    | Ok (_, env) ->
+      let env =
+        (* if a party was given *)
+        match vp with
+        | None -> env
+        | Some (Party p1) ->
+          let vi = lookup_var ~loc:p.pmeta env p1 in
+          (* the given party should match the ownership of the left side *)
+          (match unify_type_owner env vi.typ olhs with
+          | Ok env -> env
+          | Error (`Does_not_unify s) -> fail ~loc:vm "%s" s
+          | Error (`Parties_instantiated_but_different s) -> fail ~loc:vm "%s" s
+          | Error `Type_not_party -> fail ~loc:vm "type is not a party")
+      in
+
+      ( {
+          p with
+          p =
+            Assign
+              ( {
+                  expr = Var (V (vp, v));
+                  meta = { loc = vm; info = { typ = tlhs; own = olhs } };
+                },
+                trhs );
+        },
+        env ))
+  | Imply (c, p) ->
+    let (tc, env) = infer_parties_expr c env in
+    let (tp, env) = infer_parties p env in
+
+    (match unify tc.meta.info.typ TyBool env with
+    | Ok _ -> ()
+    | Error (`Does_not_unify s) -> fail ~loc:tc.meta.loc "%s" s
+    | Error (`Parties_instantiated_but_different s) ->
+      fail ~loc:tc.meta.loc "%s" s);
+
+    ({ p with p = Imply (tc, tp) }, env)
+  | BlockingImply (c, p) ->
+    let (tc, env) = infer_parties_expr c env in
+    let (tp, env) = infer_parties p env in
+    (match unify tc.meta.info.typ TyBool env with
+    | Ok _ -> ()
+    | Error (`Does_not_unify s) -> fail ~loc:tc.meta.loc "%s" s
+    | Error (`Parties_instantiated_but_different s) ->
+      fail ~loc:tc.meta.loc "%s" s);
+
+    ({ p with p = BlockingImply (tc, tp) }, env)
+  | Seq s ->
+    (* List.fold_right infer_parties s env *)
+    let local_bindings = env.local_bindings in
+    let (ts, env) =
+      List.fold_left
+        (fun (ts, env) c ->
+          let (te, env) = infer_parties c env in
+          (te :: ts, env))
+        ([], env) s
+    in
+    let ts = List.rev ts in
+
+    (* restore *)
+    let env = { env with local_bindings } in
+
+    ({ p with p = Seq ts }, env)
+  | Par ps ->
+    let (ts, env) =
+      List.fold_left
+        (fun (ts, env) p ->
+          let (tp, env) = infer_parties p env in
+          (tp :: ts, env))
+        ([], env) ps
+    in
+    let ts = List.rev ts in
+    ({ p with p = Par ts }, env)
+  | Disj (a, b) ->
+    let (ta, env) = infer_parties a env in
+    let (tb, env) = infer_parties b env in
+    ({ p with p = Disj (ta, tb) }, env)
+  | Forall (e, s, p1) ->
+    let (em, sm) = (e.meta, s.meta) in
+    let (V (pe, e)) = must_be_var e in
+    let (V (ps, s)) = must_be_var s in
+
+    (* this binds only one new name, e. s is already defined *)
+    let (env, party, own) =
+      let pl = p.pmeta in
+      match lookup_var ~loc:pl env s with
+      | { typ = TySet (TyParty _ as p); own } -> (env, p, own)
+      (* | Some vi -> fail "not a party set: %a" pp_var_info vi *)
+      | { typ; own } ->
+        let[@warning "-8"] (TyVar p) = fresh_type () in
+        let env =
+          match unify typ (TySet (TyParty p)) env with
+          | Ok env -> env
+          | Error (`Does_not_unify s)
+          | Error (`Parties_instantiated_but_different s) ->
+            fail ~loc:pl "could not unify set type: %s" s
+        in
+        (env, TyParty p, own)
+    in
+
+    let env =
+      { env with bindings = SMap.add e { typ = party; own } env.bindings }
+    in
+
+    let (tp1, env) = infer_parties p1 env in
+
+    (* unbind the bound variable *)
+    let env = { env with bindings = SMap.remove e env.bindings } in
+
+    (* TODO this always unbinds e even if it's been redefined, but we'll worry about that later *)
+    let e =
+      {
+        expr = Var (V (pe, e));
+        meta = { loc = em; info = { typ = party; own } };
+      }
+    in
+    let s =
+      {
+        expr = Var (V (ps, s));
+        meta = { loc = sm; info = { typ = TySet party; own } };
+      }
+    in
+
+    ({ p with p = Forall (e, s, tp1) }, env)
+  | Exists (_, _, _) -> nyi "infer_parties exists"
+  | Comment (_, _, _) -> bug "infer_parties doesn't expect comments"
+  | SendOnly _ -> bug "infer_parties doesn't expect send only"
+  | ReceiveOnly _ -> bug "infer_parties doesn't expect receive only"
 
 let has_initiative (V (_, party)) p =
   let rec aux p =
-    match p with
+    match p.p with
     | Emp -> false
     | Seq (s :: _) -> aux s
     | Seq _ -> false
@@ -236,3 +646,110 @@ let has_initiative (V (_, party)) p =
     | Comment _ -> false
   in
   aux p
+
+let parse_protocol file =
+  (* let p = Parsing.parse_inc file in *)
+  match
+    if String.equal file "-" then
+      Parsing.parse_mono_ic file stdin
+    else
+      Parsing.parse_mono file
+  with
+  | Ok p -> p
+  | Error s -> failwith s
+
+let initial_env parties =
+  let (parties, var_info) =
+    parties
+    |> List.map (fun p ->
+           let i = fresh () in
+           let r = UF.elt i in
+           let name = var_name p.repr in
+           let vi = { typ = TySet (TyParty r); own = Global } in
+           ((i, p), (name, vi)))
+    |> List.split
+  in
+  {
+    empty_env with
+    parties = IMap.of_list parties;
+    bindings = SMap.of_list var_info;
+    polymorphic =
+      SMap.of_list
+        [
+          ( "union",
+            let a = UF.elt (fresh ()) in
+            let set_a = TySet (TyVar a) in
+            Forall ([a], TyFn ([set_a; set_a], set_a)) );
+          ( "p2i",
+            let a = UF.elt (fresh ()) in
+            Forall ([], TyFn ([TyParty a], TyInt)) );
+          ("/", Forall ([], TyFn ([TyInt; TyInt], TyInt)));
+          ("*", Forall ([], TyFn ([TyInt; TyInt], TyInt)));
+          ("-", Forall ([], TyFn ([TyInt; TyInt], TyInt)));
+          ("+", Forall ([], TyFn ([TyInt; TyInt], TyInt)));
+          ("<", Forall ([], TyFn ([TyInt; TyInt], TyBool)));
+          ("<=", Forall ([], TyFn ([TyInt; TyInt], TyBool)));
+          (">", Forall ([], TyFn ([TyInt; TyInt], TyBool)));
+          (">=", Forall ([], TyFn ([TyInt; TyInt], TyBool)));
+          ("&", Forall ([], TyFn ([TyBool; TyBool], TyBool)));
+          ( "size",
+            let a = UF.elt (fresh ()) in
+            Forall ([a], TyFn ([TySet (TyVar a)], TyInt)) );
+          ( "==",
+            let a = UF.elt (fresh ()) in
+            Forall ([a], TyFn ([TyVar a; TyVar a], TyBool)) );
+        ];
+  }
+
+let party_instantiated env p =
+  match p with Global -> true | Party p -> IMap.mem (UF.value p) env.parties
+
+let rec type_instantiated env t =
+  match t with
+  | TyParty p -> IMap.mem (UF.value p) env.parties
+  | TyVar v ->
+    (match IMap.find_opt (UF.value v) env.types with
+    | None -> false
+    | Some v -> type_instantiated env v)
+  | TyInt | TyBool -> true
+  | TySet a | TyList a -> type_instantiated env a
+  | TyFn (args, ret) ->
+    List.for_all (type_instantiated env) args && type_instantiated env ret
+
+let rec check_instantiated_expr env (t : texpr) =
+  match t.expr with
+  | Int _ | Bool _ -> ()
+  | Set s -> List.iter (check_instantiated_expr env) s
+  | List l -> List.iter (check_instantiated_expr env) l
+  | Var (V (_, v)) ->
+    let { typ; own } = t.meta.info in
+    if not (type_instantiated env typ) then
+      fail ~loc:t.meta.loc "failed to infer type for %s" v;
+    if not (party_instantiated env own) then
+      fail ~loc:t.meta.loc "failed to infer party for %s" v
+  | App (_, args) -> List.iter (check_instantiated_expr env) args
+  | Map _ -> nyi "map check_instanted_expr"
+  | Tuple (_, _) -> nyi "tuple check_instanted_expr"
+
+let rec check_instantiated env p =
+  match p.p with
+  | Seq s | Par s -> List.iter (check_instantiated env) s
+  | Disj (a, b) -> List.iter (check_instantiated env) [a; b]
+  | Send { from; to_; msg = Message { args; _ } } ->
+    check_instantiated_expr env from;
+    check_instantiated_expr env to_;
+    List.iter (fun (_, e) -> check_instantiated_expr env e) args
+  | Assign (v, e) ->
+    check_instantiated_expr env v;
+    check_instantiated_expr env e
+  | Imply (c, b) | BlockingImply (c, b) ->
+    check_instantiated_expr env c;
+    check_instantiated env b
+  | Forall (v, s, b) | Exists (v, s, b) ->
+    check_instantiated_expr env v;
+    check_instantiated_expr env s;
+    check_instantiated env b
+  | Emp -> bug "emp should not appear"
+  | SendOnly _ -> bug "send only should not appear"
+  | ReceiveOnly _ -> bug "receive only should not appear"
+  | Comment (_, _, _) -> bug "comment should not appear"
