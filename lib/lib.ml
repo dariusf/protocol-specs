@@ -997,7 +997,7 @@ let print project_party party_specs ast no_normalize file =
       (* let p = Parsing.parse_inc file in *)
       match
         if String.equal file "-" then
-          Parsing.parse_mono_ic stdin
+          Parsing.parse_mono_ic file stdin
         else
           Parsing.parse_mono file
       with

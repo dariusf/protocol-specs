@@ -50,10 +50,9 @@ let echo f lexbuf =
 
 let f = Lexer.f
 
-let parse_mono_ic ic =
+let parse_mono_ic file ic =
   let lexer = Lexing.from_channel ~with_positions:true ic in
-  (* 4.11 *)
-  (* Lexing.set_filename lexer file; *)
+  Lexing.set_filename lexer file;
   try Ok (lexer |> Parser.p f) with
   | Parser.Error ->
     let pos = lexer.Lexing.lex_curr_p in
@@ -71,7 +70,7 @@ let parse_mono_ic ic =
          pos.pos_lnum
          (pos.pos_cnum - pos.pos_bol + 1))
 
-let parse_mono file = Containers.IO.with_in file parse_mono_ic
+let parse_mono file = Containers.IO.with_in file (parse_mono_ic file)
 
 (* https://baturin.org/blog/declarative-parse-error-reporting-with-menhir/ *)
 open Lexing
@@ -116,8 +115,7 @@ let parse_inc file =
   Containers.IO.with_in file (fun ic ->
       (* stdin *)
       let lexbuf = Lexing.from_channel ~with_positions:true ic in
-      (* 4.11 *)
-      (* Lexing.set_filename lexer file; *)
+      Lexing.set_filename lexbuf file;
       try Ok (parse lexbuf (Parser.Incremental.p lexbuf.lex_curr_p))
       with Syntax_error (pos, err) ->
         Error
