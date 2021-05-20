@@ -6,8 +6,6 @@ let show_token t =
   match t with
   | WHEN -> "WHEN"
   | STAR -> "STAR"
-  | SPACE n -> Format.sprintf "SPACE %d" n
-  | INDENT n -> Format.sprintf "INDENT %d" n
   | SEMI -> "SEMI"
   | COLON -> "COLON"
   | COMMA -> "COMMA"

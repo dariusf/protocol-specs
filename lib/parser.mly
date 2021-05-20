@@ -2,8 +2,6 @@
   open Ast
 %}
 
-%token <int> SPACE
-%token <int> INDENT
 %token EOF
 %token LPAREN RPAREN COLON COMMA
 %token AND OR NOT PLUS MINUS DIV LT LE GT GE EQEQ
