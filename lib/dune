@@ -32,3 +32,11 @@
  (dev
   (flags
    (:standard -warn-error -A))))
+
+(rule
+ (target config.ml)
+ (deps ../ppx_debug.json)
+ (action
+  (with-stdout-to
+   %{target}
+   (bash "echo let a = $RANDOM"))))
