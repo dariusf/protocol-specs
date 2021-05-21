@@ -1,7 +1,5 @@
 open Containers
 
-let _ = Config.a
-
 type pos = {
   line : int;
   col : int;

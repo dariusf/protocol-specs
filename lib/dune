@@ -2,6 +2,7 @@
  (name lib)
  (libraries ppx_debug pprint containers menhirLib)
  (inline_tests)
+ (preprocessor_deps (file ../ppx_debug.json))
  (preprocess
   (pps
    ppx_debug
@@ -33,10 +34,3 @@
   (flags
    (:standard -warn-error -A))))
 
-(rule
- (target config.ml)
- (deps ../ppx_debug.json)
- (action
-  (with-stdout-to
-   %{target}
-   (bash "echo let a = $RANDOM"))))
