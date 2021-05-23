@@ -9,14 +9,14 @@ The classic two-phase commit protocol.
         \/
         p->c: abort;
         aborted = union(aborted, {p})));
-    (aborted == {} =>*
+    (aborted == {} =>
        (forall p in P
           c->p: commit;
-          p->c: commit_ack
-        \/
-        forall p in P
-          c->p: abort;
-          p->c: abort_ack))
+          p->c: commit_ack)
+     \/
+     forall p in P
+       c->p: abort;
+       p->c: abort_ack)
 
   $ protocol print --parties P,C --types 2pc.spec
   forall (c : party C;global) in (C : {party C};global)
@@ -27,14 +27,14 @@ The classic two-phase commit protocol.
         \/
         (p : party P;P)->(c : party C;P): abort;
         (aborted : {party P};C) = union((aborted : {party P};C), {(p : party P;C)})));
-    ((aborted : {party P};C) == {} =>*
+    ((aborted : {party P};C) == {} =>
        (forall (p : party P;global) in (P : {party P};global)
           (c : party C;global)->(p : party P;global): commit;
-          (p : party P;P)->(c : party C;P): commit_ack
-        \/
-        forall (p : party P;global) in (P : {party P};global)
-          (c : party C;global)->(p : party P;global): abort;
-          (p : party P;P)->(c : party C;P): abort_ack))
+          (p : party P;P)->(c : party C;P): commit_ack)
+     \/
+     forall (p : party P;global) in (P : {party P};global)
+       (c : party C;global)->(p : party P;global): abort;
+       (p : party P;P)->(c : party C;P): abort_ack)
 
   $ protocol print 2pc.spec --parties C,P --project C
   (forall p in P
@@ -44,14 +44,14 @@ The classic two-phase commit protocol.
       \/
       p->self*: abort;
       aborted = union(aborted, {p})));
-  (aborted == {} =>*
+  (aborted == {} =>
      (forall p in P
         *self->p: commit;
-        p->self*: commit_ack
-      \/
-      forall p in P
-        *self->p: abort;
-        p->self*: abort_ack))
+        p->self*: commit_ack)
+   \/
+   forall p in P
+     *self->p: abort;
+     p->self*: abort_ack)
 
   $ protocol print 2pc.spec --parties C,P --project P
   forall c in C
