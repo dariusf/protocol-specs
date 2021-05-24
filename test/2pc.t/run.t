@@ -14,9 +14,10 @@ The classic two-phase commit protocol.
           c->p: commit;
           p->c: commit_ack)
      \/
-     forall p in P
-       c->p: abort;
-       p->c: abort_ack)
+     aborted != {} =>
+       (forall p in P
+          c->p: abort;
+          p->c: abort_ack))
 
   $ protocol print 2pc-wait.spec
   forall c in C
@@ -33,7 +34,7 @@ The classic two-phase commit protocol.
        c->p: commit;
        p->c: commit_ack)
   \/
-  aborted == {} =>*
+  aborted != {} =>*
     (forall p in P
        c->p: abort;
        p->c: abort_ack)
@@ -52,9 +53,10 @@ The classic two-phase commit protocol.
           (c : party C;global)->(p : party P;global): commit;
           (p : party P;P)->(c : party C;P): commit_ack)
      \/
-     forall (p : party P;global) in (P : {party P};global)
-       (c : party C;global)->(p : party P;global): abort;
-       (p : party P;P)->(c : party C;P): abort_ack)
+     (aborted : {party P};C) != {} =>
+       (forall (p : party P;global) in (P : {party P};global)
+          (c : party C;global)->(p : party P;global): abort;
+          (p : party P;P)->(c : party C;P): abort_ack))
 
   $ protocol print 2pc.spec --parties C,P --project C
   (forall p in P
@@ -69,9 +71,10 @@ The classic two-phase commit protocol.
         *self->p: commit;
         p->self*: commit_ack)
    \/
-   forall p in P
-     *self->p: abort;
-     p->self*: abort_ack)
+   aborted != {} =>
+     (forall p in P
+        *self->p: abort;
+        p->self*: abort_ack))
 
   $ protocol print 2pc.spec --parties C,P --project P
   forall c in C

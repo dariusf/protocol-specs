@@ -22,6 +22,7 @@ let show_token t =
   | EXISTS -> "EXISTS"
   | EQ -> "EQ"
   | EQEQ -> "EQEQ"
+  | NEQ -> "NEQ"
   | EOF -> "EOF"
   | DOT -> "DOT"
   | ARROW -> "ARROW"

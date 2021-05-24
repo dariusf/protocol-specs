@@ -695,6 +695,9 @@ let initial_env parties =
           ( "size",
             let a = UF.elt (fresh ()) in
             Forall ([a], TyFn ([TySet (TyVar a)], TyInt)) );
+          ( "!=",
+            let a = UF.elt (fresh ()) in
+            Forall ([a], TyFn ([TyVar a; TyVar a], TyBool)) );
           ( "==",
             let a = UF.elt (fresh ()) in
             Forall ([a], TyFn ([TyVar a; TyVar a], TyBool)) );

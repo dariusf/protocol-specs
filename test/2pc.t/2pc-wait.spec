@@ -16,7 +16,7 @@ forall c in C
        c->p: commit;
        p->c: commit_ack
    \/
-   aborted == {} =>*
+   aborted != {} =>*
      forall p in P
        c->p: abort;
        p->c: abort_ack)

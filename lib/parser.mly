@@ -4,7 +4,7 @@
 
 %token EOF
 %token LPAREN RPAREN COLON COMMA
-%token AND OR NOT PLUS MINUS DIV LT LE GT GE EQEQ
+%token AND OR NOT PLUS MINUS DIV LT LE GT GE EQEQ NEQ
 %token TRUE FALSE LBRACKET RBRACKET LCURLY RCURLY
 %token <int> INT
 %token <string> IDENT
@@ -19,7 +19,7 @@
 
 %left OR
 %left AND
-%left EQEQ
+%left EQEQ NEQ
 %left LT LE GT GE
 %left PLUS MINUS
 %left DIV STAR
@@ -39,6 +39,7 @@ f : e = expr; EOF { e }
   | DIV { "/" }
   | AND { "&" }
   | EQEQ { "==" }
+  | NEQ { "!=" }
   | OR { "|" }
   | GT { ">" }
   | GE { ">=" }

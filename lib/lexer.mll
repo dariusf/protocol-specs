@@ -37,6 +37,7 @@ rule f = parse
   | "=>*" { WHEN }
   | "=" { EQ }
   | "==" { EQEQ }
+  | "!=" { NEQ }
   | "+" { PLUS }
   | "*" { STAR }
   | "-" { MINUS }
