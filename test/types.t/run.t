@@ -61,31 +61,28 @@ Qualifying r allows us to infer the type.
 Here it's not possible for members of party C to know which of them should send a message to P because they don't know s, which resides on p...
 
   $ protocol print --parties P,C --types <<EOF
-  > forall c in C
-  >   forall p in P
-  >     p.s = C;
-  >     forall x in p.s
-  >       x->p: m
+  >  forall p in P
+  >   p.s = C;
+  >   forall x in p.s
+  >     x->p: m
   > EOF
-  error at line 5, col 6:
+  error at line 4, col 4:
   sender x does not know of itself (of party C but known only to P)
 
 ... but it becomes possible if p first sends a message to members of x to inform them of its existence.
 
   $ protocol print --parties P,C --types <<EOF
-  > forall c in C
-  >   forall p in P
-  >     p.s = C;
-  >     forall x in p.s
-  >       p->x: n;
-  >       x->p: m
+  > forall p in P
+  >   p.s = C;
+  >   forall x in p.s
+  >     p->x: n;
+  >     x->p: m
   > EOF
-  forall (c : party C;global) in (C : {party C};global)
-    forall (p : party P;global) in (P : {party P};global)
-      (p.s : {party C};P) = (C : {party C};global);
-      (forall (x : party C;P) in (p.s : {party C};P)
-         (p : party P;global)->(x : party C;P): n;
-         (x : party C;C)->(p : party P;C): m)
+  forall (p : party P;global) in (P : {party P};global)
+    (p.s : {party C};P) = (C : {party C};global);
+    (forall (x : party C;P) in (p.s : {party C};P)
+       (p : party P;global)->(x : party C;P): n;
+       (x : party C;C)->(p : party P;C): m)
 
 This fails because we cannot infer a type for a...
 
