@@ -1,8 +1,9 @@
 (library
  (name lib)
- (libraries ppx_debug pprint containers menhirLib)
+ (libraries str ppx_debug pprint containers menhirLib ocamlgraph)
  (inline_tests)
- (preprocessor_deps (file ../ppx_debug.json))
+ (preprocessor_deps
+  (file ../ppx_debug.json))
  (preprocess
   (pps
    ppx_debug
@@ -33,4 +34,3 @@
  (dev
   (flags
    (:standard -warn-error -A))))
-

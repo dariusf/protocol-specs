@@ -280,12 +280,20 @@ let pretty fmt d = PPrint.ToFormatter.pretty 0.8 120 fmt d
 
 let one_line fmt pp t = Format.fprintf fmt "@[<h>%a@]" pp t
 
+let pp_tprotocol_untyped ~env fmt t =
+  let pp fmt t = render_tprotocol_untyped ~env t |> pretty fmt in
+  one_line fmt pp t
+
 let pp_expr fmt t =
   let pp fmt t = render_expr t |> pretty fmt in
   one_line fmt pp t
 
 let pp_texpr ~env fmt t =
   let pp fmt t = render_texpr ~env t |> pretty fmt in
+  one_line fmt pp t
+
+let pp_texpr_untyped ~env fmt t =
+  let pp fmt t = render_texpr_as_expr ~env t |> pretty fmt in
   one_line fmt pp t
 
 let pp_typ ~env fmt t =

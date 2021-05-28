@@ -7,7 +7,7 @@ let parse_parties s =
 
 let parse_protocol = Infer.parse_protocol
 
-let print project_party parties ast types file =
+let print project_party parties ast types actions file =
   let protocol =
     parse_protocol file
     |> (* if no_normalize then Fun.id else *)
@@ -42,6 +42,9 @@ let print project_party parties ast types file =
 
     if ast then
       tprotocol |> show_tprotocol |> print_endline
+    else if actions then
+      let (g, nodes) = Actions.find_actions tprotocol in
+      print_endline (Actions.to_graphviz env g nodes)
     else
       tprotocol
       |> (if types then
@@ -50,19 +53,6 @@ let print project_party parties ast types file =
            Print.render_tprotocol_untyped ~env)
       |> PPrint.ToChannel.pretty 0.8 120 stdout
 
-let print project_party parties ast types file =
-  try print project_party parties ast types file
-  with Check_failure s -> Format.printf "%s@." s
-
-let infer file =
-  let protocol = parse_protocol file in
-  let env =
-    Infer.initial_env [{ repr = V (None, "C") }; { repr = V (None, "P") }]
-  in
-  try
-    let (tp, env) = Infer.infer_parties protocol env in
-    env |> Infer.explain_env |> print_endline;
-    tp |> Print.render_tprotocol ~env |> PPrint.ToChannel.pretty 0.8 120 stdout;
-    print_endline "";
-    print_endline "---"
+let print project_party parties ast types actions file =
+  try print project_party parties ast types actions file
   with Check_failure s -> Format.printf "%s@." s

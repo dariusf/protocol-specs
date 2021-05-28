@@ -88,6 +88,44 @@ The classic two-phase commit protocol.
      c->self*: abort;
      *self->c: abort_ack)
 
+  $ protocol print 2pc.spec --parties C,P --project P --actions
+  digraph G {
+    0 [label="λ c.\nc->self*: prepare"];
+    1 [label="λ c.\n*self->c: prepared"];
+    2 [label="λ c.\n*self->c: abort"];
+    3 [label="λ c.\nc->self*: commit"];
+    4 [label="λ c.\n*self->c: commit_ack"];
+    5 [label="λ c.\nc->self*: abort"];
+    6 [label="λ c.\n*self->c: abort_ack"];
+    5 -> 6;
+    3 -> 4;
+    2 -> 5;
+    2 -> 3;
+    1 -> 5;
+    1 -> 3;
+    0 -> 2;
+    0 -> 1;
+  }
+
+  $ protocol print 2pc.spec --parties C,P --project C --actions
+  digraph G {
+    0 [label="λ p.\n*self->p: prepare"];
+    1 [label="λ p.\np->self*: prepared;\nresponded = union(responded, {p})"];
+    2 [label="λ p.\np->self*: abort;\naborted = union(aborted, {p})"];
+    3 [label="{aborted == {}}\nλ p.\n*self->p: commit"];
+    4 [label="{aborted == {}}\nλ p.\np->self*: commit_ack"];
+    5 [label="{aborted != {}}\nλ p.\n*self->p: abort"];
+    6 [label="{aborted != {}}\nλ p.\np->self*: abort_ack"];
+    5 -> 6;
+    3 -> 4;
+    2 -> 5;
+    2 -> 3;
+    1 -> 5;
+    1 -> 3;
+    0 -> 2;
+    0 -> 1;
+  }
+
   $ protocol print 2pc.spec > 2pc1.spec && protocol print 2pc1.spec | protocol print > 2pc2.spec && git diff --no-index 2pc1.spec 2pc2.spec
 
   $ protocol print 2pc-wait.spec > 2pc1-wait.spec && protocol print 2pc1-wait.spec | protocol print > 2pc2-wait.spec && git diff --no-index 2pc1-wait.spec 2pc2-wait.spec

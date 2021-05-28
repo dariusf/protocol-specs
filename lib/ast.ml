@@ -225,16 +225,11 @@ let p_with_pos start stop p =
       p;
     }
 
-type party_info = {
-  (* representative set, will be nonempty *)
-  repr : var;
-}
+type party_info = { (* representative set, will be nonempty *)
+                    repr : var }
 [@@deriving show { with_path = false }, eq]
 
-let empty_party_info repr =
-  {
-    repr
-  }
+let empty_party_info repr = { repr }
 
 type scheme = Forall of UF.t list * typ
 [@@deriving show { with_path = false }]
