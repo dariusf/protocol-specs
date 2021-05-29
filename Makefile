@@ -1,14 +1,21 @@
 
+export OCAMLRUNPARAM=b
+
 all:
 	dune test
-	OCAMLRUNPARAM=b dune exec ./app/protocol.exe
+	dune exec ./app/protocol.exe
 
 2pc:
 	dune build @install
-	OCAMLRUNPARAM=b protocol print test/2pc.t/2pc.spec --types
+	protocol print test/2pc.t/2pc.spec --parties C,P --project P --actions | dot -Tpng -o p.png
+	protocol print test/2pc.t/2pc.spec --parties C,P --project C --actions | dot -Tpng -o c.png
+	protocol tla test/2pc.t/2pc.spec --parties C,P --project C > 2pc.tla
+
+clean:
+	rm -rf *.png *.tla
 
 dev:
-	OCAMLRUNPARAM=b dune test -w
+	dune test -w
 
 messages:
 	menhir --list-errors lib/parser.mly > lib/parser.messages
