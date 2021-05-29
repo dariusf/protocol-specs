@@ -58,6 +58,28 @@ Actions
   >     c.a = 3;
   >     c.x = 4
   > EOF
+  
+  --------------------------------- MODULE spec ---------------------------------
+  
+  EXTENDS Naturals, FiniteSets, Sequences
+  
+  VARIABLE messages
+  
+  Send(m, msgs) ==
+      IF m \in DOMAIN msgs THEN
+          [msgs EXCEPT ![m] = msgs[m] + 1]
+      ELSE
+          msgs @ (m :> 1)
+  
+  Receive(m, msgs) ==
+      IF m \in DOMAIN msgs THEN
+          [msgs EXCEPT ![m] = msgs[m] - 1]
+      ELSE
+          msgs
+  
+  VARIABLE pc
+  
+  
   CONSTANT P
   
   CONSTANT C
@@ -94,3 +116,8 @@ Actions
   Next ==
     \/ \E self \in C : CChangeA0(self)
     \/ \E self \in C : CChangeA1(self)
+  
+  Spec == Init /\ [][Next]_vars
+  
+  ===============================================================================
+  

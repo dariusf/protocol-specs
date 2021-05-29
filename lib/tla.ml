@@ -65,8 +65,9 @@ Spec == Init /\ [][Next]_vars
     name
     (PPrint.ToFormatter.pretty 0.8 120)
     spec
-  |> ignore;
-  Format.sprintf "@[<h>%a@]" (PPrint.ToFormatter.pretty 0.8 120) spec
+
+(* |> ignore; *)
+(* Format.sprintf "@[<h>%a@]" (PPrint.ToFormatter.pretty 0.8 120) spec *)
 
 let subst_fml ~sub ~replacement (f : fml) =
   let rec aux f =

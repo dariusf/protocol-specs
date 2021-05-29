@@ -131,6 +131,28 @@ The classic two-phase commit protocol.
   }
 
   $ protocol tla 2pc.spec --parties C,P --project C
+  
+  --------------------------------- MODULE spec ---------------------------------
+  
+  EXTENDS Naturals, FiniteSets, Sequences
+  
+  VARIABLE messages
+  
+  Send(m, msgs) ==
+      IF m \in DOMAIN msgs THEN
+          [msgs EXCEPT ![m] = msgs[m] + 1]
+      ELSE
+          msgs @ (m :> 1)
+  
+  Receive(m, msgs) ==
+      IF m \in DOMAIN msgs THEN
+          [msgs EXCEPT ![m] = msgs[m] - 1]
+      ELSE
+          msgs
+  
+  VARIABLE pc
+  
+  
   CONSTANT C
   
   CONSTANT P
@@ -284,3 +306,8 @@ The classic two-phase commit protocol.
     \/ \E self \in P : \E c \in C : PSendCommitAck11(self, c)
     \/ \E self \in P : \E c \in C : PReceiveAbort12(self, c)
     \/ \E self \in P : \E c \in C : PSendAbortAck13(self, c)
+  
+  Spec == Init /\ [][Next]_vars
+  
+  ===============================================================================
+  
