@@ -49,7 +49,7 @@ type constr = Mutex of int [@@deriving show { with_path = false }]
 type node = {
   preconditions : texpr list;
   protocol : tprotocol;
-  params : string list;
+  params : (string * string) list;
   constraints : constr list;
 }
 [@@deriving show { with_path = false }]
@@ -68,7 +68,7 @@ let fresh_id =
     - send
     - receive
     - assignment
-    - everything else
+    - something else (like a disj), but containing only subactions
 
     atomic actions are
 
@@ -108,49 +108,66 @@ let group_seq (ts : tprotocol list) =
   in
   loop [] [] ts |> List.map label_action
 
-let make_atomic (t : tprotocol) =
-  match t.p with
-  | Send _ -> bug "make atomic send"
-  | SendOnly _ -> nyi "make atomic imply"
-  | ReceiveOnly _ -> nyi "make atomic imply"
-  | Emp -> bug "make atomic emp"
-  | Seq _ -> bug "make atomic seq"
-  | Par _ -> bug "make atomic par"
-  | Disj (_, _) -> bug "make atomic disj"
-  | Assign (_, _) -> nyi "make atomic assign"
-  | Imply (_, _) -> bug "make atomic imply"
-  | BlockingImply (_, _) -> bug "make atomic imply"
-  | Forall (_, _, _) -> bug "make atomic imply"
-  | Exists (_, _, _) -> bug "make atomic imply"
-  | Comment (_, _, _) -> bug "make atomic imply"
+let rec used_names_expr (t : texpr) =
+  match t.expr with
+  | Int _ | Bool _ -> []
+  | Map kvs -> List.concat_map (fun (_, v) -> used_names_expr v) kvs
+  | Set args | List args | App (_, args) -> List.concat_map used_names_expr args
+  | Var (V (_, v)) -> [v]
+  | Tuple (_, _) -> nyi "tuple used names"
 
-let rec find_actions1 ~preconditions ~params (t : tprotocol) =
+let rec used_names (t : tprotocol) =
   match t.p with
-  | Forall (v, _, p) ->
+  | Seq es | Par es -> List.concat_map used_names es
+  | Disj (a, b) -> used_names a @ used_names b
+  | Assign (v, e) -> used_names_expr v @ used_names_expr e
+  | Imply (c, b) | BlockingImply (c, b) -> used_names_expr c @ used_names b
+  | Forall (v, s, b) -> used_names_expr v @ used_names_expr s @ used_names b
+  | SendOnly { from; to_; msg = Message { args; _ } } ->
+    List.concat_map used_names_expr ([from; to_] @ List.map snd args)
+  | ReceiveOnly { from; to_; msg = MessageD { args; _ } } ->
+    List.concat_map used_names_expr ([from; to_] @ args)
+  | Exists (_, _, _) -> nyi "used names exists"
+  | Send _ -> bug "used names send"
+  | Comment (_, _, _) -> bug "used names comment"
+  | Emp -> bug "used names emp"
+
+let rec split_actions ~preconditions ~params (t : tprotocol) =
+  match t.p with
+  | Forall (v, s, p) ->
     let (V (_, v1)) = must_be_var_t v in
-    find_actions1 ~preconditions ~params:(v1 :: params) p
+    let (V (_, s1)) = must_be_var_t s in
+    split_actions ~preconditions ~params:((v1, s1) :: params) p
   | Seq ps ->
     let ps1 = group_seq ps in
     let nodes =
       List.map
-        (fun (comp, p) ->
+        (fun (comp, pr) ->
           match comp with
           | `Atomic ->
             let id = fresh_id () in
             let g = G.add_vertex G.empty id in
+            let used_params =
+              List.filter
+                (fun (pa, _) ->
+                  List.mem ~eq:String.equal pa
+                    (pr |> List.concat_map used_names
+                   |> List.uniq ~eq:String.equal))
+                params
+            in
             let m =
               IMap.singleton id
                 {
                   constraints = [];
-                  params;
+                  params = used_params;
                   preconditions;
-                  protocol = { t with p = Seq p };
+                  protocol = { t with p = Seq pr };
                 }
             in
             (g, m)
           | `Composite ->
-            let[@warning "-8"] [p] = p in
-            find_actions1 ~preconditions ~params p)
+            let[@warning "-8"] [p] = pr in
+            split_actions ~preconditions ~params p)
         ps1
     in
     let res =
@@ -167,7 +184,7 @@ let rec find_actions1 ~preconditions ~params (t : tprotocol) =
   | SendOnly _ -> bug "find actions send"
   | ReceiveOnly _ -> bug "find actions receive"
   | Par ps ->
-    let nodes = List.map (find_actions1 ~preconditions ~params) ps in
+    let nodes = List.map (split_actions ~preconditions ~params) ps in
     let res =
       List.fold_right
         (fun (gc, mc) (gt, mt) ->
@@ -178,15 +195,15 @@ let rec find_actions1 ~preconditions ~params (t : tprotocol) =
     res
   | Disj (a, b) ->
     (* TODO mutually exclusive constraints *)
-    let (ag, am) = find_actions1 ~preconditions ~params a in
-    let (bg, bm) = find_actions1 ~preconditions ~params b in
+    let (ag, am) = split_actions ~preconditions ~params a in
+    let (bg, bm) = split_actions ~preconditions ~params b in
     let res =
       ( merge_graphs ag bg,
         IMap.union (fun _ _ _ -> bug "failed to merge node") am bm )
     in
     res
   | Imply (c, p) | BlockingImply (c, p) ->
-    find_actions1 ~preconditions:(c :: preconditions) ~params p
+    split_actions ~preconditions:(c :: preconditions) ~params p
   | Exists (_, _, _) -> nyi "find actions exists"
   | Comment (_, _, _) -> bug "find actions comment"
   | Emp -> bug "find actions empty"
@@ -221,7 +238,9 @@ let to_graphviz env g m =
              | [] -> ""
              | _ ->
                Format.sprintf "λ %a.\\n"
-                 (List.pp ~pp_sep:(pp_const ", ") Format.pp_print_string)
+                 (List.pp ~pp_sep:(pp_const ", ")
+                    (Pair.pp ~pp_sep:(pp_const ":") Format.pp_print_string
+                       Format.pp_print_string))
                  params
            in
            Format.sprintf "%d [label=\"%s%s%a\"];" id pre params
@@ -238,7 +257,7 @@ let to_graphviz env g m =
     (edges |> String.concat maybe_nl)
     maybe_nl
 
-let find_actions : tprotocol -> G.t * node IMap.t =
+let split_into_actions : tprotocol -> G.t * node IMap.t =
  fun t ->
-  let (g, m) = find_actions1 ~preconditions:[] ~params:[] t in
+  let (g, m) = split_actions ~preconditions:[] ~params:[] t in
   (g, m)

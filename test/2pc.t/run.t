@@ -88,15 +88,19 @@ The classic two-phase commit protocol.
      c->self*: abort;
      *self->c: abort_ack)
 
+  $ protocol print 2pc.spec > 2pc1.spec && protocol print 2pc1.spec | protocol print > 2pc2.spec && git diff --no-index 2pc1.spec 2pc2.spec
+
+  $ protocol print 2pc-wait.spec > 2pc1-wait.spec && protocol print 2pc1-wait.spec | protocol print > 2pc2-wait.spec && git diff --no-index 2pc1-wait.spec 2pc2-wait.spec
+
   $ protocol print 2pc.spec --parties C,P --project P --actions
   digraph G {
-    0 [label="λ c.\nc->self*: prepare"];
-    1 [label="λ c.\n*self->c: prepared"];
-    2 [label="λ c.\n*self->c: abort"];
-    3 [label="λ c.\nc->self*: commit"];
-    4 [label="λ c.\n*self->c: commit_ack"];
-    5 [label="λ c.\nc->self*: abort"];
-    6 [label="λ c.\n*self->c: abort_ack"];
+    0 [label="λ c:C.\nc->self*: prepare"];
+    1 [label="λ c:C.\n*self->c: prepared"];
+    2 [label="λ c:C.\n*self->c: abort"];
+    3 [label="λ c:C.\nc->self*: commit"];
+    4 [label="λ c:C.\n*self->c: commit_ack"];
+    5 [label="λ c:C.\nc->self*: abort"];
+    6 [label="λ c:C.\n*self->c: abort_ack"];
     5 -> 6;
     3 -> 4;
     2 -> 5;
@@ -109,13 +113,13 @@ The classic two-phase commit protocol.
 
   $ protocol print 2pc.spec --parties C,P --project C --actions
   digraph G {
-    0 [label="λ p.\n*self->p: prepare"];
-    1 [label="λ p.\np->self*: prepared;\nresponded = union(responded, {p})"];
-    2 [label="λ p.\np->self*: abort;\naborted = union(aborted, {p})"];
-    3 [label="{aborted == {}}\nλ p.\n*self->p: commit"];
-    4 [label="{aborted == {}}\nλ p.\np->self*: commit_ack"];
-    5 [label="{aborted != {}}\nλ p.\n*self->p: abort"];
-    6 [label="{aborted != {}}\nλ p.\np->self*: abort_ack"];
+    0 [label="λ p:P.\n*self->p: prepare"];
+    1 [label="λ p:P.\np->self*: prepared;\nresponded = union(responded, {p})"];
+    2 [label="λ p:P.\np->self*: abort;\naborted = union(aborted, {p})"];
+    3 [label="{aborted == {}}\nλ p:P.\n*self->p: commit"];
+    4 [label="{aborted == {}}\nλ p:P.\np->self*: commit_ack"];
+    5 [label="{aborted != {}}\nλ p:P.\n*self->p: abort"];
+    6 [label="{aborted != {}}\nλ p:P.\np->self*: abort_ack"];
     5 -> 6;
     3 -> 4;
     2 -> 5;
@@ -126,6 +130,157 @@ The classic two-phase commit protocol.
     0 -> 1;
   }
 
-  $ protocol print 2pc.spec > 2pc1.spec && protocol print 2pc1.spec | protocol print > 2pc2.spec && git diff --no-index 2pc1.spec 2pc2.spec
-
-  $ protocol print 2pc-wait.spec > 2pc1-wait.spec && protocol print 2pc1-wait.spec | protocol print > 2pc2-wait.spec && git diff --no-index 2pc1-wait.spec 2pc2-wait.spec
+  $ protocol tla 2pc.spec --parties C,P --project C
+  CONSTANT C
+  
+  CONSTANT P
+  
+  Cvars == <<responded, aborted>>
+  
+  Pvars == <<>>
+  
+  vars == <<responded, aborted, messages>>
+  
+  \* Used by C
+  
+  VARIABLES responded aborted
+  
+  Init ==
+    /\ responded = [i \in C |-> {}]
+    /\ aborted = [i \in C |-> {}]
+  
+  CSendPrepare0(self, p) ==
+    /\ pc' = [pc EXCEPT ![self] = 0]
+    /\ 
+      /\ messages' = Send([mtype |-> prepare, msrc |-> self, mdest |-> p])
+    /\ UNCHANGED <<responded, aborted, messages>>
+  
+  CReceivePrepared1(self, p) ==
+    /\ pc = 0
+    /\ pc' = [pc EXCEPT ![self] = 1]
+    /\ \E m \in messages : 
+      /\ m.mtype = prepared
+      /\ m.mdest = self
+      /\ responded' = [responded EXCEPT ![self] = (responded[self] \union {p})]
+      /\ messages' = Receive(m)
+    /\ UNCHANGED <<aborted>>
+  
+  CReceiveAbort2(self, p) ==
+    /\ pc = 0
+    /\ pc' = [pc EXCEPT ![self] = 2]
+    /\ \E m \in messages : 
+      /\ m.mtype = abort
+      /\ m.mdest = self
+      /\ aborted' = [aborted EXCEPT ![self] = (aborted[self] \union {p})]
+      /\ messages' = Receive(m)
+    /\ UNCHANGED <<responded>>
+  
+  CSendCommit3(self, p) ==
+    /\ 
+      \/ pc = 2
+      \/ pc = 1
+    /\ pc' = [pc EXCEPT ![self] = 3]
+    /\ 
+      /\ messages' = Send([mtype |-> commit, msrc |-> self, mdest |-> p])
+    /\ UNCHANGED <<responded, aborted, messages>>
+  
+  CReceiveCommitAck4(self, p) ==
+    /\ pc = 3
+    /\ pc' = [pc EXCEPT ![self] = 4]
+    /\ \E m \in messages : 
+      /\ m.mtype = commit_ack
+      /\ m.mdest = self
+      /\ messages' = Receive(m)
+    /\ UNCHANGED <<responded, aborted>>
+  
+  CSendAbort5(self, p) ==
+    /\ 
+      \/ pc = 2
+      \/ pc = 1
+    /\ pc' = [pc EXCEPT ![self] = 5]
+    /\ 
+      /\ messages' = Send([mtype |-> abort, msrc |-> self, mdest |-> p])
+    /\ UNCHANGED <<responded, aborted, messages>>
+  
+  CReceiveAbortAck6(self, p) ==
+    /\ pc = 5
+    /\ pc' = [pc EXCEPT ![self] = 6]
+    /\ \E m \in messages : 
+      /\ m.mtype = abort_ack
+      /\ m.mdest = self
+      /\ messages' = Receive(m)
+    /\ UNCHANGED <<responded, aborted>>
+  
+  PReceivePrepare7(self, c) ==
+    /\ pc' = [pc EXCEPT ![self] = 7]
+    /\ \E m \in messages : 
+      /\ m.mtype = prepare
+      /\ m.mdest = self
+      /\ messages' = Receive(m)
+    /\ UNCHANGED <<responded, aborted>>
+  
+  PSendPrepared8(self, c) ==
+    /\ pc = 7
+    /\ pc' = [pc EXCEPT ![self] = 8]
+    /\ 
+      /\ messages' = Send([mtype |-> prepared, msrc |-> self, mdest |-> c])
+    /\ UNCHANGED <<responded, aborted, messages>>
+  
+  PSendAbort9(self, c) ==
+    /\ pc = 7
+    /\ pc' = [pc EXCEPT ![self] = 9]
+    /\ 
+      /\ messages' = Send([mtype |-> abort, msrc |-> self, mdest |-> c])
+    /\ UNCHANGED <<responded, aborted, messages>>
+  
+  PReceiveCommit10(self, c) ==
+    /\ 
+      \/ pc = 9
+      \/ pc = 8
+    /\ pc' = [pc EXCEPT ![self] = 10]
+    /\ \E m \in messages : 
+      /\ m.mtype = commit
+      /\ m.mdest = self
+      /\ messages' = Receive(m)
+    /\ UNCHANGED <<responded, aborted>>
+  
+  PSendCommitAck11(self, c) ==
+    /\ pc = 10
+    /\ pc' = [pc EXCEPT ![self] = 11]
+    /\ 
+      /\ messages' = Send([mtype |-> commit_ack, msrc |-> self, mdest |-> c])
+    /\ UNCHANGED <<responded, aborted, messages>>
+  
+  PReceiveAbort12(self, c) ==
+    /\ 
+      \/ pc = 9
+      \/ pc = 8
+    /\ pc' = [pc EXCEPT ![self] = 12]
+    /\ \E m \in messages : 
+      /\ m.mtype = abort
+      /\ m.mdest = self
+      /\ messages' = Receive(m)
+    /\ UNCHANGED <<responded, aborted>>
+  
+  PSendAbortAck13(self, c) ==
+    /\ pc = 12
+    /\ pc' = [pc EXCEPT ![self] = 13]
+    /\ 
+      /\ messages' = Send([mtype |-> abort_ack, msrc |-> self, mdest |-> c])
+    /\ UNCHANGED <<responded, aborted, messages>>
+  
+  Next ==
+    \/ \E self \in C : \E p \in P : CSendPrepare0(self, p)
+    \/ \E self \in C : \E p \in P : CReceivePrepared1(self, p)
+    \/ \E self \in C : \E p \in P : CReceiveAbort2(self, p)
+    \/ \E self \in C : \E p \in P : CSendCommit3(self, p)
+    \/ \E self \in C : \E p \in P : CReceiveCommitAck4(self, p)
+    \/ \E self \in C : \E p \in P : CSendAbort5(self, p)
+    \/ \E self \in C : \E p \in P : CReceiveAbortAck6(self, p)
+    \/ \E self \in P : \E c \in C : PReceivePrepare7(self, c)
+    \/ \E self \in P : \E c \in C : PSendPrepared8(self, c)
+    \/ \E self \in P : \E c \in C : PSendAbort9(self, c)
+    \/ \E self \in P : \E c \in C : PReceiveCommit10(self, c)
+    \/ \E self \in P : \E c \in C : PSendCommitAck11(self, c)
+    \/ \E self \in P : \E c \in C : PReceiveAbort12(self, c)
+    \/ \E self \in P : \E c \in C : PSendAbortAck13(self, c)

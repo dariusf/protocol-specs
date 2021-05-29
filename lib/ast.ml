@@ -145,20 +145,10 @@ type 'v msg_destruct =
     }
 [@@deriving show { with_path = false }, eq]
 
-type 'e msg_construct =
-  | MessageC of {
-      typ : string;
-      args : 'e list;
-    }
-[@@deriving show { with_path = false }, eq]
-
 let msg name = Message { typ = name; args = [] }
 
 let msg_destruct (Message { typ; args }) =
   MessageD { typ; args = List.map fst args }
-
-let msg_construct (Message { typ; args }) =
-  MessageC { typ; args = List.map snd args }
 
 type ('a, 'e, 'v) _protocol = {
   pmeta : 'a;
@@ -185,7 +175,7 @@ and ('a, 'e, 'v) _protocol' =
   | SendOnly of {
       from : 'v;
       to_ : 'v;
-      msg : 'e msg_construct;
+      msg : ('e, 'v) msg;
     }
   | ReceiveOnly of {
       from : 'v;

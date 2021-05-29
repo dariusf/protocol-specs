@@ -52,6 +52,10 @@ let print project parties ast types actions file =
       Lib.print project parties ast types actions file);
   `Ok ()
 
+let tla project parties file =
+  Ppx_debug.Tracing.wrap (fun () -> Lib.tla project parties file);
+  `Ok ()
+
 let print_cmd =
   let file =
     Arg.(value & pos 0 string "-" & info [] ~docv:"FILE" ~doc:"file")
@@ -91,7 +95,34 @@ let print_cmd =
     Term.info "print" ~doc:"renders a specification" ~exits:Term.default_exits
       ~man )
 
-let cmds = [print_cmd; help_cmd]
+let tla_cmd =
+  let file =
+    Arg.(value & pos 0 string "-" & info [] ~docv:"FILE" ~doc:"file")
+  in
+  let project =
+    Arg.(
+      value
+      & opt (some string) None
+          (info ~docv:"PROJECT" ~doc:"project protocol for a specific party"
+             ["project"]))
+  in
+  let parties =
+    Arg.(
+      value
+      & opt (some string) None
+          (info ~docv:"PARTIES" ~doc:"indicate party sets" ["parties"]))
+  in
+  let man =
+    [
+      `S Manpage.s_description; `P "Compiles a specification to TLA+.";
+      `Blocks help_secs;
+    ]
+  in
+  ( Term.(ret (const tla $ project $ parties $ file)),
+    Term.info "tla" ~doc:"compiles a specification to TLA+"
+      ~exits:Term.default_exits ~man )
+
+let cmds = [print_cmd; tla_cmd; help_cmd]
 
 let default_cmd =
   let doc = "Protocol specifications" in

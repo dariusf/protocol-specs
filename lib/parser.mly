@@ -104,8 +104,8 @@ protocol :
   | v = var; EQ; e = expr; { p_with_pos $startpos $endpos (Assign (v, e)) }
   | p1 = var; ARROW; p2 = var; COLON; m = IDENT; args = loption(delimited(LPAREN, separated_nonempty_list(COMMA, msg_kvp), RPAREN));
     { p_with_pos $startpos $endpos (Send { from = p1; to_ = p2; msg = Message { typ = m; args = args } }) }
-  | STAR; p1 = var; ARROW; p2 = var; COLON; m = IDENT; es = loption(delimited(LPAREN, separated_nonempty_list(COMMA, expr), RPAREN));
-    { p_with_pos $startpos $endpos (SendOnly { from = p1; to_ = p2; msg = MessageC { typ = m; args = es } }) }
+  // | STAR; p1 = var; ARROW; p2 = var; COLON; m = IDENT; es = loption(delimited(LPAREN, separated_nonempty_list(COMMA, expr), RPAREN));
+    // { p_with_pos $startpos $endpos (SendOnly { from = p1; to_ = p2; msg = MessageC { typ = m; args = es } }) }
   | p1 = var; ARROW; p2 = var; STAR; COLON; m = IDENT; is = loption(delimited(LPAREN, separated_nonempty_list(COMMA, var), RPAREN));
     { p_with_pos $startpos $endpos (ReceiveOnly { from = p1; to_ = p2; msg = MessageD { typ = m; args = is } }) }
   (*| ps = separated_nonempty_list(SEMI, protocol) { p_with_pos $startpos $endpos (Seq ps) }*)

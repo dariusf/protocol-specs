@@ -45,7 +45,7 @@ let rec project_aux : party_info list -> env -> tprotocol -> tprotocol list =
                  {
                    from = { from with expr = Var (V (None, "self")) };
                    to_;
-                   msg = msg_construct msg;
+                   msg;
                  }
              else if is_party parties env party to_ then
                ReceiveOnly

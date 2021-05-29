@@ -23,6 +23,11 @@ let fail ~loc s =
               loc.start.col m)))
     s
 
+let bad_input s =
+  Format.ksprintf
+    ~f:(fun m -> raise (Check_failure (Format.sprintf "bad input: %s" m)))
+    s
+
 let bug s = Format.ksprintf ~f:failwith s
 
 let nyi s =
@@ -52,3 +57,21 @@ let rec transpose xss =
   | _ -> []
 
 module UF = UF.Int
+
+module Printing = struct
+  open PPrint
+
+  let (arrow, disj, par, if_, when_, in_, forall, exists) =
+    ( string "->",
+      string "\\/",
+      string "||",
+      string "=>",
+      string "=>*",
+      string "in",
+      string "forall",
+      string "exists" )
+
+  let spaced d = terminate space d
+
+  let nl = break 1
+end

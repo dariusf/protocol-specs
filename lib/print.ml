@@ -1,5 +1,6 @@
 open Ast
 open Common
+open Common.Printing
 open PPrint
 
 (** printing contexts *)
@@ -9,20 +10,6 @@ type pctx = {
   (* whether or not nodr is last in a sequence of some kind *)
   last : bool;
 }
-
-let (arrow, disj, par, if_, when_, in_, forall, exists) =
-  ( string "->",
-    string "\\/",
-    string "||",
-    string "=>",
-    string "=>*",
-    string "in",
-    string "forall",
-    string "exists" )
-
-let spaced d = terminate space d
-
-let nl = break 1
 
 let render_var (V (p, v)) =
   match p with
@@ -247,14 +234,17 @@ let render_protocol_ : ('e -> document) -> ('a, 'e, 'v) _protocol -> document =
                 exists; space; render_expr v; space; in_; render_expr s; nl;
                 render_protocol ~pctx:{ pctx with prec = n } p;
               ])
-    | SendOnly { from; to_; msg = MessageC { typ; args } } ->
+    | SendOnly { from; to_; msg = Message { typ; args } } ->
       concat
         [
           star; render_expr from; arrow; render_expr to_; colon; space;
           string typ;
           (match args with
           | [] -> empty
-          | _ -> parens (separate (spaced comma) (List.map render_expr args)));
+          | _ ->
+            parens
+              (separate (spaced comma)
+                 (List.map render_expr (args |> List.map snd))));
         ]
     | ReceiveOnly { from; to_; msg = MessageD { typ; args } } ->
       concat
