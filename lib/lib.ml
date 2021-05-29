@@ -61,6 +61,7 @@ let print project_party parties ast types actions file =
   with Check_failure s -> Format.printf "%s@." s
 
 let tla project_party parties file =
+  let spec_name = Filename.remove_extension file in
   match project_party with
   | None ->
     (* TODO fix unintuitiveness *)
@@ -79,9 +80,8 @@ let tla project_party parties file =
         tps
     in
 
-    (* let (graph, nodes) = Actions.find_actions tprotocol in *)
     let tla = Tla.to_tla parties env actions |> Tla.Render.render_tla in
-    Tla.with_preamble "spec" tla |> print_endline
+    Tla.with_preamble spec_name tla |> print_endline
 
 let tla project_party parties file =
   try tla project_party parties file

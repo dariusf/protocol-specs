@@ -132,7 +132,7 @@ The classic two-phase commit protocol.
 
   $ protocol tla 2pc.spec --parties C,P --project C
   
-  --------------------------------- MODULE spec ---------------------------------
+  --------------------------------- MODULE 2pc ---------------------------------
   
   EXTENDS Naturals, FiniteSets, Sequences
   
