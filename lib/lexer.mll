@@ -30,10 +30,12 @@ rule f = parse
   | ";" { SEMI }
   | "||" { PAR }
   | "\\/" { DISJ }
+  (* | "/\\" { CONJ } *)
   | ":" { COLON }
   | "," { COMMA }
   | "->" { ARROW }
   | "=>" { IF }
+  | "==>" { IMPLIES }
   | "=>*" { WHEN }
   | "=" { EQ }
   | "==" { EQEQ }
@@ -52,6 +54,11 @@ rule f = parse
   | "}" { RCURLY }
   | "[" { LBRACKET }
   | "]" { RBRACKET }
+  | "invariant" { INVARIANT }
+  | "protocol" { PROTOCOL }
+  | "ltl" { LTL }
+  | "<>" { DIAMOND }
+  | "[]" { BOX }
   | "//" { comments lexbuf }
   | _ { raise SyntaxError }
   | eof { EOF }

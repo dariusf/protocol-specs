@@ -17,6 +17,7 @@ let show_token t =
   | INT i -> Format.sprintf "INT %d" i
   | IN -> "IN"
   | IF -> "IF"
+  | IMPLIES -> "IMPLIES"
   | IDENT i -> Format.sprintf "IDENT %s" i
   | FORALL -> "FORALL"
   | EXISTS -> "EXISTS"
@@ -41,6 +42,11 @@ let show_token t =
   | GT -> ">"
   | LE -> "<="
   | LT -> "<"
+  | INVARIANT -> "invariant"
+  | PROTOCOL -> "protocol"
+  | LTL -> "ltl"
+  | BOX -> "[]"
+  | DIAMOND -> "<>"
 
 let echo f lexbuf =
   let t = f lexbuf in
@@ -52,7 +58,7 @@ let f = Lexer.f
 let parse_mono_ic file ic =
   let lexer = Lexing.from_channel ~with_positions:true ic in
   Lexing.set_filename lexer file;
-  try Ok (lexer |> Parser.p f) with
+  try Ok (lexer |> Parser.spec f) with
   | Parser.Error ->
     let pos = lexer.Lexing.lex_curr_p in
     let tok = Lexing.lexeme lexer in
@@ -92,7 +98,7 @@ let get_parse_error env =
        with Not_found -> "invalid syntax (no specific message for this eror)" *)
     "Invalid syntax"
 
-let rec parse lexbuf (checkpoint : Ast.protocol I.checkpoint) =
+let rec parse lexbuf (checkpoint : Ast.spec I.checkpoint) =
   match checkpoint with
   | I.InputNeeded _env ->
     let token = Lexer.f lexbuf in
@@ -115,7 +121,7 @@ let parse_inc file =
       (* stdin *)
       let lexbuf = Lexing.from_channel ~with_positions:true ic in
       Lexing.set_filename lexbuf file;
-      try Ok (parse lexbuf (Parser.Incremental.p lexbuf.lex_curr_p))
+      try Ok (parse lexbuf (Parser.Incremental.spec lexbuf.lex_curr_p))
       with Syntax_error (pos, err) ->
         Error
           (Format.sprintf "%s%s" err

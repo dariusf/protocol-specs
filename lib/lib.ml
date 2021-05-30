@@ -7,7 +7,7 @@ let parse_parties s =
 
 let read project_party parties file =
   let protocol =
-    Infer.parse_protocol file
+    (Infer.parse_spec file).protocol
     |> (* if no_normalize then Fun.id else *)
     Normalize.normalize
   in

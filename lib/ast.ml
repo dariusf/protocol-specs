@@ -245,3 +245,15 @@ let empty_env =
   }
 
 let party_list parties = parties |> IMap.values |> List.of_iter
+
+type spec_decl =
+  | Invariant of expr
+  | Ltl of expr
+  | Function of string * string list * protocol
+[@@deriving show { with_path = false }]
+
+type spec = {
+  decls : spec_decl list;
+  protocol : protocol;
+}
+[@@deriving show { with_path = false }]

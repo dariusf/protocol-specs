@@ -647,7 +647,7 @@ let has_initiative (V (_, party)) p =
   in
   aux p
 
-let parse_protocol file =
+let parse_spec file =
   (* let p = Parsing.parse_inc file in *)
   match
     if String.equal file "-" then
