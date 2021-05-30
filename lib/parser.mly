@@ -25,72 +25,12 @@
 %left DIV STAR
 %nonassoc NOT
 
-%start <expr> f
 %start <protocol> p
 
 %%
 
-f : e = expr; EOF { e }
-
-%inline binop :
-  | PLUS { "+" }
-  | MINUS { "-" }
-  | STAR { "*" }
-  | DIV { "/" }
-  | AND { "&" }
-  | EQEQ { "==" }
-  | NEQ { "!=" }
-  | OR { "|" }
-  | GT { ">" }
-  | GE { ">=" }
-  | LT { "<" }
-  | LE { "<=" }
-
-map_kvp :
-  | v = IDENT; COLON; e = expr; { (v, e) }
-
-expr :
-  | n = INT; { with_pos $startpos $endpos (Int n) }
-
-  | i = IDENT;
-    { with_pos $startpos $endpos (Var (V (None, i))) }
-  | p = IDENT; DOT; i = IDENT;
-    { with_pos $startpos $endpos (Var (V (Some (Party p), i))) }
-  | f = IDENT; args = delimited(LPAREN, separated_list(COMMA, expr), RPAREN)
-    { with_pos $startpos $endpos (App (f, args)) }
-
-  (* ugh using the macros causes shift/reduce conflicts but inlining this doesn't! *)
-  (*
-  | party = terminated(IDENT?, DOT); i = IDENT;
-    { Var (V (Option.map (fun p -> Party p) party, i)) }
-*)
-
-  (*%prec dot*)
-  (*
-  | party = terminated(expr?, DOT); i = IDENT;
-  (*%prec dot*)
-    { Var (V (Option.map (fun p -> Party p) party, i)) }
-  *)
-  | TRUE; { with_pos $startpos $endpos (Bool true) }
-  | FALSE; { with_pos $startpos $endpos (Bool false) }
-  | a = expr; o = binop; b = expr; { with_pos $startpos $endpos (App (o, [a; b])) }
-  | NOT; e = expr; { with_pos $startpos $endpos (App ("!", [e])) }
-  | es = delimited(LCURLY, separated_list(COMMA, expr), RCURLY) { with_pos $startpos $endpos (Set es) }
-  | es = delimited(LBRACKET, separated_nonempty_list(COMMA, expr), RBRACKET) { with_pos $startpos $endpos (List es) }
-  (* empty set/map are ambiguous *)
-  | es = delimited(LCURLY, separated_nonempty_list(COMMA, map_kvp), RCURLY) { with_pos $startpos $endpos (Map es) }
-  | LPAREN; e = expr; RPAREN; { e }
-
-p : pr = protocol; EOF { pr }
-
-var :
-  | var = IDENT;
-    { with_pos $startpos $endpos (Var (V (None, var))) }
-  | party = IDENT; DOT; var = IDENT;
-    { with_pos $startpos $endpos (Var (V (Some (Party party), var))) }
-
-msg_kvp :
-  | v = var; EQ; e = expr; { (v, e) }
+p :
+  | pr = protocol; EOF { pr }
 
 protocol :
   (*| party = terminated(IDENT?, DOT) var = IDENT; EQ; e = expr;*)
@@ -124,3 +64,61 @@ protocol :
   | EXISTS; v = var; IN; s = var; p = protocol; %prec forall_exists
     { p_with_pos $startpos $endpos (Exists (v, s, p)) }
   | LPAREN; p = protocol; RPAREN; { p }
+
+expr :
+  | n = INT; { with_pos $startpos $endpos (Int n) }
+
+  | i = IDENT;
+    { with_pos $startpos $endpos (Var (V (None, i))) }
+  | p = IDENT; DOT; i = IDENT;
+    { with_pos $startpos $endpos (Var (V (Some (Party p), i))) }
+  | f = IDENT; args = delimited(LPAREN, separated_list(COMMA, expr), RPAREN)
+    { with_pos $startpos $endpos (App (f, args)) }
+
+  (* ugh using the macros causes shift/reduce conflicts but inlining this doesn't! *)
+  (*
+  | party = terminated(IDENT?, DOT); i = IDENT;
+    { Var (V (Option.map (fun p -> Party p) party, i)) }
+*)
+
+  (*%prec dot*)
+  (*
+  | party = terminated(expr?, DOT); i = IDENT;
+  (*%prec dot*)
+    { Var (V (Option.map (fun p -> Party p) party, i)) }
+  *)
+  | TRUE; { with_pos $startpos $endpos (Bool true) }
+  | FALSE; { with_pos $startpos $endpos (Bool false) }
+  | a = expr; o = binop; b = expr; { with_pos $startpos $endpos (App (o, [a; b])) }
+  | NOT; e = expr; { with_pos $startpos $endpos (App ("!", [e])) }
+  | es = delimited(LCURLY, separated_list(COMMA, expr), RCURLY) { with_pos $startpos $endpos (Set es) }
+  | es = delimited(LBRACKET, separated_nonempty_list(COMMA, expr), RBRACKET) { with_pos $startpos $endpos (List es) }
+  (* empty set/map are ambiguous *)
+  | es = delimited(LCURLY, separated_nonempty_list(COMMA, map_kvp), RCURLY) { with_pos $startpos $endpos (Map es) }
+  | LPAREN; e = expr; RPAREN; { e }
+
+var :
+  | var = IDENT;
+    { with_pos $startpos $endpos (Var (V (None, var))) }
+  | party = IDENT; DOT; var = IDENT;
+    { with_pos $startpos $endpos (Var (V (Some (Party party), var))) }
+
+msg_kvp :
+  | v = var; EQ; e = expr; { (v, e) }
+
+%inline binop :
+  | PLUS { "+" }
+  | MINUS { "-" }
+  | STAR { "*" }
+  | DIV { "/" }
+  | AND { "&" }
+  | EQEQ { "==" }
+  | NEQ { "!=" }
+  | OR { "|" }
+  | GT { ">" }
+  | GE { ">=" }
+  | LT { "<" }
+  | LE { "<=" }
+
+map_kvp :
+  | v = IDENT; COLON; e = expr; { (v, e) }
