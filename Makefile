@@ -11,6 +11,11 @@ all:
 	protocol print test/2pc.t/2pc.spec --parties C,P --project C --actions | dot -Tpng -o c.png
 	protocol tla test/2pc.t/2pc.spec --parties C,P --project C > 2pc.tla
 
+deps:
+	git ls | depgraph | sd '\{' '{rankdir=BT;' | dot -Tpng > modules.png
+	dune-deps | tred | dot -Tpng > deps.png
+	open modules.png deps.png
+
 clean:
 	rm -rf *.png *.tla
 
