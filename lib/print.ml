@@ -16,8 +16,6 @@ let render_var (V (p, v)) =
   | None -> string v
   | Some (Party p) -> concat [string p; dot; string v]
 
-let is_alpha = function 'a' .. 'z' | 'A' .. 'Z' -> true | _ -> false
-
 (* this should be kept in sync with the parser *)
 let get_expr_prec op =
   match op with

@@ -179,8 +179,8 @@ let rec split_actions ~preconditions ~params (t : tprotocol) =
     in
     res
   | Assign (_, _) ->
-    (* TODO this probably shouldn't be a bug. if we encounter it on its own, make it a singleton seq? *)
-    bug "find actions assign"
+      (* this happens when an assignment is on its own, outside a seq. the simplest thing to do is treat it as a seq *)
+      split_actions ~preconditions ~params {t with p = Seq[t]}
   | SendOnly _ -> bug "find actions send"
   | ReceiveOnly _ -> bug "find actions receive"
   | Par ps ->
@@ -261,3 +261,47 @@ let split_into_actions : tprotocol -> G.t * node IMap.t =
  fun t ->
   let (g, m) = split_actions ~preconditions:[] ~params:[] t in
   (g, m)
+
+let snake_to_camel s =
+  s |> String.lowercase_ascii |> String.capitalize_ascii
+  |> Str.global_substitute (Str.regexp {|_\([a-z]\)|}) (fun s ->
+         Str.matched_group 1 s |> String.lowercase_ascii
+         |> String.capitalize_ascii)
+
+let node_name party (id, node) =
+  let prefix =
+    match node.protocol.p with
+    | Seq ({ p = SendOnly { msg = Message { typ; _ }; _ }; _ } :: _)
+    | SendOnly { msg = Message { typ; _ }; _ } ->
+      Format.sprintf "Send%s" (typ |> snake_to_camel)
+    | Seq ({ p = ReceiveOnly { msg = MessageD { typ; _ }; _ }; _ } :: _)
+    | ReceiveOnly { msg = MessageD { typ; _ }; _ } ->
+      Format.sprintf "Receive%s" (typ |> snake_to_camel)
+    | Seq ({ p = Assign (v, _); _ } :: _) | Assign (v, _) ->
+      let (V (_, v)) = must_be_var_t v in
+      Format.sprintf "Change%s" (v |> snake_to_camel)
+    | _ -> "Action"
+  in
+  Format.sprintf "%s%s%d" party prefix id
+
+let assigned_variables (t : tprotocol) =
+  let rec aux t =
+    match t.p with
+    | Assign (v, _) ->
+      let info = v.meta.info in
+      let (V (_, v)) = must_be_var_t v in
+      [(v, info)]
+    | Seq es | Par es -> List.concat_map aux es
+    | Disj (a, b) -> aux a @ aux b
+    | Imply (_, b) | BlockingImply (_, b) | Forall (_, _, b) ->
+      (* ignore the variables in forall *)
+      aux b
+    | SendOnly _ | ReceiveOnly _ ->
+      (* ignore variables *)
+      []
+    | Exists (_, _, _) -> nyi "used variables exists"
+    | Send _ -> bug "used variable send"
+    | Comment (_, _, _) -> bug "used variables comment"
+    | Emp -> bug "used variables emp"
+  in
+  aux t |> List.uniq ~eq:(fun (a, _) (b, _) -> String.equal a b)

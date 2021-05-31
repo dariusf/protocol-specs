@@ -1,6 +1,13 @@
 (library
  (name lib)
- (libraries str ppx_debug pprint containers menhirLib ocamlgraph)
+ (libraries
+  str
+  ppx_debug
+  pprint
+  containers
+  containers.unix
+  menhirLib
+  ocamlgraph)
  (inline_tests)
  (preprocessor_deps
   (file ../ppx_debug.json))

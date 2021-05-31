@@ -281,8 +281,11 @@ and infer_parties_expr : expr -> env -> texpr * env =
             | Ok env -> env
             | Error (`Does_not_unify s)
             | Error (`Parties_instantiated_but_different s) ->
-              fail ~loc:b.meta.loc "could not unify arg %a: %s"
-                (Print.pp_texpr ~env) b s)
+              (* Format.printf "a %a@." pp_typ a;
+                 Format.printf "b %a@." pp_typ b.meta.info.typ;
+                 dump_env env; *)
+              fail ~loc:b.meta.loc "could not unify arg %a of function %s: %s"
+                (Print.pp_texpr ~env) b fn s)
           targs tes env
       in
 
@@ -682,7 +685,14 @@ let initial_env parties =
             Forall ([a], TyFn ([set_a; set_a], set_a)) );
           ( "p2i",
             let a = UF.elt (fresh ()) in
-            Forall ([], TyFn ([TyParty a], TyInt)) );
+            Forall ([a], TyFn ([TyParty a], TyInt)) );
+          (* TODO these should only be defined for invariants and ltl *)
+          ( "[]",
+            let a = UF.elt (fresh ()) in
+            Forall ([a], TyFn ([TyVar a], TyBool)) );
+          ( "<>",
+            let a = UF.elt (fresh ()) in
+            Forall ([a], TyFn ([TyVar a], TyBool)) );
           ("/", Forall ([], TyFn ([TyInt; TyInt], TyInt)));
           ("*", Forall ([], TyFn ([TyInt; TyInt], TyInt)));
           ("-", Forall ([], TyFn ([TyInt; TyInt], TyInt)));

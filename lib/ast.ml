@@ -58,6 +58,17 @@ module IMap = struct
       map
 end
 
+module SSet = struct
+  module M = Set.Make (String)
+  include M
+
+  let pp fmt map =
+    Format.fprintf fmt "%a"
+      (M.pp ~pp_sep:(pp_const ", ") ~pp_start:(pp_const "{")
+         ~pp_stop:(pp_const "}") Format.pp_print_string)
+      map
+end
+
 type typ =
   | TyParty of UF.t
   | TySet of typ

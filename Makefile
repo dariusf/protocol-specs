@@ -1,6 +1,8 @@
 
 export OCAMLRUNPARAM=b
 
+.PHONY: monitor
+
 all:
 	dune test
 	dune exec ./app/protocol.exe
@@ -15,6 +17,13 @@ deps:
 	git ls | depgraph | sd '\{' '{rankdir=BT;' | dot -Tpng > modules.png
 	dune-deps | tred | dot -Tpng > deps.png
 	open modules.png deps.png
+
+ltl:
+	ltl2mon "a U b" | dot -Tpng > ltl.png
+	open ltl.png
+
+monitor:
+	protocol monitor --parties C,P --project C <<< 'forall c in C c.a = 1 ltl ([] (a > 0))'
 
 clean:
 	rm -rf *.png *.tla

@@ -242,28 +242,6 @@ module Render = struct
   let render_tla t = List.map render_def t |> separate (nl ^^ nl)
 end
 
-let assigned_variables (t : tprotocol) =
-  let rec aux t =
-    match t.p with
-    | Assign (v, _) ->
-      let info = v.meta.info in
-      let (V (_, v)) = must_be_var_t v in
-      [(v, info)]
-    | Seq es | Par es -> List.concat_map aux es
-    | Disj (a, b) -> aux a @ aux b
-    | Imply (_, b) | BlockingImply (_, b) | Forall (_, _, b) ->
-      (* ignore the variables in forall *)
-      aux b
-    | SendOnly _ | ReceiveOnly _ ->
-      (* ignore variables *)
-      []
-    | Exists (_, _, _) -> nyi "used variables exists"
-    | Send _ -> bug "used variable send"
-    | Comment (_, _, _) -> bug "used variables comment"
-    | Emp -> bug "used variables emp"
-  in
-  aux t |> List.uniq ~eq:(fun (a, _) (b, _) -> String.equal a b)
-
 let rec translate_expr (e : texpr) =
   match e.expr with
   | Int i -> Term (string_of_int i)
@@ -342,28 +320,6 @@ let rec translate_protocol (p : tprotocol) =
   | Emp -> bug "do protocol emp"
   | Comment (_, _, _) -> bug "do protocol comment"
 
-let snake_to_camel s =
-  s |> String.lowercase_ascii |> String.capitalize_ascii
-  |> Str.global_substitute (Str.regexp {|_\([a-z]\)|}) (fun s ->
-         Str.matched_group 1 s |> String.lowercase_ascii
-         |> String.capitalize_ascii)
-
-let node_name party (id, node) =
-  let prefix =
-    match node.protocol.p with
-    | Seq ({ p = SendOnly { msg = Message { typ; _ }; _ }; _ } :: _)
-    | SendOnly { msg = Message { typ; _ }; _ } ->
-      Format.sprintf "Send%s" (typ |> snake_to_camel)
-    | Seq ({ p = ReceiveOnly { msg = MessageD { typ; _ }; _ }; _ } :: _)
-    | ReceiveOnly { msg = MessageD { typ; _ }; _ } ->
-      Format.sprintf "Receive%s" (typ |> snake_to_camel)
-    | Seq ({ p = Assign (v, _); _ } :: _) | Assign (v, _) ->
-      let (V (_, v)) = must_be_var_t v in
-      Format.sprintf "Change%s" (v |> snake_to_camel)
-    | _ -> "Action"
-  in
-  Format.sprintf "%s%s%d" party prefix id
-
 let translate_node all_vars graph pname (id, node) =
   (* not sure if we want to get this from the graph? *)
   let pc_current =
@@ -385,7 +341,7 @@ let translate_node all_vars graph pname (id, node) =
     | u -> [Unchanged u]
   in
   Def
-    ( node_name pname (id, node),
+    ( Actions.node_name pname (id, node),
       "self" :: (node.params |> List.map fst),
       Conj (pc_current @ [pc_next; body] @ unchanged) )
 
@@ -401,7 +357,7 @@ let rec default_value_of_type env t =
 
 let single_party_to_tla all_vars env graph nodes party protocol =
   let (V (_, pname)) = party.repr in
-  let vars = assigned_variables protocol in
+  let vars = Actions.assigned_variables protocol in
   let variables =
     match vars with
     | [] -> []

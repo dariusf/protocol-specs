@@ -22,6 +22,9 @@ rule f = parse
   | "false" { FALSE }
   | "and" { AND }
   | "or" { OR }
+  | "invariant" { INVARIANT }
+  | "protocol" { PROTOCOL }
+  | "ltl" { LTL }
   | ident as i { IDENT i }
   | "&" { AND }
   | "|" { OR }
@@ -54,9 +57,6 @@ rule f = parse
   | "}" { RCURLY }
   | "[" { LBRACKET }
   | "]" { RBRACKET }
-  | "invariant" { INVARIANT }
-  | "protocol" { PROTOCOL }
-  | "ltl" { LTL }
   | "<>" { DIAMOND }
   | "[]" { BOX }
   | "//" { comments lexbuf }

@@ -75,3 +75,5 @@ module Printing = struct
 
   let nl = break 1
 end
+
+let is_alpha = function 'a' .. 'z' | 'A' .. 'Z' -> true | _ -> false
