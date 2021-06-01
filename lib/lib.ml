@@ -77,7 +77,7 @@ let print project_party parties ast types actions file =
   with Check_failure s -> Format.printf "%s@." s
 
 let tla project_party parties file =
-  let spec_name = Filename.remove_extension file in
+  let spec_name = file |> Filename.remove_extension |> Filename.basename in
   let project_party = require_project_party project_party in
   let parties = require_parties parties in
   let spec = parse file in
