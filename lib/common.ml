@@ -77,3 +77,7 @@ module Printing = struct
 end
 
 let is_alpha = function 'a' .. 'z' | 'A' .. 'Z' -> true | _ -> false
+
+let write_to_file ~filename content =
+  IO.File.write_exn filename content;
+  print_endline filename

@@ -24,7 +24,7 @@
   	A int
   }
   
-  func t0(g Global) bool {
+  func (m *Monitor) t0(g Global) bool {
   	return (g.A > 0)
   }
   
@@ -41,7 +41,7 @@
   	CChangeA0 Action = iota
   )
   
-  func precondition(action Action) bool {
+  func (m *Monitor) precondition(action Action) bool {
   	switch action {
   	case CChangeA0:
   		return true
@@ -65,10 +65,18 @@
   	done     bool
   	dead     bool
   	pc       int
+  	vars     map[string]interface{}
   }
   
-  func NewMonitor() *Monitor {
-  	return &Monitor{state: S_1_Y, pc: -1}
+  func NewMonitor(vars map[string]interface{}) *Monitor {
+  	return &Monitor{
+  		state: S_1_Y,
+  		// previous is the empty Global
+  		done: false,
+  		dead: false,
+  		pc:   -1,
+  		vars: vars,
+  	}
   }
   
   // For debugging
@@ -83,7 +91,7 @@
   		return errors.New("sink state")
   	}
   
-  	if !precondition(act) {
+  	if !m.precondition(act) {
   		return errors.New("precondition violation")
   	}
   
@@ -92,8 +100,7 @@
   	m.applyPostcondition(act)
   
   	// evaluate all the props
-  	t0 := t0(g)
-  	println("t0", t0)
+  	t0 := m.t0(g)
   
   	// note the true ones, take that transition
   	switch m.state {

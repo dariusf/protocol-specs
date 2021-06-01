@@ -126,6 +126,11 @@ let monitor project_party parties file =
     let ltl_fml =
       spec.decls |> List.filter_map (function Ltl e -> Some e | _ -> None)
     in
+
+    (match ltl_fml with
+    | [] -> print_endline "no LTL properties given, nothing to do"
+    | _ -> ());
+
     let (ltl_fml, env) =
       List.fold_right
         (fun e (ts, env) ->
@@ -153,7 +158,8 @@ let monitor project_party parties file =
         let pr = get_party_protocol pname in
         let (action_graph, action_nodes) = Actions.split_into_actions pr in
         Ltl_go.translate_party_ltl env i (pname, ltl) pr action_graph
-          action_nodes)
+          action_nodes
+          (List.map (fun p -> p.repr |> var_name) parties))
       ltl_fml
 
 let monitor project_party parties file =

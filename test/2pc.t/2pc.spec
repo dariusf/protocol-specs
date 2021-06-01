@@ -19,3 +19,5 @@ forall c in C
    aborted != {} => forall p in P
      c->p: abort;
      p->c: abort_ack)
+
+ltl (<> (aborted != {} | responded == P))

@@ -24,14 +24,15 @@ module G = struct
     !res
 end
 
-let template ~global_contents ~prop_fns ~states ~action_defs ~preconditions
-    ~postconditions ~initial_state ~prop_vars ~transitions () =
+let template ~extra_imports ~global_contents ~prop_fns ~states ~action_defs
+    ~preconditions ~postconditions ~initial_state ~prop_vars ~transitions () =
   Format.sprintf
     {|
 package rv
 
 import (
 	"errors"
+  %s
 )
 
 type Global struct {
@@ -50,7 +51,7 @@ const (
 %s
 )
 
-func precondition(action Action) bool {
+func (m *Monitor) precondition(action Action) bool {
 	switch action {
     %s
     default:
@@ -72,10 +73,18 @@ type Monitor struct {
 	done     bool
 	dead     bool
   pc       int
+  vars     map[string]interface{}
 }
 
-func NewMonitor() *Monitor {
-	return &Monitor{state: %s, pc: -1}
+func NewMonitor(vars map[string]interface{}) *Monitor {
+	return &Monitor{
+    state: %s,
+    // previous is the empty Global
+    done: false,
+    dead: false,
+    pc: -1,
+    vars: vars,
+  }
 }
 
 // For debugging
@@ -90,7 +99,7 @@ func (m *Monitor) Step(g Global, act Action) error {
 		return errors.New("sink state")
 	}
 
-	if !precondition(act) {
+	if !m.precondition(act) {
 		return errors.New("precondition violation")
 	}
 
@@ -109,8 +118,8 @@ func (m *Monitor) Step(g Global, act Action) error {
 	}
 }
 |}
-    global_contents prop_fns states action_defs preconditions postconditions
-    initial_state prop_vars transitions
+    extra_imports global_contents prop_fns states action_defs preconditions
+    postconditions initial_state prop_vars transitions
 
 let fresh =
   let n = ref 0 in
@@ -175,7 +184,7 @@ let invoke_ltl2mon s =
   (* Format.printf "stderr %s@." res#stderr; *)
   res#stdout
 
-let debug = true
+let debug = false
 
 let invoke_gofmt s =
   (* TODO check if gofmt is present, and distinguish that from the case where we produce syntactically invalid Go code *)
@@ -284,25 +293,54 @@ digraph G {
 
 let state_var_name s = String.capitalize_ascii s
 
-let rec compile te =
+let rec compile_typ env t =
+  match t with
+  | TyParty _ ->
+    (* how are parties represented? *)
+    "string"
+  | TySet t1 -> Format.sprintf "map[%s]bool" (compile_typ env t1)
+  | TyList _ -> nyi "compile type list"
+  | TyVar v -> compile_typ env (IMap.find (UF.value v) env.types)
+  | TyInt -> "int"
+  | TyBool -> "bool"
+  | TyFn (_, _) -> nyi "compile type fn"
+
+let uses_reflect = ref false
+
+let rec compile parties te =
   match te.expr with
   | Int i -> string_of_int i
   | Bool b -> string_of_bool b
-  | Set _ -> nyi "compile set"
+  | Set es ->
+    let values =
+      List.map (compile parties) es
+      |> List.map (fun e -> Format.sprintf "\"%s\": bool," e)
+      |> String.concat ""
+    in
+    Format.sprintf "map[string]bool{%s}" values
   | List _ -> nyi "compile list"
   | Map _ -> nyi "compile map"
   | App (f, args) ->
-    let args = List.map compile args in
-    if List.length args = 2 && not (is_alpha f.[0]) then
-      Format.sprintf "(%s %s %s)" (List.nth args 0) f (List.nth args 1)
+    let args = List.map (compile parties) args in
+    if String.equal f "!=" then (
+      uses_reflect := true;
+      Format.sprintf "%s(%s)" "!reflect.DeepEqual" (String.concat ", " args))
+    else if String.equal f "==" then (
+      uses_reflect := true;
+      Format.sprintf "%s(%s)" "reflect.DeepEqual" (String.concat ", " args))
+    else if List.length args = 2 && not (is_alpha f.[0]) then
+      let f1 = match f with "|" -> "||" | _ -> f in
+      Format.sprintf "(%s %s %s)" (List.nth args 0) f1 (List.nth args 1)
     else
       let f1 = match f with "size" -> "Len" | _ -> f in
       Format.sprintf "%s(%s)" f1 (String.concat ", " args)
+  | Var (V (_, v)) when List.mem ~eq:String.equal v parties ->
+    Format.sprintf "m.vars[\"%s\"]" (state_var_name v)
   | Var (V (_, v)) -> Format.sprintf "g.%s" (state_var_name v)
   | Tuple (_, _) -> nyi "compile tuple"
 
-let translate_party_ltl env _ltl_i (pname, ltl) tprotocol action_graph
-    action_nodes =
+let translate_party_ltl env ltl_i (pname, ltl) tprotocol action_graph
+    action_nodes parties =
   (* TODO use ltl_i when having multiple properties falsified is supported *)
   (* TODO use pname to qualify stuff *)
   let fmls =
@@ -311,6 +349,11 @@ let translate_party_ltl env _ltl_i (pname, ltl) tprotocol action_graph
            let (ltl1, bindings) = extract_subexprs ltl in
            let fml = ltl1 |> fml_to_ltl3tools in
            let output = fml |> invoke_ltl2mon in
+           if debug then
+             (* TODO re-print the graphviz file with updated names? *)
+             write_to_file
+               ~filename:(Format.sprintf "ltl-%s-%d.dot" pname ltl_i)
+               output;
            let (node_colors, edges, graph) = output |> parse_graphviz_output in
            let initial_state =
              G.find_vertices
@@ -347,7 +390,7 @@ let translate_party_ltl env _ltl_i (pname, ltl) tprotocol action_graph
              | [] -> Format.sprintf "return true"
              | _ ->
                Format.sprintf "return %s"
-                 (List.map (fun p -> Format.sprintf "pc == %d" p) preds
+                 (List.map (fun p -> Format.sprintf "m.pc == %d" p) preds
                  |> String.concat " || ")
            in
            Format.sprintf "case %s:\n%s"
@@ -376,8 +419,7 @@ let translate_party_ltl env _ltl_i (pname, ltl) tprotocol action_graph
   let global_contents =
     assigned
     |> List.map (fun (v, info) ->
-           Format.sprintf "%s %a" (state_var_name v) (Print.pp_typ ~env)
-             info.typ)
+           Format.sprintf "%s %s" (state_var_name v) (compile_typ env info.typ))
     |> String.concat "\n"
   in
   let states =
@@ -390,16 +432,16 @@ let translate_party_ltl env _ltl_i (pname, ltl) tprotocol action_graph
     bindings |> SMap.bindings
     |> List.map (fun (v, _) ->
            if debug then
-             Format.sprintf "%s := %s(g)\nprintln(\"%s\", %s)" v v v v
+             Format.sprintf "%s := m.%s(g)\nprintln(\"%s\", %s)" v v v v
            else
-             Format.sprintf "%s := %s(g)" v v)
+             Format.sprintf "%s := m.%s(g)" v v)
     |> String.concat "\n"
   in
   let prop_fns =
     bindings |> SMap.bindings
     |> List.map (fun (v, te) ->
-           Format.sprintf "func %s(g Global) bool {\nreturn %s\n}" v
-             (compile te))
+           Format.sprintf "func (m *Monitor) %s(g Global) bool {\nreturn %s\n}"
+             v (compile parties te))
     |> String.concat "\n"
   in
   let generate_ifs eligible_edges vars props =
@@ -443,16 +485,15 @@ let translate_party_ltl env _ltl_i (pname, ltl) tprotocol action_graph
                 SSet.empty))
     |> String.concat "\n"
   in
-  template ~global_contents ~prop_fns ~states ~action_defs ~preconditions
-    ~postconditions ~initial_state ~prop_vars ~transitions ()
+  let extra_imports = if !uses_reflect then "\"reflect\"" else "" in
+  template ~extra_imports ~global_contents ~prop_fns ~states ~action_defs
+    ~preconditions ~postconditions ~initial_state ~prop_vars ~transitions ()
 
 let translate_party_ltl env _ltl_i (pname, ltl) tprotocol action_graph
-    action_nodes =
+    action_nodes parties =
   let code =
     translate_party_ltl env _ltl_i (pname, ltl) tprotocol action_graph
-      action_nodes
+      action_nodes parties
     |> invoke_gofmt
   in
-  let filename = Format.sprintf "monitor%s.go" pname in
-  IO.File.write_exn filename code;
-  print_endline filename
+  write_to_file ~filename:(Format.sprintf "monitor%s.go" pname) code
