@@ -311,3 +311,155 @@ The classic two-phase commit protocol.
   
   ===============================================================================
   
+
+  $ protocol monitor --parties C,P --project C 2pc.spec
+  monitorC.go
+
+  $ cat monitorC.go
+  package rv
+  
+  import (
+  	"errors"
+  	"reflect"
+  )
+  
+  type Global struct {
+  	Responded map[string]bool
+  	Aborted   map[string]bool
+  }
+  
+  func (m *Monitor) t0(g Global) bool {
+  	return (!reflect.DeepEqual(g.Aborted, map[string]bool{}) || reflect.DeepEqual(g.Responded, m.vars["P"]))
+  }
+  
+  type State int
+  
+  const (
+  	S_0_Y State = iota
+  	S_1_G
+  )
+  
+  type Action int
+  
+  const (
+  	CSendPrepare0 Action = iota
+  	CReceivePrepared1
+  	CReceiveAbort2
+  	CSendCommit3
+  	CReceiveCommitAck4
+  	CSendAbort5
+  	CReceiveAbortAck6
+  )
+  
+  func (m *Monitor) precondition(action Action) bool {
+  	switch action {
+  	case CSendPrepare0:
+  		return true
+  	case CReceivePrepared1:
+  		return m.pc == 0
+  	case CReceiveAbort2:
+  		return m.pc == 0
+  	case CSendCommit3:
+  		return m.pc == 2 || m.pc == 1
+  	case CReceiveCommitAck4:
+  		return m.pc == 3
+  	case CSendAbort5:
+  		return m.pc == 2 || m.pc == 1
+  	case CReceiveAbortAck6:
+  		return m.pc == 5
+  	default:
+  		panic("invalid action")
+  	}
+  }
+  
+  func (m *Monitor) applyPostcondition(action Action) {
+  	switch action {
+  	case CSendPrepare0:
+  		m.pc = 0
+  	case CReceivePrepared1:
+  		m.pc = 1
+  	case CReceiveAbort2:
+  		m.pc = 2
+  	case CSendCommit3:
+  		m.pc = 3
+  	case CReceiveCommitAck4:
+  		m.pc = 4
+  	case CSendAbort5:
+  		m.pc = 5
+  	case CReceiveAbortAck6:
+  		m.pc = 6
+  	default:
+  		panic("invalid action")
+  	}
+  }
+  
+  type Monitor struct {
+  	state    State
+  	previous Global
+  	done     bool
+  	dead     bool
+  	pc       int
+  	vars     map[string]interface{}
+  }
+  
+  func NewMonitor(vars map[string]interface{}) *Monitor {
+  	return &Monitor{
+  		state: S_0_Y,
+  		// previous is the empty Global
+  		done: false,
+  		dead: false,
+  		pc:   -1,
+  		vars: vars,
+  	}
+  }
+  
+  // For debugging
+  func (m *Monitor) InternalState() State {
+  	return m.state
+  }
+  
+  func (m *Monitor) Step(g Global, act Action) error {
+  	if m.done {
+  		return nil
+  	} else if m.dead {
+  		return errors.New("sink state")
+  	}
+  
+  	if !m.precondition(act) {
+  		return errors.New("precondition violation")
+  	}
+  
+  	m.previous = g
+  
+  	m.applyPostcondition(act)
+  
+  	// evaluate all the props
+  	t0 := m.t0(g)
+  
+  	// note the true ones, take that transition
+  	switch m.state {
+  	case S_0_Y:
+  		if t0 {
+  			m.state = S_1_G
+  			m.done = true
+  			return nil
+  		} else {
+  			m.state = S_0_Y
+  			return nil
+  		}
+  
+  	case S_1_G:
+  		if t0 {
+  			m.state = S_1_G
+  			m.done = true
+  			return nil
+  		} else {
+  			m.state = S_1_G
+  			m.done = true
+  			return nil
+  		}
+  
+  	default:
+  		panic("invalid state")
+  	}
+  }

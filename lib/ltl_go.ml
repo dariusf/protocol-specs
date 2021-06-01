@@ -339,6 +339,13 @@ let rec compile parties te =
   | Var (V (_, v)) -> Format.sprintf "g.%s" (state_var_name v)
   | Tuple (_, _) -> nyi "compile tuple"
 
+let check_monitorability env ltl node_colors =
+  if
+    SMap.bindings node_colors
+    |> List.for_all (fun (_, c) -> String.equal "yellow" c)
+  then
+    bad_input "%a is not monitorable" (Print.pp_texpr ~env) ltl
+
 let translate_party_ltl env ltl_i (pname, ltl) tprotocol action_graph
     action_nodes parties =
   (* TODO use ltl_i when having multiple properties falsified is supported *)
@@ -355,6 +362,7 @@ let translate_party_ltl env ltl_i (pname, ltl) tprotocol action_graph
                ~filename:(Format.sprintf "ltl-%s-%d.dot" pname ltl_i)
                output;
            let (node_colors, edges, graph) = output |> parse_graphviz_output in
+           check_monitorability env ltl node_colors;
            let initial_state =
              G.find_vertices
                (fun v ->
