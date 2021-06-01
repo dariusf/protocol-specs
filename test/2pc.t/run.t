@@ -94,13 +94,13 @@ The classic two-phase commit protocol.
 
   $ protocol print 2pc.spec --parties C,P --project P --actions
   digraph G {
-    0 [label="λ c:C.\nc->self*: prepare"];
-    1 [label="λ c:C.\n*self->c: prepared"];
-    2 [label="λ c:C.\n*self->c: abort"];
-    3 [label="λ c:C.\nc->self*: commit"];
-    4 [label="λ c:C.\n*self->c: commit_ack"];
-    5 [label="λ c:C.\nc->self*: abort"];
-    6 [label="λ c:C.\n*self->c: abort_ack"];
+    0 [label="PReceivePrepare0\nλ c:C.\nc->self*: prepare"];
+    1 [label="PSendPrepared1\nλ c:C.\n*self->c: prepared"];
+    2 [label="PSendAbort2\nλ c:C.\n*self->c: abort"];
+    3 [label="PReceiveCommit3\nλ c:C.\nc->self*: commit"];
+    4 [label="PSendCommitAck4\nλ c:C.\n*self->c: commit_ack"];
+    5 [label="PReceiveAbort5\nλ c:C.\nc->self*: abort"];
+    6 [label="PSendAbortAck6\nλ c:C.\n*self->c: abort_ack"];
     5 -> 6;
     3 -> 4;
     2 -> 5;
@@ -113,13 +113,13 @@ The classic two-phase commit protocol.
 
   $ protocol print 2pc.spec --parties C,P --project C --actions
   digraph G {
-    0 [label="λ p:P.\n*self->p: prepare"];
-    1 [label="λ p:P.\np->self*: prepared;\nresponded = union(responded, {p})"];
-    2 [label="λ p:P.\np->self*: abort;\naborted = union(aborted, {p})"];
-    3 [label="{aborted == {}}\nλ p:P.\n*self->p: commit"];
-    4 [label="{aborted == {}}\nλ p:P.\np->self*: commit_ack"];
-    5 [label="{aborted != {}}\nλ p:P.\n*self->p: abort"];
-    6 [label="{aborted != {}}\nλ p:P.\np->self*: abort_ack"];
+    0 [label="CSendPrepare0\nλ p:P.\n*self->p: prepare"];
+    1 [label="CReceivePrepared1\nλ p:P.\np->self*: prepared;\nresponded = union(responded, {p})"];
+    2 [label="CReceiveAbort2\nλ p:P.\np->self*: abort;\naborted = union(aborted, {p})"];
+    3 [label="CSendCommit3\n{aborted == {}}\nλ p:P.\n*self->p: commit"];
+    4 [label="CReceiveCommitAck4\n{aborted == {}}\nλ p:P.\np->self*: commit_ack"];
+    5 [label="CSendAbort5\n{aborted != {}}\nλ p:P.\n*self->p: abort"];
+    6 [label="CReceiveAbortAck6\n{aborted != {}}\nλ p:P.\np->self*: abort_ack"];
     5 -> 6;
     3 -> 4;
     2 -> 5;

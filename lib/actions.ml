@@ -179,8 +179,8 @@ let rec split_actions ~preconditions ~params (t : tprotocol) =
     in
     res
   | Assign (_, _) ->
-      (* this happens when an assignment is on its own, outside a seq. the simplest thing to do is treat it as a seq *)
-      split_actions ~preconditions ~params {t with p = Seq[t]}
+    (* this happens when an assignment is on its own, outside a seq. the simplest thing to do is treat it as a seq *)
+    split_actions ~preconditions ~params { t with p = Seq [t] }
   | SendOnly _ -> bug "find actions send"
   | ReceiveOnly _ -> bug "find actions receive"
   | Par ps ->
@@ -215,53 +215,6 @@ let maybe_nl = if compact then "" else "\n"
 
 let maybe_indent = if compact then "" else "  "
 
-let to_graphviz env g m =
-  let strip_whitespace s =
-    s
-    |> Str.global_replace (Str.regexp "  +") ""
-    |> String.replace ~which:`All ~sub:"\n" ~by:"\\n"
-  in
-  let nodes =
-    IMap.bindings m
-    |> List.map
-         (fun (id, { preconditions; params; constraints = _; protocol }) ->
-           let pre =
-             match preconditions with
-             | [] -> ""
-             | _ ->
-               Format.sprintf "{%a}\\n"
-                 (List.pp ~pp_sep:(pp_const ", ") (Print.pp_texpr_untyped ~env))
-                 preconditions
-           in
-           let params =
-             match params with
-             | [] -> ""
-             | _ ->
-               Format.sprintf "λ %a.\\n"
-                 (List.pp ~pp_sep:(pp_const ", ")
-                    (Pair.pp ~pp_sep:(pp_const ":") Format.pp_print_string
-                       Format.pp_print_string))
-                 params
-           in
-           Format.sprintf "%d [label=\"%s%s%a\"];" id pre params
-             (Print.pp_tprotocol_untyped ~env)
-             protocol
-           |> strip_whitespace |> ( ^ ) maybe_indent)
-  in
-  let edges =
-    all_edges g
-    |> List.map (fun (a, b) -> Format.sprintf "%s%d -> %d;" maybe_indent a b)
-  in
-  Format.sprintf "digraph G {%s%s\n%s%s}" maybe_nl
-    (nodes |> String.concat maybe_nl)
-    (edges |> String.concat maybe_nl)
-    maybe_nl
-
-let split_into_actions : tprotocol -> G.t * node IMap.t =
- fun t ->
-  let (g, m) = split_actions ~preconditions:[] ~params:[] t in
-  (g, m)
-
 let snake_to_camel s =
   s |> String.lowercase_ascii |> String.capitalize_ascii
   |> Str.global_substitute (Str.regexp {|_\([a-z]\)|}) (fun s ->
@@ -283,6 +236,54 @@ let node_name party (id, node) =
     | _ -> "Action"
   in
   Format.sprintf "%s%s%d" party prefix id
+
+let to_graphviz env pname g m =
+  let strip_whitespace s =
+    s
+    |> Str.global_replace (Str.regexp "  +") ""
+    |> String.replace ~which:`All ~sub:"\n" ~by:"\\n"
+  in
+  let nodes =
+    IMap.bindings m
+    |> List.map (fun (id, node) ->
+           let { preconditions; params; constraints = _; protocol } = node in
+           let name = node_name pname (id, node) in
+           let pre =
+             match preconditions with
+             | [] -> ""
+             | _ ->
+               Format.sprintf "{%a}\\n"
+                 (List.pp ~pp_sep:(pp_const ", ") (Print.pp_texpr_untyped ~env))
+                 preconditions
+           in
+           let params =
+             match params with
+             | [] -> ""
+             | _ ->
+               Format.sprintf "λ %a.\\n"
+                 (List.pp ~pp_sep:(pp_const ", ")
+                    (Pair.pp ~pp_sep:(pp_const ":") Format.pp_print_string
+                       Format.pp_print_string))
+                 params
+           in
+           Format.sprintf "%d [label=\"%s\\n%s%s%a\"];" id name pre params
+             (Print.pp_tprotocol_untyped ~env)
+             protocol
+           |> strip_whitespace |> ( ^ ) maybe_indent)
+  in
+  let edges =
+    all_edges g
+    |> List.map (fun (a, b) -> Format.sprintf "%s%d -> %d;" maybe_indent a b)
+  in
+  Format.sprintf "digraph G {%s%s\n%s%s}" maybe_nl
+    (nodes |> String.concat maybe_nl)
+    (edges |> String.concat maybe_nl)
+    maybe_nl
+
+let split_into_actions : tprotocol -> G.t * node IMap.t =
+ fun t ->
+  let (g, m) = split_actions ~preconditions:[] ~params:[] t in
+  (g, m)
 
 let assigned_variables (t : tprotocol) =
   let rec aux t =

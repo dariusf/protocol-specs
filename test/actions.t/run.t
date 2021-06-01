@@ -12,8 +12,8 @@ Actions
   >     c.m = 1
   > EOF
   digraph G {
-    0 [label="λ c:C.\nc->self*: m"];
-    1 [label="λ c:C.\n*self->c: n"];
+    0 [label="PReceiveM0\nλ c:C.\nc->self*: m"];
+    1 [label="PSendN1\nλ c:C.\n*self->c: n"];
     0 -> 1;
   }
 
@@ -43,8 +43,8 @@ Actions
   >     c.x = 4
   > EOF
   digraph G {
-    0 [label="c.a = 1;\nc.x = 2"];
-    1 [label="c.a = 3;\nc.x = 4"];
+    0 [label="CChangeA0\nc.a = 1;\nc.x = 2"];
+    1 [label="CChangeA1\nc.a = 3;\nc.x = 4"];
     0 -> 1;
   }
 
@@ -83,13 +83,13 @@ Actions
   VARIABLE pc
   
   
-  CONSTANT P
-  
   CONSTANT C
   
-  Pvars == <<>>
+  CONSTANT P
   
   Cvars == <<a, x>>
+  
+  Pvars == <<>>
   
   vars == <<a, x, messages>>
   

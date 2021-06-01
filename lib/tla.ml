@@ -355,8 +355,7 @@ let rec default_value_of_type env t =
   | TyBool -> Term "FALSE"
   | TyFn (_, _) -> nyi "default party fn"
 
-let single_party_to_tla all_vars env graph nodes party protocol =
-  let (V (_, pname)) = party.repr in
+let single_party_to_tla all_vars env graph nodes pname protocol =
   let vars = Actions.assigned_variables protocol in
   let variables =
     match vars with
@@ -410,41 +409,35 @@ let single_party_to_tla all_vars env graph nodes party protocol =
   in
   (variables, init, next, actions, vars_def)
 
-let to_tla parties env actions =
+let to_tla env actions =
   let all_vars =
-    (actions
-    |> List.map (fun (_g, _n, p) -> p)
+    (actions |> SMap.bindings
+    |> List.map (fun (_, (_g, _n, p)) -> p)
     |> List.concat_map assigned_variables
     |> List.map fst)
     @ ["messages"]
     (* pc is always changed so it isn't here *)
   in
   let joint =
-    List.mapi
-      (fun i (graph, nodes, a) ->
-        single_party_to_tla all_vars env graph nodes (List.nth parties i) a)
-      actions
+    actions |> SMap.bindings
+    |> List.map (fun (p, (graph, nodes, a)) ->
+           single_party_to_tla all_vars env graph nodes p a)
   in
   let variables = List.map (fun (a, _, _, _, _) -> a) joint in
   let inits = List.map (fun (_, a, _, _, _) -> a) joint in
   let nexts = List.map (fun (_, _, a, _, _) -> a) joint in
-  let actions = List.map (fun (_, _, _, a, _) -> a) joint in
+  let actions1 = List.map (fun (_, _, _, a, _) -> a) joint in
   let var_defs = List.map (fun (_, _, _, _, a) -> a) joint in
   let all_vars_def =
     Def ("vars", [], List (List.map (fun v -> Term v) all_vars))
   in
-  let parties =
-    List.map
-      (fun p ->
-        let (V (_, name)) = p.repr in
-        name)
-      parties
+  let party_constants =
+    actions |> SMap.bindings |> List.map fst |> List.map (fun n -> Constant n)
   in
-  let party_constants = List.map (fun n -> Constant n) parties in
   let init = Def ("Init", [], Conj (List.concat inits)) in
   let next = Def ("Next", [], Disj (List.concat nexts)) in
   List.concat
     [
       party_constants; var_defs; [all_vars_def]; List.concat variables; [init];
-      List.concat actions; [next];
+      List.concat actions1; [next];
     ]
