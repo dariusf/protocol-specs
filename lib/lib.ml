@@ -82,7 +82,8 @@ let tla project_party parties file =
     in
 
     let tla = Tla.to_tla parties env actions |> Tla.Render.render_tla in
-    Tla.with_preamble spec_name tla |> print_endline
+    let tla_s = Tla.with_preamble spec_name tla in
+    write_to_file ~filename:(Format.sprintf "%s.tla" spec_name) tla_s
 
 let tla project_party parties file =
   try tla project_party parties file

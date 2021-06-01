@@ -131,6 +131,9 @@ The classic two-phase commit protocol.
   }
 
   $ protocol tla 2pc.spec --parties C,P --project C
+  2pc.tla
+
+  $ cat 2pc.tla
   
   --------------------------------- MODULE 2pc ---------------------------------
   
@@ -310,7 +313,6 @@ The classic two-phase commit protocol.
   Spec == Init /\ [][Next]_vars
   
   ===============================================================================
-  
 
   $ protocol monitor --parties C,P --project C 2pc.spec
   monitorC.go
