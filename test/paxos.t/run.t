@@ -76,8 +76,8 @@ Single-decree Paxos
   p.promise_responses = {};
   (p.proposal = p.proposal + 1;
    (forall a in A
-      *self->a: prepare(p2i(p) * 100 + p.proposal);
-      a->self*: promise(cp, cv);
+      ->a: prepare(n=p2i(p) * 100 + p.proposal);
+      a->: promise(cp, cv);
       p.promise_responses = union(p.promise_responses, {a});
       (cp > 0 & cp > p.cp =>
          p.cp = cp;
@@ -85,31 +85,31 @@ Single-decree Paxos
    ||
    size(p.promise_responses) > p.majority =>*
      (forall a1 in p.promise_responses
-        *self->a1: propose(p.proposal, p.value);
-        a1->self*: accept))
+        ->a1: propose(pn=p.proposal, pv=p.value);
+        a1->: accept))
 
   $ protocol print paxos.spec --parties P,A,L --project A
   a.highest_proposal = 0;
   a.accepted_proposal = 0;
   a.accepted_value = 0;
   (forall p in P
-     (p->self*: prepare(n);
+     (p->: prepare(n);
       (n > a.highest_proposal =>
          a.highest_proposal = n;
-         *self->p: promise(a.accepted_proposal, a.accepted_value))
+         ->p: promise(cp=a.accepted_proposal, cv=a.accepted_value))
       ||
-      p->self*: propose(pn, pv);
+      p->: propose(pn, pv);
       a2 = a1;
       (pn == a1.highest_proposal =>
          a1.accepted_proposal = pn;
          a1.accepted_value = pv;
-         *self->p: accept;
+         ->p: accept;
          (forall l in L
-            *self->l: accept))))
+            ->l: accept))))
 
   $ protocol print paxos.spec --parties P,A,L --project L
   (forall p in P
      (forall a1 in p.promise_responses
-        a2->self*: accept))
+        a2->: accept))
 
   $ protocol print paxos.spec > paxos1.spec && protocol print paxos1.spec | protocol print > paxos2.spec && git diff --no-index paxos1.spec paxos2.spec

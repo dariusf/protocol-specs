@@ -56,6 +56,16 @@ let rec transpose xss =
   | (_ :: _) :: _ -> List.map List.hd xss :: transpose (List.map List.tl xss)
   | _ -> []
 
+let foldl1 f xs =
+  match xs with
+  | [] -> failwith "foldl1: empty"
+  | x :: rest -> List.fold_left f x rest
+
+let foldr1 f xs =
+  match xs with
+  | [] -> failwith "foldr1: empty"
+  | x :: rest -> List.fold_right f rest x
+
 module UF = UF.Int
 
 module Printing = struct

@@ -199,6 +199,28 @@ let render_protocol_ : ('e -> document) -> ('a, 'e, 'v) _protocol -> document =
                       concat [render_expr v; equals; render_expr e])
                     args)));
         ]
+    | SendOnly { to_; msg = Message { typ; args }; _ } ->
+      concat
+        [
+          arrow; render_expr to_; colon; space; string typ;
+          (match args with
+          | [] -> empty
+          | _ ->
+            parens
+              (separate (spaced comma)
+                 (List.map
+                    (fun (v, e) ->
+                      concat [render_expr v; equals; render_expr e])
+                    args)));
+        ]
+    | ReceiveOnly { from; msg = MessageD { typ; args }; _ } ->
+      concat
+        [
+          render_expr from; arrow; colon; space; string typ;
+          (match args with
+          | [] -> empty
+          | _ -> parens (separate (spaced comma) (List.map render_expr args)));
+        ]
     | Assign (v, e) -> separate space [render_expr v; equals; render_expr e]
     | Imply (b, p) ->
       parens_multiline_if ~pctx ~n
@@ -232,27 +254,6 @@ let render_protocol_ : ('e -> document) -> ('a, 'e, 'v) _protocol -> document =
                 exists; space; render_expr v; space; in_; render_expr s; nl;
                 render_protocol ~pctx:{ pctx with prec = n } p;
               ])
-    | SendOnly { from; to_; msg = Message { typ; args } } ->
-      concat
-        [
-          star; render_expr from; arrow; render_expr to_; colon; space;
-          string typ;
-          (match args with
-          | [] -> empty
-          | _ ->
-            parens
-              (separate (spaced comma)
-                 (List.map render_expr (args |> List.map snd))));
-        ]
-    | ReceiveOnly { from; to_; msg = MessageD { typ; args } } ->
-      concat
-        [
-          render_expr from; arrow; render_expr to_; star; colon; space;
-          string typ;
-          (match args with
-          | [] -> empty
-          | _ -> parens (separate (spaced comma) (List.map render_expr args)));
-        ]
     | Comment (_, _, _) -> failwith "comment"
   in
   render_protocol p

@@ -242,11 +242,6 @@ and split_actions :
     (* the fence cond is what the SUCCESSOR of a node has to wait for *)
     let nodes = ps1 in
 
-    let foldl1 f xs =
-      match xs with
-      | [] -> failwith "foldl1: empty"
-      | x :: rest -> List.fold_left f x rest
-    in
     let res =
       foldl1
         (fun (gt, mt, ft) (gc, mc, fc) ->

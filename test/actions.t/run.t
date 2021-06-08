@@ -12,8 +12,8 @@ Actions
   >     c.m = 1
   > EOF
   digraph G {
-    0 [label="PReceiveM0\ntid: Pt0(c:C)\n{start}\nλ [(c:C)].\nc->self*: m"];
-    1 [label="PSendN1\ntid: Pt0(c:C)\n{Pt0(c:C) = 0}\nλ [(c:C)].\n*self->c: n"];
+    0 [label="PReceiveM0\ntid: Pt0(c:C)\n{start}\nλ [(c:C)].\nc->: m"];
+    1 [label="PSendN1\ntid: Pt0(c:C)\n{Pt0(c:C) = 0}\nλ [(c:C)].\n->c: n"];
     0 -> 1;
   }
 
