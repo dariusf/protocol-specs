@@ -47,19 +47,9 @@ let rec project_aux : party_info list -> env -> tprotocol -> tprotocol list =
                   also doesn't seem to serve any purpose *)
                fail ~loc:pr.pmeta.loc "self-send not allowed"
              else if is_party parties env party from then
-               SendOnly
-                 {
-                   from = { from with expr = Var (V (None, "self")) };
-                   to_;
-                   msg;
-                 }
+               SendOnly { to_; msg }
              else if is_party parties env party to_ then
-               ReceiveOnly
-                 {
-                   from;
-                   to_ = { to_ with expr = Var (V (None, "self")) };
-                   msg = msg_destruct msg;
-                 }
+               ReceiveOnly { from; msg = msg_destruct msg }
              else
                Emp)
     | Imply (c, body) ->

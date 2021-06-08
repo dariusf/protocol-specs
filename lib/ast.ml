@@ -149,13 +149,11 @@ and ('a, 'e, 'v) _protocol' =
   | Exists of 'v * 'e * ('a, 'e, 'v) _protocol
   (* extras *)
   | SendOnly of {
-      from : 'v;
       to_ : 'v;
       msg : ('e, 'v) msg;
     }
   | ReceiveOnly of {
       from : 'v;
-      to_ : 'v;
       msg : 'v msg_destruct;
     }
   (* cst *)

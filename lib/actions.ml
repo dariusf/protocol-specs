@@ -121,10 +121,10 @@ let rec used_names (t : tprotocol) =
   | Assign (v, e) -> used_names_expr v @ used_names_expr e
   | Imply (c, b) | BlockingImply (c, b) -> used_names_expr c @ used_names b
   | Forall (v, s, b) -> used_names_expr v @ used_names_expr s @ used_names b
-  | SendOnly { from; to_; msg = Message { args; _ } } ->
-    List.concat_map used_names_expr ([from; to_] @ List.map snd args)
-  | ReceiveOnly { from; to_; msg = MessageD { args; _ } } ->
-    List.concat_map used_names_expr ([from; to_] @ args)
+  | SendOnly { to_; msg = Message { args; _ } } ->
+    List.concat_map used_names_expr ([to_] @ List.map snd args)
+  | ReceiveOnly { from; msg = MessageD { args; _ } } ->
+    List.concat_map used_names_expr ([from] @ args)
   | Exists (_, _, _) -> nyi "used names exists"
   | Send _ -> bug "used names send"
   | Comment (_, _, _) -> bug "used names comment"
