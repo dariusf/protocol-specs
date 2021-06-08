@@ -1,5 +1,4 @@
 open Ast
-open Containers
 open Common
 open Normalize
 
@@ -29,18 +28,16 @@ let rec project_aux : party_info list -> env -> tprotocol -> tprotocol list =
   let p2 =
     match pr.p with
     | Emp -> parties |> List.map (fun _ -> Emp)
-    | Assign (v, _e) ->
+    | Assign (v, e) ->
       parties
       |> List.map (fun party ->
-             if owned_by parties party v then
-               pr.p
-             (* Assign
-                ( { v with expr = Var (V (None, var_name (must_be_var_t v))) },
-                  e ) *)
+             if owned_by parties party v then (* drop the party qualifiers *)
+               Assign
+                 ( { v with expr = Var (V (None, var_name (must_be_var_t v))) },
+                   e )
              else
                Emp)
     | Send { from; to_; msg } ->
-      (* drop the party qualifiers *)
       parties
       |> List.map (fun party ->
              if is_party parties env party from then

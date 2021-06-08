@@ -44,7 +44,7 @@ The chain disappears entirely from C.
   $ protocol print --parties P,C,D --project C basic.spec
   forall p in P
     ->p: m;
-    c.a = 1
+    a = 1
 
   $ protocol print --parties P,C,D --project P basic.spec
   forall c in C
@@ -76,7 +76,7 @@ A chain of messages that goes through C but does not end at it.
     (forall d in D
        d->: m3(p);
        ->p: m4(d=d));
-    c.a = 1
+    a = 1
 
   $ protocol print --parties P,C,D --project P three.spec
   forall c in C
@@ -109,7 +109,7 @@ A chain of messages that ends at C.
     ->p: m;
     (forall d in D
        d->: msg);
-    c.a = 1
+    a = 1
 
   $ protocol print --parties P,C,D --project P ex1.spec
   forall c in C

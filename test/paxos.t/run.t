@@ -69,19 +69,19 @@ Single-decree Paxos
                  (a2 : party A;A)->(l : party L;global): accept)))))
 
   $ protocol print paxos.spec --parties P,A,L --project P
-  p.proposal = 0;
-  p.value = 1;
-  p.cp = {0, 0};
-  p.majority = size(A) / 2 + 1;
-  p.promise_responses = {};
-  (p.proposal = p.proposal + 1;
+  proposal = 0;
+  value = 1;
+  cp = {0, 0};
+  majority = size(A) / 2 + 1;
+  promise_responses = {};
+  (proposal = p.proposal + 1;
    (forall a in A
       ->a: prepare(n=p2i(p) * 100 + p.proposal);
       a->: promise(cp, cv);
-      p.promise_responses = union(p.promise_responses, {a});
+      promise_responses = union(p.promise_responses, {a});
       (cp > 0 & cp > p.cp =>
-         p.cp = cp;
-         p.value = cv))
+         cp = cp;
+         value = cv))
    ||
    size(p.promise_responses) > p.majority =>*
      (forall a1 in p.promise_responses
@@ -89,20 +89,20 @@ Single-decree Paxos
         a1->: accept))
 
   $ protocol print paxos.spec --parties P,A,L --project A
-  a.highest_proposal = 0;
-  a.accepted_proposal = 0;
-  a.accepted_value = 0;
+  highest_proposal = 0;
+  accepted_proposal = 0;
+  accepted_value = 0;
   (forall p in P
      (p->: prepare(n);
       (n > a.highest_proposal =>
-         a.highest_proposal = n;
+         highest_proposal = n;
          ->p: promise(cp=a.accepted_proposal, cv=a.accepted_value))
       ||
       p->: propose(pn, pv);
       a2 = a1;
       (pn == a1.highest_proposal =>
-         a1.accepted_proposal = pn;
-         a1.accepted_value = pv;
+         accepted_proposal = pn;
+         accepted_value = pv;
          ->p: accept;
          (forall l in L
             ->l: accept))))

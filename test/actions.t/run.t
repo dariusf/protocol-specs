@@ -43,8 +43,8 @@ Actions
   >     c.x = 4
   > EOF
   digraph G {
-    0 [label="CChangeA0\ntid: Ct0(p:P)\n{start}\nc.a = 1;\nc.x = 2"];
-    1 [label="CChangeA1\ntid: Ct1(p:P)\n{∀ p:P. Ct0(p:P) = 0}\nc.a = 3;\nc.x = 4"];
+    0 [label="CChangeA0\ntid: Ct0(p:P)\n{start}\na = 1;\nx = 2"];
+    1 [label="CChangeA1\ntid: Ct1(p:P)\n{∀ p:P. Ct0(p:P) = 0}\na = 3;\nx = 4"];
     0 -> 1;
   }
 
