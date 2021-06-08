@@ -362,13 +362,15 @@ and infer_parties_expr : expr -> env -> texpr * env =
     (* infer_all [a; b] env *)
     nyi "infer_parties_expr tuple"
 
-let%trace rec infer_parties : protocol -> env -> tprotocol * env =
- fun p env ->
+let%trace rec infer_parties : ?in_seq:bool -> protocol -> env -> tprotocol * env
+    =
+ fun ?(in_seq = false) p env ->
   if debug then (
     dump_env env;
     Format.printf "infer %a@." pp_protocol p);
+  let p1 = { p = Emp; pmeta = pmeta ~loc:p.pmeta () } in
   match p.p with
-  | Emp -> ({ p with p = Emp }, env)
+  | Emp -> ({ p1 with p = Emp }, env)
   | Send { from; to_; msg = Message { args; typ = mtype } } ->
     let (fm, tm) = (from.meta, to_.meta) in
     let (V (fp, from)) = must_be_var from in
@@ -386,6 +388,7 @@ let%trace rec infer_parties : protocol -> env -> tprotocol * env =
           (Print.pp_typ ~env) f_vi.typ
       | Error (`Does_not_unify _)
       | Error (`Parties_instantiated_but_different _) ->
+        (* dump_env env; *)
         fail ~loc:p.pmeta
           "sender %s does not know of itself (of %a but known only to %a)" from
           (Print.pp_typ ~env) f_vi.typ (Print.pp_ownership ~env) f_vi.own
@@ -429,8 +432,13 @@ let%trace rec infer_parties : protocol -> env -> tprotocol * env =
               fail ~loc:p.pmeta "recipient does not know of variables"
           in
           let (V (pv, v)) = must_be_var k in
-          let local_bindings = SMap.add v vi env.local_bindings in
-          let env = { env with local_bindings } in
+          let env =
+            if in_seq then
+              let local_bindings = SMap.add v vi env.local_bindings in
+              { env with local_bindings }
+            else
+              env
+          in
           let k1 =
             { expr = Var (V (pv, v)); meta = { loc = k.meta; info = vi } }
           in
@@ -448,23 +456,29 @@ let%trace rec infer_parties : protocol -> env -> tprotocol * env =
     in
     (* but only locally *)
     let env =
-      {
-        env with
-        local_bindings =
-          SMap.add from { f_vi with own = recipient } env.local_bindings;
-      }
+      if in_seq then
+        {
+          env with
+          local_bindings =
+            SMap.add from { f_vi with own = recipient } env.local_bindings;
+        }
+      else
+        env
     in
     (* receiver is also owned by receiver *)
     let env =
-      {
-        env with
-        local_bindings =
-          SMap.add to_ { t_vi with own = recipient } env.local_bindings;
-      }
+      if in_seq then
+        {
+          env with
+          local_bindings =
+            SMap.add to_ { t_vi with own = recipient } env.local_bindings;
+        }
+      else
+        env
     in
 
     ( {
-        p with
+        p1 with
         p =
           Send
             {
@@ -517,7 +531,7 @@ let%trace rec infer_parties : protocol -> env -> tprotocol * env =
       in
 
       ( {
-          p with
+          p1 with
           p =
             Assign
               ( {
@@ -537,7 +551,7 @@ let%trace rec infer_parties : protocol -> env -> tprotocol * env =
     | Error (`Parties_instantiated_but_different s) ->
       fail ~loc:tc.meta.loc "%s" s);
 
-    ({ p with p = Imply (tc, tp) }, env)
+    ({ p1 with p = Imply (tc, tp) }, env)
   | BlockingImply (c, p) ->
     let (tc, env) = infer_parties_expr c env in
     let (tp, env) = infer_parties p env in
@@ -547,14 +561,14 @@ let%trace rec infer_parties : protocol -> env -> tprotocol * env =
     | Error (`Parties_instantiated_but_different s) ->
       fail ~loc:tc.meta.loc "%s" s);
 
-    ({ p with p = BlockingImply (tc, tp) }, env)
+    ({ p1 with p = BlockingImply (tc, tp) }, env)
   | Seq s ->
     (* List.fold_right infer_parties s env *)
     let local_bindings = env.local_bindings in
     let (ts, env) =
       List.fold_left
         (fun (ts, env) c ->
-          let (te, env) = infer_parties c env in
+          let (te, env) = infer_parties ~in_seq:true c env in
           (te :: ts, env))
         ([], env) s
     in
@@ -563,7 +577,7 @@ let%trace rec infer_parties : protocol -> env -> tprotocol * env =
     (* restore *)
     let env = { env with local_bindings } in
 
-    ({ p with p = Seq ts }, env)
+    ({ p1 with p = Seq ts }, env)
   | Par ps ->
     let (ts, env) =
       List.fold_left
@@ -573,12 +587,12 @@ let%trace rec infer_parties : protocol -> env -> tprotocol * env =
         ([], env) ps
     in
     let ts = List.rev ts in
-    ({ p with p = Par ts }, env)
+    ({ p1 with p = Par ts }, env)
   | Disj (a, b) ->
     let (ta, env) = infer_parties a env in
     let (tb, env) = infer_parties b env in
-    ({ p with p = Disj (ta, tb) }, env)
-  | Forall (e, s, p1) ->
+    ({ p1 with p = Disj (ta, tb) }, env)
+  | Forall (e, s, pb) ->
     let (em, sm) = (e.meta, s.meta) in
     let (V (pe, e)) = must_be_var e in
     let (V (ps, s)) = must_be_var s in
@@ -605,7 +619,7 @@ let%trace rec infer_parties : protocol -> env -> tprotocol * env =
       { env with bindings = SMap.add e { typ = party; own } env.bindings }
     in
 
-    let (tp1, env) = infer_parties p1 env in
+    let (tp1, env) = infer_parties pb env in
 
     (* unbind the bound variable *)
     let env = { env with bindings = SMap.remove e env.bindings } in
@@ -624,7 +638,7 @@ let%trace rec infer_parties : protocol -> env -> tprotocol * env =
       }
     in
 
-    ({ p with p = Forall (e, s, tp1) }, env)
+    ({ p1 with p = Forall (e, s, tp1) }, env)
   | Exists (_, _, _) -> nyi "infer_parties exists"
   | Comment (_, _, _) -> bug "infer_parties doesn't expect comments"
   | SendOnly _ -> bug "infer_parties doesn't expect send only"
@@ -701,6 +715,7 @@ let initial_env parties =
           ("<=", Forall ([], TyFn ([TyInt; TyInt], TyBool)));
           (">", Forall ([], TyFn ([TyInt; TyInt], TyBool)));
           (">=", Forall ([], TyFn ([TyInt; TyInt], TyBool)));
+          ("!", Forall ([], TyFn ([TyBool], TyBool)));
           ("|", Forall ([], TyFn ([TyBool; TyBool], TyBool)));
           ("&", Forall ([], TyFn ([TyBool; TyBool], TyBool)));
           ( "size",

@@ -29,14 +29,10 @@ let typecheck parties protocol =
   Infer.check_instantiated env tp;
   (env, tp)
 
-let project project_party parties env tprotocol =
+let project parties env tprotocol =
   let projected = Project.project parties env tprotocol in
-  let map =
-    List.map2 (fun party pr -> (party.repr |> var_name, pr)) parties projected
-    |> SMap.of_list
-  in
-  let one = SMap.find project_party map in
-  (one, map)
+  List.map2 (fun party pr -> (party.repr |> var_name, pr)) parties projected
+  |> SMap.of_list
 
 let print project_party parties ast types actions file =
   let spec = parse file in
@@ -56,13 +52,14 @@ let print project_party parties ast types actions file =
       | None -> tprotocol
       | _ ->
         let project_party = require_project_party project_party in
-        project project_party parties env tprotocol |> fst
+        let all = project parties env tprotocol in
+        SMap.find project_party all
     in
     if ast then
       tprotocol |> show_tprotocol |> print_endline
     else if actions then
       let project_party = require_project_party project_party in
-      let (g, nodes) = Actions.split_into_actions tprotocol in
+      let (g, nodes) = Actions.split_into_actions project_party env tprotocol in
       print_endline (Actions.to_graphviz env project_party g nodes)
     else
       tprotocol
@@ -76,44 +73,45 @@ let print project_party parties ast types actions file =
   try print project_party parties ast types actions file
   with Check_failure s -> Format.printf "%s@." s
 
-let tla project_party parties file =
+let tla parties file =
   let spec_name = file |> Filename.remove_extension |> Filename.basename in
-  let project_party = require_project_party project_party in
   let parties = require_parties parties in
   let spec = parse file in
   let protocol = spec.protocol in
   let (env, tprotocol) = typecheck parties protocol in
-  let (_, all) = project project_party parties env tprotocol in
+  let all = project parties env tprotocol in
 
   let actions =
     all
-    |> SMap.mapi (fun _ p ->
-           let (graph, nodes) = Actions.split_into_actions p in
+    |> SMap.mapi (fun party p ->
+           let (graph, nodes) = Actions.split_into_actions party env p in
            (graph, nodes, p))
   in
 
-  let tla = Tla.to_tla env actions |> Tla.Render.render_tla in
+  let (tla, cfg) = Tla.to_tla env actions in
+  let tla = Tla.Render.render_tla tla in
   let tla_s = Tla.with_preamble spec_name tla in
-  write_to_file ~filename:(Format.sprintf "%s.tla" spec_name) tla_s
+  write_to_file ~filename:(Format.sprintf "%s.tla" spec_name) tla_s;
+  let cfg_filename = Format.sprintf "%s.cfg" spec_name in
+  if not (Sys.file_exists cfg_filename) then
+    write_to_file ~filename:cfg_filename cfg
 
-let tla project_party parties file =
-  try tla project_party parties file
-  with Check_failure s -> Format.printf "%s@." s
+let tla parties file =
+  try tla parties file with Check_failure s -> Format.printf "%s@." s
 
-let monitor project_party parties file =
+let monitor parties file =
   (* TODO is this needed? *)
   let _spec_name = Filename.remove_extension file in
   let spec = parse file in
   let protocol = spec.protocol in
 
-  let project_party = require_project_party project_party in
   let parties = require_parties parties in
 
   (* infer type for protocol *)
   let (env, tprotocol) = typecheck parties protocol in
 
   (* project *)
-  let (_, all) = project project_party parties env tprotocol in
+  let all = project parties env tprotocol in
 
   (* infer ltl types *)
   (* this should work because variable bindings stay in the environment after type checking is done, unlike quantified variables and local bindings, but those are never used in properties *)
@@ -150,11 +148,12 @@ let monitor project_party parties file =
   List.iteri
     (fun i (pname, ltl) ->
       let pr = SMap.find pname all in
-      let (action_graph, action_nodes) = Actions.split_into_actions pr in
+      let (action_graph, action_nodes) =
+        Actions.split_into_actions pname env pr
+      in
       Ltl_go.translate_party_ltl env i (pname, ltl) pr action_graph action_nodes
         (List.map (fun p -> p.repr |> var_name) parties))
     ltl_fml
 
-let monitor project_party parties file =
-  try monitor project_party parties file
-  with Check_failure s -> Format.printf "%s@." s
+let monitor parties file =
+  try monitor parties file with Check_failure s -> Format.printf "%s@." s

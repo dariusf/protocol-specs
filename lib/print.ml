@@ -264,9 +264,65 @@ let render_tprotocol ~env p = render_protocol_ (render_texpr ~env) p
 let render_tprotocol_untyped ~env p =
   render_protocol_ (render_texpr_as_expr ~env) p
 
-let pretty fmt d = PPrint.ToFormatter.pretty 0.8 120 fmt d
+module PP = struct
+  open PPrintEngine
 
-let one_line fmt pp t = Format.fprintf fmt "@[<h>%a@]" pp t
+  let initial rfrac width =
+    {
+      width;
+      ribbon = max 0 (min width (truncate (float_of_int width *. rfrac)));
+      last_indent = 0;
+      line = 0;
+      column = 0;
+    }
+
+  module MakeRenderer (X : sig
+    type channel
+
+    val output : channel -> output
+  end) =
+  struct
+    type channel = X.channel
+
+    type dummy = document
+
+    type document = dummy
+
+    let pretty rfrac width channel doc =
+      pretty (X.output channel) (initial rfrac width) 0 false doc
+
+    let compact channel doc = compact (X.output channel) doc
+  end
+
+  class formatter_output fmt =
+    object
+      method char c =
+        (* Don't replace spaces with Format's break hints *)
+        Format.pp_print_char fmt c
+
+      method substring str ofs len =
+        Format.pp_print_text fmt
+          (if ofs = 0 && len = String.length str then
+             str
+          else
+            String.sub str ofs len)
+    end
+
+  module ToFormatter = MakeRenderer (struct
+    type channel = Format.formatter
+
+    let output = new formatter_output
+  end)
+end
+
+(* let pretty fmt d = PPrint.ToFormatter.pretty 0.8 120 fmt d *)
+let pretty fmt d = PP.ToFormatter.pretty 0.8 120 fmt d
+
+(* let one_line fmt pp t = Format.fprintf fmt "box(@[<h>(%a)@])" pp t *)
+
+(* inexplicably, a newline sometimes appears due to the opening of the box *)
+
+let one_line fmt pp t = Format.fprintf fmt "%a" pp t
 
 let pp_tprotocol_untyped ~env fmt t =
   let pp fmt t = render_tprotocol_untyped ~env t |> pretty fmt in
@@ -291,3 +347,12 @@ let pp_typ ~env fmt t =
 let pp_ownership ~env fmt t =
   let pp fmt t = render_own ~env t |> pretty fmt in
   one_line fmt pp t
+
+let pp_tid fmt t =
+  Format.fprintf fmt "%s%s" t.name
+    (match t.params with
+    | [] -> ""
+    | ts ->
+      Format.sprintf "(%s)"
+        (String.concat ", "
+           (List.map (fun (t, s) -> Format.sprintf "%s:%s" t s) ts)))

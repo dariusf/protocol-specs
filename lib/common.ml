@@ -81,3 +81,60 @@ let is_alpha = function 'a' .. 'z' | 'A' .. 'Z' -> true | _ -> false
 let write_to_file ~filename content =
   IO.File.write_exn filename content;
   print_endline filename
+
+let pp_const s fmt () = Format.fprintf fmt "%s" s
+
+module List = struct
+  include List
+
+  let pp ?(start = "[") ?(stop = "]") ?(sep = "; ") e fmt l =
+    pp ~pp_start:(pp_const start) ~pp_stop:(pp_const stop)
+      ~pp_sep:(pp_const sep) e fmt l
+end
+
+module Pair = struct
+  include Pair
+
+  let pp ?(start = "(") ?(stop = ")") ?(sep = ", ") a b fmt l =
+    pp ~pp_start:(pp_const start) ~pp_stop:(pp_const stop)
+      ~pp_sep:(pp_const sep) a b fmt l
+end
+
+module String = struct
+  include String
+
+  let pp = Format.pp_print_string
+end
+
+module SMap = struct
+  module M = Map.Make (String)
+  include M
+
+  let pp e fmt map =
+    Format.fprintf fmt "%a"
+      (M.pp ~pp_sep:(pp_const ";") ~pp_start:(pp_const "{")
+         ~pp_stop:(pp_const "}") String.pp e)
+      map
+end
+
+module IMap = struct
+  module M = Map.Make (Int)
+  include M
+
+  let pp e fmt map =
+    Format.fprintf fmt "%a"
+      (M.pp ~pp_sep:(pp_const ";") ~pp_start:(pp_const "{")
+         ~pp_stop:(pp_const "}") Int.pp e)
+      map
+end
+
+module SSet = struct
+  module M = Set.Make (String)
+  include M
+
+  let pp fmt map =
+    Format.fprintf fmt "%a"
+      (M.pp ~pp_sep:(pp_const ", ") ~pp_start:(pp_const "{")
+         ~pp_stop:(pp_const "}") Format.pp_print_string)
+      map
+end

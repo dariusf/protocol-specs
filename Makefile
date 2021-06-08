@@ -34,7 +34,8 @@ clean:
 	rm -rf *.png *.tla
 
 dev:
-	dune test -w
+	# dune test -w
+	git ls | grep ml$ | entr -c -r dune test
 
 messages:
 	menhir --list-errors lib/parser.mly > lib/parser.messages

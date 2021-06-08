@@ -15,6 +15,8 @@ type fml =
   (* AssignLocal(v, f) is v' = [v EXCEPT ![self] = subst(v, v[self], f) ] *)
   | AssignLocal of string * fml
   | AssignGlobal of string * fml
+  (* MapUpdate(a, b, f) is [a EXCEPT ![b] = f] *)
+  | MapUpdate of string * string * fml
   | Set of fml list
   | Map of (string * fml) list
   | List of fml list
@@ -29,16 +31,25 @@ type def =
   | Def of string * string list * fml
   | Comment of string
   | Variables of string list
-  | Constant of string
+  | Constants of string list
 
 type tla = def list
+
+let cfg_file_template ~constants =
+  Format.sprintf {|
+CONSTANTS
+%s
+SPECIFICATION Spec
+\* INVARIANT Inv
+|}
+    constants
 
 let with_preamble name spec =
   Format.sprintf
     {|
 --------------------------------- MODULE %s ---------------------------------
 
-EXTENDS Naturals, FiniteSets, Sequences
+EXTENDS Integers, FiniteSets, Sequences, TLC
 
 VARIABLE messages
 
@@ -46,7 +57,7 @@ Send(m, msgs) ==
     IF m \in DOMAIN msgs THEN
         [msgs EXCEPT ![m] = msgs[m] + 1]
     ELSE
-        msgs @@ (m :> 1)
+        msgs @@@@ (m :> 1)
 
 Receive(m, msgs) ==
     IF m \in DOMAIN msgs THEN
@@ -85,6 +96,7 @@ let subst_fml ~sub ~replacement (f : fml) =
     | Equals (a, b) -> Equals (a, aux b)
     | AssignLocal (a, b) -> AssignLocal (a, aux b)
     | AssignGlobal (a, b) -> AssignGlobal (a, aux b)
+    | MapUpdate (a, b, f) -> MapUpdate (a, b, aux f)
     | Set es -> Set (List.map aux es)
     (* don't replace map keys *)
     | Map kvs -> Map (List.map (fun (k, v) -> (k, aux v)) kvs)
@@ -102,7 +114,7 @@ let subst_fml ~sub ~replacement (f : fml) =
 let rec assignments_fml f =
   match f with
   | Term _ | Op _ | Apply _ | Set _ | SetCompConstant _ | Map _ | Unchanged _
-  | List _ | Equals _ ->
+  | MapUpdate _ | List _ | Equals _ ->
     []
   | Conj es | Disj es -> List.concat_map assignments_fml es
   | If (_, c, a) -> List.concat_map assignments_fml [c; a]
@@ -125,10 +137,10 @@ module Render = struct
              |> separate nl;
            ])
     in
-    let quantifier vars x =
+    let quantifier which vars x =
       concat
         [
-          string "\\E"; space;
+          string which; space;
           separate space
             (vars
             |> List.concat_map (fun (v, s) ->
@@ -178,6 +190,16 @@ module Render = struct
                  render_fml (subst_fml ~sub:v ~replacement:(v ^ "[self]") e);
                ]);
         ]
+    | MapUpdate (a, k, v) ->
+      separate space
+        [
+          brackets
+            (separate space
+               [
+                 string a; string "EXCEPT"; string "!" ^^ brackets (string k);
+                 equals; render_fml v;
+               ]);
+        ]
     | Set es -> braces (separate (spaced comma) (List.map render_fml es))
     | List es ->
       enclose (string "<<") (string ">>")
@@ -212,8 +234,8 @@ module Render = struct
               ^^ nl); string "IN";
           ]
         ^^ nl ^^ render_fml x)
-    | Exists (vars, x) -> quantifier vars x
-    | Forall (vars, x) -> quantifier vars x
+    | Exists (vars, x) -> quantifier "\\E" vars x
+    | Forall (vars, x) -> quantifier "\\A" vars x
     | Unchanged vars ->
       string "UNCHANGED" ^^ space
       ^^ render_fml (List (List.map (fun v -> Term v) vars))
@@ -236,8 +258,11 @@ module Render = struct
       concat [string name; args; space; string "=="; space_after_eq; body]
     | Comment c -> separate space [string "\\*"; string c]
     | Variables vs ->
-      separate space [string "VARIABLES"; separate space (List.map string vs)]
-    | Constant c -> separate space [string "CONSTANT"; string c]
+      separate space
+        [string "VARIABLES"; separate (spaced comma) (List.map string vs)]
+    | Constants cs ->
+      separate space
+        [string "CONSTANTS"; separate (spaced comma) (List.map string cs)]
 
   let render_tla t = List.map render_def t |> separate (nl ^^ nl)
 end
@@ -268,8 +293,15 @@ let rec translate_protocol (p : tprotocol) =
     let (V (_, v)) = must_be_var_t v in
     AssignLocal (v, translate_expr e)
   | Seq ({ p = ReceiveOnly { msg = MessageD { typ; args }; _ }; _ } :: rest) ->
-    let pre = [Equals ("m.mtype", Term typ); Equals ("m.mdest", Term "self")] in
-    let recv = AssignGlobal ("messages", Apply ("Receive", [Term "m"])) in
+    let pre =
+      [
+        Op (">", [Term "messages[m]"; Term "0"]); Equals ("m.mtype", Term typ);
+        Equals ("m.mdest", Term "self");
+      ]
+    in
+    let recv =
+      AssignGlobal ("messages", Apply ("Receive", [Term "m"; Term "messages"]))
+    in
     let body = List.map translate_protocol rest in
     let rest =
       match args with
@@ -283,7 +315,7 @@ let rec translate_protocol (p : tprotocol) =
         in
         [Let (bindings, Conj (body @ [recv]))]
     in
-    Exists ([("m", Term "messages")], Conj (pre @ rest))
+    Exists ([("m", Term "DOMAIN messages")], Conj (pre @ rest))
   | Seq ps -> Conj (List.map translate_protocol ps)
   | SendOnly { to_; msg = Message { typ; args }; _ } ->
     let (V (_, to_)) = must_be_var_t to_ in
@@ -294,8 +326,8 @@ let rec translate_protocol (p : tprotocol) =
           (v, translate_expr e))
         args
     in
-    Equals
-      ( "messages'",
+    AssignGlobal
+      ( "messages",
         Apply
           ( "Send",
             [
@@ -304,7 +336,7 @@ let rec translate_protocol (p : tprotocol) =
                 @ [
                     ("mtype", Term typ); ("msrc", Term "self");
                     ("mdest", Term to_);
-                  ]);
+                  ]); Term "messages";
             ] ) )
   | Imply (c, body) ->
     If (translate_expr c, translate_protocol body, Term "TRUE")
@@ -320,22 +352,55 @@ let rec translate_protocol (p : tprotocol) =
   | Emp -> bug "do protocol emp"
   | Comment (_, _, _) -> bug "do protocol comment"
 
+let translate_tid (t : tid) =
+  match t.params with
+  | [] -> Format.sprintf "%s" t.name
+  | ps ->
+    Format.sprintf "<<%s>>" (String.concat ", " (t.name :: List.map fst ps))
+
+let fence_to_pc tid f =
+  let rec aux f =
+    match f with
+    | ThreadStart ->
+      (* use the current thread *)
+      let pc = Format.sprintf "pc[self][%s]" (translate_tid tid) in
+      Equals (pc, Term "-1")
+    | AnyOf fs -> Disj (List.map aux fs)
+    | AllOf fs -> Conj (List.map aux fs)
+    | Cond (t, i) ->
+      (* use the thread that this part is dependent on *)
+      let pc = Format.sprintf "pc[self][%s]" (translate_tid t) in
+      Equals (pc, Term (string_of_int i))
+    | Forall (v, s, b) ->
+      (* rename the variable in case it conflicts with that of the quantifier in scope *)
+      let v1 = v ^ "i" in
+      Forall ([(v1, Term s)], subst_fml ~sub:v ~replacement:v1 (aux b))
+  in
+  aux f
+
 let translate_node all_vars graph pname (id, node) =
   (* not sure if we want to get this from the graph? *)
+  let tid = node.protocol.pmeta.tid in
   let pc_current =
-    let set_pc pred = Equals ("pc", Term (string_of_int pred)) in
-    match G.pred graph id with
-    | [] -> []
-    | [pred] -> [set_pc pred]
-    | preds -> [Disj (preds |> List.map set_pc)]
+    (* let set_pc pred = Equals (pc, Term (string_of_int pred)) in match G.pred graph id with
+       | [] -> [set_pc (-1)]
+       | [pred] -> [set_pc pred]
+       | preds -> [Disj (preds |> List.map set_pc)] *)
+    fence_to_pc tid node.fence
   in
-  let pc_next = AssignLocal ("pc", Term (string_of_int id)) in
+  (* let pc_next = AssignLocal (pc, Term (string_of_int id)) in *)
+  (* /\ pc' = [pc EXCEPT ![p] = [pc[p] EXCEPT ![t] = 2]] *)
+  let pc_next =
+    AssignLocal
+      ("pc", MapUpdate ("pc[self]", translate_tid tid, Term (string_of_int id)))
+  in
   let body = translate_protocol node.protocol in
   let assigned = assignments_fml body in
   let unchanged =
     match
       all_vars
       |> List.filter (fun v -> not (List.mem ~eq:String.equal v assigned))
+      |> List.filter (fun v -> not (String.equal "pc" v))
     with
     | [] -> []
     | u -> [Unchanged u]
@@ -343,7 +408,7 @@ let translate_node all_vars graph pname (id, node) =
   Def
     ( Actions.node_name pname (id, node),
       "self" :: (node.params |> List.map fst),
-      Conj (pc_current @ [pc_next; body] @ unchanged) )
+      Conj ([pc_current; pc_next; body] @ unchanged) )
 
 let rec default_value_of_type env t =
   match t with
@@ -415,8 +480,66 @@ let to_tla env actions =
     |> List.map (fun (_, (_g, _n, p)) -> p)
     |> List.concat_map assigned_variables
     |> List.map fst)
-    @ ["messages"]
+    @ ["messages"; "pc"]
     (* pc is always changed so it isn't here *)
+  in
+  let all_threads =
+    actions |> SMap.bindings
+    |> List.concat_map (fun (_, (_g, n, _p)) ->
+           (* TODO have to use n here because p's threads aren't labelled yet. find a way to remove p from the caller as it should be irrelevant, we can get everything from the action nodes *)
+
+           (* let p = *)
+           n |> IMap.bindings
+           |> List.map (fun (_, nn) -> nn.protocol.pmeta.tid |> fun t -> t.name)
+           (* .protocol in
+              print_endline ("!!! " ^ p.pmeta.tid.name);
+              Format.eprintf "thing %a@." (Print.pp_tprotocol_untyped ~env) p;
+              n |> IMap.bindings |> List.map snd
+              |> List.iter (fun nn -> Format.eprintf "node %a@." pp_node nn);
+              p.pmeta.tid *))
+    |> List.uniq ~eq:String.equal
+    (* equal_tid *)
+  in
+  let party_sizes = SMap.of_list [("C", 1); ("P", 2)] in
+  let party_sets =
+    SMap.mapi
+      (fun k v ->
+        List.range 1 v
+        |> List.map (fun n ->
+               Format.sprintf "%s%d" (String.lowercase_ascii k) n))
+      party_sizes
+  in
+  (* https://groups.google.com/g/tlaplus/c/WTb6JZDxorE/m/XpOrtsS8AgAJ
+     because the n-ary cartesian product is expensive, generate code for exactly the <thread, participant, ...> tuples we'll need
+  *)
+  let participant_threads_def =
+    let product_set =
+      actions |> SMap.bindings
+      |> List.concat_map (fun (_, (_, n, _)) ->
+             n |> IMap.bindings |> List.map snd
+             |> List.concat_map (fun node -> all_tids node.protocol)
+             |> List.uniq ~eq:equal_tid)
+      |> List.map (fun (t : tid) ->
+             (* this is similar to translate_tid but different enough *)
+             match t.params with
+             | [] -> [Term t.name]
+             | _ ->
+               let params =
+                 t.params |> List.map snd
+                 |> List.map (fun p -> SMap.find p party_sets)
+               in
+               let params = [t.name] :: params in
+               params |> List.cartesian_product
+               |> List.map (fun l -> List (List.map (fun t -> Term t) l)))
+      |> List.concat
+      |> fun ts -> Set ts
+    in
+    Def ("threadParticipants", [], product_set)
+  in
+  let msg_types =
+    actions |> SMap.bindings
+    |> List.concat_map (fun (_, (_g, _n, p)) -> collect_message_types p)
+    |> List.uniq ~eq:String.equal
   in
   let joint =
     actions |> SMap.bindings
@@ -431,13 +554,74 @@ let to_tla env actions =
   let all_vars_def =
     Def ("vars", [], List (List.map (fun v -> Term v) all_vars))
   in
-  let party_constants =
-    actions |> SMap.bindings |> List.map fst |> List.map (fun n -> Constant n)
+  let participants = actions |> SMap.bindings |> List.map fst in
+  let participants_def =
+    Def
+      ( "participants",
+        [],
+        List.fold_right
+          (fun c t ->
+            match t with
+            | None -> Some (Term c)
+            | Some t -> Some (Op ("\\union", [Term c; t])))
+          participants None
+        |> Option.get_exn_or "empty participants" )
   in
-  let init = Def ("Init", [], Conj (List.concat inits)) in
+  let threads_def =
+    Def
+      ("threads", [], List.map (fun t -> Term t) all_threads |> fun ts -> Set ts)
+  in
+  let thread_constants = Constants all_threads in
+  let party_constants = Constants (actions |> SMap.bindings |> List.map fst) in
+  let party_member_constants =
+    Constants (party_sets |> SMap.bindings |> List.concat_map snd)
+  in
+  let msg_type_constants = Constants msg_types in
+  let init =
+    Def
+      ( "Init",
+        [],
+        Conj
+          (List.concat inits
+          @ [
+              Equals ("messages", SetCompConstant ("i", "{}", Term "0"));
+              Equals
+                ( "pc",
+                  SetCompConstant
+                    ( "i",
+                      "participants",
+                      SetCompConstant
+                        ( "j",
+                          (* TODO note that this product needs to be extended for each additional level of nested quantification in a spec *)
+                          (* "(threads \\X participants) \\union threads", *)
+                          "threadParticipants",
+                          Term "-1" ) ) );
+            ]) )
+  in
   let next = Def ("Next", [], Disj (List.concat nexts)) in
-  List.concat
-    [
-      party_constants; var_defs; [all_vars_def]; List.concat variables; [init];
-      List.concat actions1; [next];
-    ]
+  let spec =
+    List.concat
+      [
+        [
+          party_constants; party_member_constants; thread_constants;
+          msg_type_constants;
+        ]; List.concat variables; var_defs;
+        [all_vars_def; threads_def; participants_def; participant_threads_def];
+        [init]; List.concat actions1; [next];
+      ]
+  in
+  let cfg =
+    let ts =
+      all_threads |> List.map (fun t -> Format.sprintf "  %s = %s" t t)
+    in
+    let ps =
+      actions |> SMap.bindings |> List.map fst
+      |> List.concat_map (fun c ->
+             let mem = SMap.find c party_sets in
+             Format.sprintf "  %s = {%s}" c (mem |> String.concat ", ")
+             :: (mem |> List.map (fun m -> Format.sprintf "  %s = %s" m m)))
+    in
+    let mts = msg_types |> List.map (fun m -> Format.sprintf "  %s = %s" m m) in
+    cfg_file_template ~constants:(String.concat "\n" (ps @ mts @ ts))
+  in
+  (spec, cfg)

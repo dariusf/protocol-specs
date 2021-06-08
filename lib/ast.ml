@@ -11,8 +11,6 @@ let var_name (V (_, v)) = v
 
 let var_names vars = List.map var_name vars
 
-let pp_const s fmt () = Format.fprintf fmt "%s" s
-
 let pp_var fmt (V (p, var)) =
   match p with
   | Some p -> Format.fprintf fmt "%a.%s" pp_party p var
@@ -33,39 +31,6 @@ module VMap = struct
     Format.fprintf fmt "%a"
       (M.pp ~pp_sep:(pp_const ";") ~pp_start:(pp_const "{")
          ~pp_stop:(pp_const "}") pp_var e)
-      map
-end
-
-module SMap = struct
-  module M = Map.Make (String)
-  include M
-
-  let pp e fmt map =
-    Format.fprintf fmt "%a"
-      (M.pp ~pp_sep:(pp_const ";") ~pp_start:(pp_const "{")
-         ~pp_stop:(pp_const "}") String.pp e)
-      map
-end
-
-module IMap = struct
-  module M = Map.Make (Int)
-  include M
-
-  let pp e fmt map =
-    Format.fprintf fmt "%a"
-      (M.pp ~pp_sep:(pp_const ";") ~pp_start:(pp_const "{")
-         ~pp_stop:(pp_const "}") Int.pp e)
-      map
-end
-
-module SSet = struct
-  module M = Set.Make (String)
-  include M
-
-  let pp fmt map =
-    Format.fprintf fmt "%a"
-      (M.pp ~pp_sep:(pp_const ", ") ~pp_start:(pp_const "{")
-         ~pp_stop:(pp_const "}") Format.pp_print_string)
       map
 end
 
@@ -211,7 +176,21 @@ let must_be_var_t e =
 type protocol = (loc, expr, expr) _protocol
 [@@deriving show { with_path = false }, eq]
 
-type tprotocol = (loc, texpr, texpr) _protocol
+type tid = {
+  name : string;
+  params : (string * string) list;
+}
+[@@deriving show { with_path = false }, eq]
+
+type pmeta = {
+  tid : tid;
+  loc : loc;
+}
+[@@deriving show { with_path = false }, eq]
+
+let pmeta ?(tid = { name = "main"; params = [] }) ~loc () = { loc; tid }
+
+type tprotocol = (pmeta, texpr, texpr) _protocol
 [@@deriving show { with_path = false }, eq]
 
 let p_with_pos start stop p =

@@ -3,5 +3,7 @@ _build/
 *.json
 *.png
 *.tla
+*.cfg
+states
 *.go
 *.dot

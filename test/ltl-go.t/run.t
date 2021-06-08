@@ -2,7 +2,7 @@
   $ ls
   run.t
 
-  $ protocol monitor --parties C,P --project C <<EOF
+  $ protocol monitor --parties C,P <<EOF
   > forall c in C
   >   c.a = 1
   > ltl ([] (a > 0))

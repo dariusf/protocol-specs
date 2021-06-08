@@ -29,11 +29,14 @@ let rec project_aux : party_info list -> env -> tprotocol -> tprotocol list =
   let p2 =
     match pr.p with
     | Emp -> parties |> List.map (fun _ -> Emp)
-    | Assign (v, _) ->
+    | Assign (v, _e) ->
       parties
       |> List.map (fun party ->
              if owned_by parties party v then
                pr.p
+             (* Assign
+                ( { v with expr = Var (V (None, var_name (must_be_var_t v))) },
+                  e ) *)
              else
                Emp)
     | Send { from; to_; msg } ->

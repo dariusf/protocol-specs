@@ -52,12 +52,12 @@ let print project parties ast types actions file =
       Lib.print project parties ast types actions file);
   `Ok ()
 
-let tla project parties file =
-  Ppx_debug.Tracing.wrap (fun () -> Lib.tla project parties file);
+let tla parties file =
+  Ppx_debug.Tracing.wrap (fun () -> Lib.tla parties file);
   `Ok ()
 
-let monitor project parties file =
-  Ppx_debug.Tracing.wrap (fun () -> Lib.monitor project parties file);
+let monitor parties file =
+  Ppx_debug.Tracing.wrap (fun () -> Lib.monitor parties file);
   `Ok ()
 
 let print_cmd =
@@ -103,13 +103,6 @@ let tla_cmd =
   let file =
     Arg.(value & pos 0 string "-" & info [] ~docv:"FILE" ~doc:"file")
   in
-  let project =
-    Arg.(
-      value
-      & opt (some string) None
-          (info ~docv:"PROJECT" ~doc:"project protocol for a specific party"
-             ["project"]))
-  in
   let parties =
     Arg.(
       value
@@ -122,20 +115,13 @@ let tla_cmd =
       `Blocks help_secs;
     ]
   in
-  ( Term.(ret (const tla $ project $ parties $ file)),
+  ( Term.(ret (const tla $ parties $ file)),
     Term.info "tla" ~doc:"compiles a specification to TLA+"
       ~exits:Term.default_exits ~man )
 
 let monitor_cmd =
   let file =
     Arg.(value & pos 0 string "-" & info [] ~docv:"FILE" ~doc:"file")
-  in
-  let project =
-    Arg.(
-      value
-      & opt (some string) None
-          (info ~docv:"PROJECT" ~doc:"project protocol for a specific party"
-             ["project"]))
   in
   let parties =
     Arg.(
@@ -149,7 +135,7 @@ let monitor_cmd =
       `P "generates a monitor for runtime verification"; `Blocks help_secs;
     ]
   in
-  ( Term.(ret (const monitor $ project $ parties $ file)),
+  ( Term.(ret (const monitor $ parties $ file)),
     Term.info "monitor" ~doc:"generates a monitor for runtime verification"
       ~exits:Term.default_exits ~man )
 

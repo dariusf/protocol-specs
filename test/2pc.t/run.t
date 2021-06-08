@@ -94,13 +94,13 @@ The classic two-phase commit protocol.
 
   $ protocol print 2pc.spec --parties C,P --project P --actions
   digraph G {
-    0 [label="PReceivePrepare0\nλ c:C.\nc->self*: prepare"];
-    1 [label="PSendPrepared1\nλ c:C.\n*self->c: prepared"];
-    2 [label="PSendAbort2\nλ c:C.\n*self->c: abort"];
-    3 [label="PReceiveCommit3\nλ c:C.\nc->self*: commit"];
-    4 [label="PSendCommitAck4\nλ c:C.\n*self->c: commit_ack"];
-    5 [label="PReceiveAbort5\nλ c:C.\nc->self*: abort"];
-    6 [label="PSendAbortAck6\nλ c:C.\n*self->c: abort_ack"];
+    0 [label="PReceivePrepare0\ntid: Pt0(c:C)\n{start}\nλ [(c:C)].\nc->self*: prepare"];
+    1 [label="PSendPrepared1\ntid: Pt0(c:C)\n{Pt0(c:C) = 0}\nλ [(c:C)].\n*self->c: prepared"];
+    2 [label="PSendAbort2\ntid: Pt0(c:C)\n{Pt0(c:C) = 0}\nλ [(c:C)].\n*self->c: abort"];
+    3 [label="PReceiveCommit3\ntid: Pt0(c:C)\n{Any(Pt0(c:C) = 1, Pt0(c:C) = 2)}\nλ [(c:C)].\nc->self*: commit"];
+    4 [label="PSendCommitAck4\ntid: Pt0(c:C)\n{Pt0(c:C) = 3}\nλ [(c:C)].\n*self->c: commit_ack"];
+    5 [label="PReceiveAbort5\ntid: Pt0(c:C)\n{Any(Pt0(c:C) = 1, Pt0(c:C) = 2)}\nλ [(c:C)].\nc->self*: abort"];
+    6 [label="PSendAbortAck6\ntid: Pt0(c:C)\n{Pt0(c:C) = 5}\nλ [(c:C)].\n*self->c: abort_ack"];
     5 -> 6;
     3 -> 4;
     2 -> 5;
@@ -113,13 +113,13 @@ The classic two-phase commit protocol.
 
   $ protocol print 2pc.spec --parties C,P --project C --actions
   digraph G {
-    0 [label="CSendPrepare0\nλ p:P.\n*self->p: prepare"];
-    1 [label="CReceivePrepared1\nλ p:P.\np->self*: prepared;\nresponded = union(responded, {p})"];
-    2 [label="CReceiveAbort2\nλ p:P.\np->self*: abort;\naborted = union(aborted, {p})"];
-    3 [label="CSendCommit3\n{aborted == {}}\nλ p:P.\n*self->p: commit"];
-    4 [label="CReceiveCommitAck4\n{aborted == {}}\nλ p:P.\np->self*: commit_ack"];
-    5 [label="CSendAbort5\n{aborted != {}}\nλ p:P.\n*self->p: abort"];
-    6 [label="CReceiveAbortAck6\n{aborted != {}}\nλ p:P.\np->self*: abort_ack"];
+    0 [label="CSendPrepare0\ntid: Ct0(p:P)\n{start}\nλ [(p:P)].\n*self->p: prepare"];
+    1 [label="CReceivePrepared1\ntid: Ct0(p:P)\n{Ct0(p:P) = 0}\nλ [(p:P)].\np->self*: prepared;\nresponded = union(responded, {p})"];
+    2 [label="CReceiveAbort2\ntid: Ct0(p:P)\n{Ct0(p:P) = 0}\nλ [(p:P)].\np->self*: abort;\naborted = union(aborted, {p})"];
+    3 [label="CSendCommit3\ntid: Ct2(p:P)\n{∀ p:P. Any(Ct0(p:P) = 1, Ct0(p:P) = 2)}\n{[aborted == {}]}\nλ [(p:P)].\n*self->p: commit"];
+    4 [label="CReceiveCommitAck4\ntid: Ct2(p:P)\n{Ct2(p:P) = 3}\nλ [(p:P)].\np->self*: commit_ack"];
+    5 [label="CSendAbort5\ntid: Ct1(p:P)\n{∀ p:P. Any(Ct0(p:P) = 1, Ct0(p:P) = 2)}\n{[aborted != {}]}\nλ [(p:P)].\n*self->p: abort"];
+    6 [label="CReceiveAbortAck6\ntid: Ct1(p:P)\n{Ct1(p:P) = 5}\nλ [(p:P)].\np->self*: abort_ack"];
     5 -> 6;
     3 -> 4;
     2 -> 5;
@@ -130,14 +130,15 @@ The classic two-phase commit protocol.
     0 -> 1;
   }
 
-  $ protocol tla 2pc.spec --parties C,P --project C
+  $ protocol tla 2pc.spec --parties C,P
   2pc.tla
+  2pc.cfg
 
   $ cat 2pc.tla
   
   --------------------------------- MODULE 2pc ---------------------------------
   
-  EXTENDS Naturals, FiniteSets, Sequences
+  EXTENDS Integers, FiniteSets, Sequences, TLC
   
   VARIABLE messages
   
@@ -145,7 +146,7 @@ The classic two-phase commit protocol.
       IF m \in DOMAIN msgs THEN
           [msgs EXCEPT ![m] = msgs[m] + 1]
       ELSE
-          msgs @ (m :> 1)
+          msgs @@ (m :> 1)
   
   Receive(m, msgs) ==
       IF m \in DOMAIN msgs THEN
@@ -156,143 +157,164 @@ The classic two-phase commit protocol.
   VARIABLE pc
   
   
-  CONSTANT C
+  CONSTANTS C, P
   
-  CONSTANT P
+  CONSTANTS c1, p1, p2
+  
+  CONSTANTS Ct0, Ct2, Ct1, Pt0
+  
+  CONSTANTS prepare, prepared, commit, commit_ack, abort, abort_ack
+  
+  \* Used by C
+  
+  VARIABLES responded, aborted
   
   Cvars == <<responded, aborted>>
   
   Pvars == <<>>
   
-  vars == <<responded, aborted, messages>>
+  vars == <<responded, aborted, messages, pc>>
   
-  \* Used by C
+  threads == {Ct0, Ct2, Ct1, Pt0}
   
-  VARIABLES responded aborted
+  participants == (C \union P)
+  
+  threadParticipants == {<<Ct0, p2>>, <<Ct0, p1>>, <<Ct2, p2>>, <<Ct2, p1>>, <<Ct1, p2>>, <<Ct1, p1>>, <<Pt0, c1>>}
   
   Init ==
     /\ responded = [i \in C |-> {}]
     /\ aborted = [i \in C |-> {}]
+    /\ messages = [i \in {} |-> 0]
+    /\ pc = [i \in participants |-> [j \in threadParticipants |-> -1]]
   
   CSendPrepare0(self, p) ==
-    /\ pc' = [pc EXCEPT ![self] = 0]
+    /\ pc[self][<<Ct0, p>>] = -1
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct0, p>>] = 0]]
     /\ 
-      /\ messages' = Send([mtype |-> prepare, msrc |-> self, mdest |-> p])
-    /\ UNCHANGED <<responded, aborted, messages>>
+      /\ messages' = Send([mtype |-> prepare, msrc |-> self, mdest |-> p], messages)
+    /\ UNCHANGED <<responded, aborted>>
   
   CReceivePrepared1(self, p) ==
-    /\ pc = 0
-    /\ pc' = [pc EXCEPT ![self] = 1]
-    /\ \E m \in messages : 
+    /\ pc[self][<<Ct0, p>>] = 0
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct0, p>>] = 1]]
+    /\ \E m \in DOMAIN messages : 
+      /\ (messages[m] > 0)
       /\ m.mtype = prepared
       /\ m.mdest = self
       /\ responded' = [responded EXCEPT ![self] = (responded[self] \union {p})]
-      /\ messages' = Receive(m)
+      /\ messages' = Receive(m, messages)
     /\ UNCHANGED <<aborted>>
   
   CReceiveAbort2(self, p) ==
-    /\ pc = 0
-    /\ pc' = [pc EXCEPT ![self] = 2]
-    /\ \E m \in messages : 
+    /\ pc[self][<<Ct0, p>>] = 0
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct0, p>>] = 2]]
+    /\ \E m \in DOMAIN messages : 
+      /\ (messages[m] > 0)
       /\ m.mtype = abort
       /\ m.mdest = self
       /\ aborted' = [aborted EXCEPT ![self] = (aborted[self] \union {p})]
-      /\ messages' = Receive(m)
+      /\ messages' = Receive(m, messages)
     /\ UNCHANGED <<responded>>
   
   CSendCommit3(self, p) ==
+    /\ \A pi \in P : 
+      \/ pc[self][<<Ct0, p>>] = 1
+      \/ pc[self][<<Ct0, p>>] = 2
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct2, p>>] = 3]]
     /\ 
-      \/ pc = 2
-      \/ pc = 1
-    /\ pc' = [pc EXCEPT ![self] = 3]
-    /\ 
-      /\ messages' = Send([mtype |-> commit, msrc |-> self, mdest |-> p])
-    /\ UNCHANGED <<responded, aborted, messages>>
+      /\ messages' = Send([mtype |-> commit, msrc |-> self, mdest |-> p], messages)
+    /\ UNCHANGED <<responded, aborted>>
   
   CReceiveCommitAck4(self, p) ==
-    /\ pc = 3
-    /\ pc' = [pc EXCEPT ![self] = 4]
-    /\ \E m \in messages : 
+    /\ pc[self][<<Ct2, p>>] = 3
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct2, p>>] = 4]]
+    /\ \E m \in DOMAIN messages : 
+      /\ (messages[m] > 0)
       /\ m.mtype = commit_ack
       /\ m.mdest = self
-      /\ messages' = Receive(m)
+      /\ messages' = Receive(m, messages)
     /\ UNCHANGED <<responded, aborted>>
   
   CSendAbort5(self, p) ==
+    /\ \A pi \in P : 
+      \/ pc[self][<<Ct0, p>>] = 1
+      \/ pc[self][<<Ct0, p>>] = 2
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct1, p>>] = 5]]
     /\ 
-      \/ pc = 2
-      \/ pc = 1
-    /\ pc' = [pc EXCEPT ![self] = 5]
-    /\ 
-      /\ messages' = Send([mtype |-> abort, msrc |-> self, mdest |-> p])
-    /\ UNCHANGED <<responded, aborted, messages>>
+      /\ messages' = Send([mtype |-> abort, msrc |-> self, mdest |-> p], messages)
+    /\ UNCHANGED <<responded, aborted>>
   
   CReceiveAbortAck6(self, p) ==
-    /\ pc = 5
-    /\ pc' = [pc EXCEPT ![self] = 6]
-    /\ \E m \in messages : 
+    /\ pc[self][<<Ct1, p>>] = 5
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct1, p>>] = 6]]
+    /\ \E m \in DOMAIN messages : 
+      /\ (messages[m] > 0)
       /\ m.mtype = abort_ack
       /\ m.mdest = self
-      /\ messages' = Receive(m)
+      /\ messages' = Receive(m, messages)
     /\ UNCHANGED <<responded, aborted>>
   
   PReceivePrepare7(self, c) ==
-    /\ pc' = [pc EXCEPT ![self] = 7]
-    /\ \E m \in messages : 
+    /\ pc[self][<<Pt0, c>>] = -1
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 7]]
+    /\ \E m \in DOMAIN messages : 
+      /\ (messages[m] > 0)
       /\ m.mtype = prepare
       /\ m.mdest = self
-      /\ messages' = Receive(m)
+      /\ messages' = Receive(m, messages)
     /\ UNCHANGED <<responded, aborted>>
   
   PSendPrepared8(self, c) ==
-    /\ pc = 7
-    /\ pc' = [pc EXCEPT ![self] = 8]
+    /\ pc[self][<<Pt0, c>>] = 7
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 8]]
     /\ 
-      /\ messages' = Send([mtype |-> prepared, msrc |-> self, mdest |-> c])
-    /\ UNCHANGED <<responded, aborted, messages>>
+      /\ messages' = Send([mtype |-> prepared, msrc |-> self, mdest |-> c], messages)
+    /\ UNCHANGED <<responded, aborted>>
   
   PSendAbort9(self, c) ==
-    /\ pc = 7
-    /\ pc' = [pc EXCEPT ![self] = 9]
+    /\ pc[self][<<Pt0, c>>] = 7
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 9]]
     /\ 
-      /\ messages' = Send([mtype |-> abort, msrc |-> self, mdest |-> c])
-    /\ UNCHANGED <<responded, aborted, messages>>
+      /\ messages' = Send([mtype |-> abort, msrc |-> self, mdest |-> c], messages)
+    /\ UNCHANGED <<responded, aborted>>
   
   PReceiveCommit10(self, c) ==
     /\ 
-      \/ pc = 9
-      \/ pc = 8
-    /\ pc' = [pc EXCEPT ![self] = 10]
-    /\ \E m \in messages : 
+      \/ pc[self][<<Pt0, c>>] = 8
+      \/ pc[self][<<Pt0, c>>] = 9
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 10]]
+    /\ \E m \in DOMAIN messages : 
+      /\ (messages[m] > 0)
       /\ m.mtype = commit
       /\ m.mdest = self
-      /\ messages' = Receive(m)
+      /\ messages' = Receive(m, messages)
     /\ UNCHANGED <<responded, aborted>>
   
   PSendCommitAck11(self, c) ==
-    /\ pc = 10
-    /\ pc' = [pc EXCEPT ![self] = 11]
+    /\ pc[self][<<Pt0, c>>] = 10
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 11]]
     /\ 
-      /\ messages' = Send([mtype |-> commit_ack, msrc |-> self, mdest |-> c])
-    /\ UNCHANGED <<responded, aborted, messages>>
+      /\ messages' = Send([mtype |-> commit_ack, msrc |-> self, mdest |-> c], messages)
+    /\ UNCHANGED <<responded, aborted>>
   
   PReceiveAbort12(self, c) ==
     /\ 
-      \/ pc = 9
-      \/ pc = 8
-    /\ pc' = [pc EXCEPT ![self] = 12]
-    /\ \E m \in messages : 
+      \/ pc[self][<<Pt0, c>>] = 8
+      \/ pc[self][<<Pt0, c>>] = 9
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 12]]
+    /\ \E m \in DOMAIN messages : 
+      /\ (messages[m] > 0)
       /\ m.mtype = abort
       /\ m.mdest = self
-      /\ messages' = Receive(m)
+      /\ messages' = Receive(m, messages)
     /\ UNCHANGED <<responded, aborted>>
   
   PSendAbortAck13(self, c) ==
-    /\ pc = 12
-    /\ pc' = [pc EXCEPT ![self] = 13]
+    /\ pc[self][<<Pt0, c>>] = 12
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 13]]
     /\ 
-      /\ messages' = Send([mtype |-> abort_ack, msrc |-> self, mdest |-> c])
-    /\ UNCHANGED <<responded, aborted, messages>>
+      /\ messages' = Send([mtype |-> abort_ack, msrc |-> self, mdest |-> c], messages)
+    /\ UNCHANGED <<responded, aborted>>
   
   Next ==
     \/ \E self \in C : \E p \in P : CSendPrepare0(self, p)
@@ -314,7 +336,7 @@ The classic two-phase commit protocol.
   
   ===============================================================================
 
-  $ protocol monitor --parties C,P --project C 2pc.spec
+  $ protocol monitor --parties C,P 2pc.spec
   monitorC.go
 
   $ cat monitorC.go

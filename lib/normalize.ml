@@ -9,6 +9,7 @@ let rec normalize_once p =
   in
   let p1 =
     match p.p with
+    | Seq [] -> Emp
     | Seq s ->
       let s = s |> List.map normalize_once |> List.filter useful in
       Seq
