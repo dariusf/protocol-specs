@@ -40,7 +40,13 @@ let rec project_aux : party_info list -> env -> tprotocol -> tprotocol list =
     | Send { from; to_; msg } ->
       parties
       |> List.map (fun party ->
-             if is_party parties env party from then
+             if
+               is_party parties env party from && is_party parties env party to_
+             then
+               (* this is because it doesn't work with projection as-is, would require extracting a parallel block.
+                  also doesn't seem to serve any purpose *)
+               fail ~loc:pr.pmeta.loc "self-send not allowed"
+             else if is_party parties env party from then
                SendOnly
                  {
                    from = { from with expr = Var (V (None, "self")) };
@@ -75,6 +81,10 @@ let rec project_aux : party_info list -> env -> tprotocol -> tprotocol list =
         parties
         (project_aux parties env body)
     | Forall (v, s, p) ->
+      (* technically we should only take off a forall the first time a set is
+         quantified over. however, because we prevent self-sends, there's no other
+         reason for users to quantify over a set twice, letting us not have to do
+         this check *)
       List.map2
         (fun party p1 ->
           if is_party parties env party v then

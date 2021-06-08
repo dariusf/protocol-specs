@@ -125,15 +125,21 @@ A chain of messages that ends at C.
 
 Multiple uses of the same party set
 
-This is wrong, should be
-forall d in C ->d: m
-
   $ protocol print --parties C --project C - <<EOF
   > forall c in C
   >   forall d in C
   >     c->d: m
   > EOF
-  ->d: m
+  error at line 3, col 4:
+  self-send not allowed
+
+  $ protocol print --parties C --project C - <<EOF
+  > forall d in C
+  >   forall c in C
+  >     c->d: m
+  > EOF
+  error at line 3, col 4:
+  self-send not allowed
 
   $ protocol print --parties C,P --project C - <<EOF
   > forall c in C
