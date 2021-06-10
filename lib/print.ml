@@ -19,6 +19,8 @@ let render_var (V (p, v)) =
 (* this should be kept in sync with the parser *)
 let get_expr_prec op =
   match op with
+  | "<>" | "[]" -> 1
+  | "==>" -> 2
   | "|" -> 3
   | "&" -> 4
   | "==" | "!=" -> 5

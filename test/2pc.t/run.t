@@ -423,10 +423,12 @@ The classic two-phase commit protocol.
   	done     bool
   	dead     bool
   	pc       int
-  	vars     map[string]interface{}
+  	//vars     map[string][]string
+  	vars map[string]map[string]bool
   }
   
-  func NewMonitor(vars map[string]interface{}) *Monitor {
+  //func NewMonitor(vars map[string][]string) *Monitor {
+  func NewMonitor(vars map[string]map[string]bool) *Monitor {
   	return &Monitor{
   		state: S_0_Y,
   		// previous is the empty Global

@@ -18,4 +18,4 @@ forall c in C
       aborted = union(aborted, {p}))
 
 ltl ([] (size(committed) + size(aborted) == size(P) ==>
-  commited == {} | aborted == {}))
+  committed == {} | aborted == {}))

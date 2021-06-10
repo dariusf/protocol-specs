@@ -39,8 +39,8 @@ let print project_party parties ast types actions file =
   let protocol = spec.protocol in
   match parties with
   | None ->
-    if ast then
-      protocol |> show_protocol |> print_endline
+    if ast then (* protocol |> show_protocol |> print_endline *)
+      spec |> show_spec |> print_endline
     else
       protocol |> Print.render_protocol
       |> PPrint.ToChannel.pretty 0.8 120 stdout

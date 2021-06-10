@@ -148,3 +148,9 @@ module SSet = struct
          ~pp_stop:(pp_const "}") Format.pp_print_string)
       map
 end
+
+let snake_to_camel s =
+  s |> String.lowercase_ascii |> String.capitalize_ascii
+  |> Str.global_substitute (Str.regexp {|_\([a-z]\)|}) (fun s ->
+         Str.matched_group 1 s |> String.lowercase_ascii
+         |> String.capitalize_ascii)

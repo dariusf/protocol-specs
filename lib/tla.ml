@@ -381,15 +381,7 @@ let fence_to_pc tid f =
 let translate_node all_vars graph pname (id, node) =
   (* not sure if we want to get this from the graph? *)
   let tid = node.protocol.pmeta.tid in
-  let pc_current =
-    (* let set_pc pred = Equals (pc, Term (string_of_int pred)) in match G.pred graph id with
-       | [] -> [set_pc (-1)]
-       | [pred] -> [set_pc pred]
-       | preds -> [Disj (preds |> List.map set_pc)] *)
-    fence_to_pc tid node.fence
-  in
-  (* let pc_next = AssignLocal (pc, Term (string_of_int id)) in *)
-  (* /\ pc' = [pc EXCEPT ![p] = [pc[p] EXCEPT ![t] = 2]] *)
+  let pc_current = fence_to_pc tid node.fence in
   let pc_next =
     AssignLocal
       ("pc", MapUpdate ("pc[self]", translate_tid tid, Term (string_of_int id)))

@@ -19,14 +19,16 @@
 %right forall_exists
 %left SEMI (* this being after if/when makes it the reverse of what ocaml does: semicolons get nested inside conditionals  *)
 
+(* keep in sync with the table in Print *)
+%nonassoc BOX DIAMOND
+%right IMPLIES
 %left OR
 %left AND
-%right IMPLIES
 %left EQEQ NEQ
 %left LT LE GT GE
 %left PLUS MINUS
 %left DIV STAR
-%nonassoc NOT BOX DIAMOND
+%nonassoc NOT
 
 %start <protocol> p
 %start <spec> spec

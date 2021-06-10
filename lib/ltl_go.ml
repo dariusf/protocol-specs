@@ -73,10 +73,12 @@ type Monitor struct {
 	done     bool
 	dead     bool
   pc       int
-  vars     map[string]interface{}
+  //vars     map[string][]string
+  vars     map[string]map[string]bool
 }
 
-func NewMonitor(vars map[string]interface{}) *Monitor {
+//func NewMonitor(vars map[string][]string) *Monitor {
+func NewMonitor(vars map[string]map[string]bool) *Monitor {
 	return &Monitor{
     state: %s,
     // previous is the empty Global
@@ -128,14 +130,14 @@ let fresh =
     incr n;
     Format.sprintf "t%d" r
 
-let rec extract_subexprs (t : texpr) =
+let rec extract_subexprs env (t : texpr) =
   match t.expr with
   (* TODO probably should distinguish temporal operators from bool here.  [] (a & b) vs ([] a & [] b) *)
   (* | App (("|" as f), args) *)
   (* | App (("&" as f), args) *)
   | App (("==>" as f), args) | App (("<>" as f), args) | App (("[]" as f), args)
     ->
-    let sub = List.map extract_subexprs args in
+    let sub = List.map (extract_subexprs env) args in
     let args1 = List.map fst sub in
     let maps = List.map snd sub in
     let res = { t with expr = App (f, args1) } in
@@ -156,7 +158,7 @@ let rec fml_to_ltl3tools (t : texpr) =
   | App ("[]", [t1]) -> Format.sprintf "[] (%s)" (fml_to_ltl3tools t1)
   | App ("<>", [t1]) -> Format.sprintf "<> (%s)" (fml_to_ltl3tools t1)
   | App ("==>", [a; b]) ->
-    Format.sprintf "%s ==> %s" (fml_to_ltl3tools a) (fml_to_ltl3tools b)
+    Format.sprintf "%s -> %s" (fml_to_ltl3tools a) (fml_to_ltl3tools b)
   | Var (V (_, v)) -> v
   | App (_, _) | Int _ | Bool _ | Set _ | List _ | Map _ | Tuple (_, _) ->
     bug "fml to ltl3 unexpected node"
@@ -291,7 +293,7 @@ digraph G {
       ("S_1_Y", "S_0_R"); ("S_0_R", "S_0_R")]
   |}]
 
-let state_var_name s = String.capitalize_ascii s
+let state_var_name s = snake_to_camel s
 
 let rec compile_typ env t =
   match t with
@@ -332,7 +334,7 @@ let rec compile parties te =
       let f1 = match f with "|" -> "||" | _ -> f in
       Format.sprintf "(%s %s %s)" (List.nth args 0) f1 (List.nth args 1)
     else
-      let f1 = match f with "size" -> "Len" | _ -> f in
+      let f1 = match f with "size" -> "len" | _ -> f in
       Format.sprintf "%s(%s)" f1 (String.concat ", " args)
   | Var (V (_, v)) when List.mem ~eq:String.equal v parties ->
     Format.sprintf "m.vars[\"%s\"]" (state_var_name v)
@@ -353,7 +355,7 @@ let translate_party_ltl env ltl_i (pname, ltl) tprotocol action_graph
   let fmls =
     ltl
     |> List.map (fun ltl ->
-           let (ltl1, bindings) = extract_subexprs ltl in
+           let (ltl1, bindings) = extract_subexprs env ltl in
            let fml = ltl1 |> fml_to_ltl3tools in
            let output = fml |> invoke_ltl2mon in
            if debug then

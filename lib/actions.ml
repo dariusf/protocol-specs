@@ -297,12 +297,6 @@ let maybe_nl = if compact then "" else "\n"
 
 let maybe_indent = if compact then "" else "  "
 
-let snake_to_camel s =
-  s |> String.lowercase_ascii |> String.capitalize_ascii
-  |> Str.global_substitute (Str.regexp {|_\([a-z]\)|}) (fun s ->
-         Str.matched_group 1 s |> String.lowercase_ascii
-         |> String.capitalize_ascii)
-
 let node_name party (id, node) =
   let prefix =
     match node.protocol.p with
