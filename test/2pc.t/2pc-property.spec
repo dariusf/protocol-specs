@@ -5,13 +5,13 @@ forall c in C
      \/
      p->c: abort;
      c.has_aborted = true));
-  (has_aborted =>
+  (!has_aborted =>
     forall p in P
       c->p: commit;
       p->c: commit_ack;
       committed = union(committed, {p})
    \/
-   !has_aborted =>
+   has_aborted =>
     forall p in P
       c->p: abort;
       p->c: abort_ack;

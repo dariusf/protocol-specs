@@ -94,40 +94,40 @@ The classic two-phase commit protocol.
 
   $ protocol print 2pc.spec --parties C,P --project P --actions
   digraph G {
-    0 [label="PReceivePrepare0\ntid: Pt0(c:C)\n{start}\nλ [(c:C)].\nc->: prepare"];
-    1 [label="PSendPrepared1\ntid: Pt0(c:C)\n{Pt0(c:C) = 0}\nλ [(c:C)].\n->c: prepared"];
-    2 [label="PSendAbort2\ntid: Pt0(c:C)\n{Pt0(c:C) = 0}\nλ [(c:C)].\n->c: abort"];
-    3 [label="PReceiveCommit3\ntid: Pt0(c:C)\n{Any(Pt0(c:C) = 1, Pt0(c:C) = 2)}\nλ [(c:C)].\nc->: commit"];
-    4 [label="PSendCommitAck4\ntid: Pt0(c:C)\n{Pt0(c:C) = 3}\nλ [(c:C)].\n->c: commit_ack"];
-    5 [label="PReceiveAbort5\ntid: Pt0(c:C)\n{Any(Pt0(c:C) = 1, Pt0(c:C) = 2)}\nλ [(c:C)].\nc->: abort"];
-    6 [label="PSendAbortAck6\ntid: Pt0(c:C)\n{Pt0(c:C) = 5}\nλ [(c:C)].\n->c: abort_ack"];
-    5 -> 6;
+    1 [label="PReceivePrepare1\ntid: Pt0(c:C)\n{start}\nλ [(c:C)].\nc->: prepare"];
+    2 [label="PSendPrepared2\ntid: Pt0(c:C)\n{Pt0(c:C) = 1}\nλ [(c:C)].\n->c: prepared"];
+    3 [label="PSendAbort3\ntid: Pt0(c:C)\n{Pt0(c:C) = 1}\nλ [(c:C)].\n->c: abort"];
+    4 [label="PReceiveCommit4\ntid: Pt0(c:C)\n{Any(Pt0(c:C) = 2, Pt0(c:C) = 3)}\nλ [(c:C)].\nc->: commit"];
+    5 [label="PSendCommitAck5\ntid: Pt0(c:C)\n{Pt0(c:C) = 4}\nλ [(c:C)].\n->c: commit_ack"];
+    6 [label="PReceiveAbort6\ntid: Pt0(c:C)\n{Any(Pt0(c:C) = 2, Pt0(c:C) = 3)}\nλ [(c:C)].\nc->: abort"];
+    7 [label="PSendAbortAck7\ntid: Pt0(c:C)\n{Pt0(c:C) = 6}\nλ [(c:C)].\n->c: abort_ack"];
+    6 -> 7;
+    4 -> 5;
+    3 -> 6;
     3 -> 4;
-    2 -> 5;
-    2 -> 3;
-    1 -> 5;
+    2 -> 6;
+    2 -> 4;
     1 -> 3;
-    0 -> 2;
-    0 -> 1;
+    1 -> 2;
   }
 
   $ protocol print 2pc.spec --parties C,P --project C --actions
   digraph G {
-    0 [label="CSendPrepare0\ntid: Ct0(p:P)\n{start}\nλ [(p:P)].\n->p: prepare"];
-    1 [label="CReceivePrepared1\ntid: Ct0(p:P)\n{Ct0(p:P) = 0}\nλ [(p:P)].\np->: prepared;\nresponded = union(responded, {p})"];
-    2 [label="CReceiveAbort2\ntid: Ct0(p:P)\n{Ct0(p:P) = 0}\nλ [(p:P)].\np->: abort;\naborted = union(aborted, {p})"];
-    3 [label="CSendCommit3\ntid: Ct2(p:P)\n{∀ p:P. Any(Ct0(p:P) = 1, Ct0(p:P) = 2)}\n{[aborted == {}]}\nλ [(p:P)].\n->p: commit"];
-    4 [label="CReceiveCommitAck4\ntid: Ct2(p:P)\n{Ct2(p:P) = 3}\nλ [(p:P)].\np->: commit_ack"];
-    5 [label="CSendAbort5\ntid: Ct1(p:P)\n{∀ p:P. Any(Ct0(p:P) = 1, Ct0(p:P) = 2)}\n{[aborted != {}]}\nλ [(p:P)].\n->p: abort"];
-    6 [label="CReceiveAbortAck6\ntid: Ct1(p:P)\n{Ct1(p:P) = 5}\nλ [(p:P)].\np->: abort_ack"];
-    5 -> 6;
+    1 [label="CSendPrepare1\ntid: Ct0(p:P)\n{start}\nλ [(p:P)].\n->p: prepare"];
+    2 [label="CReceivePrepared2\ntid: Ct0(p:P)\n{Ct0(p:P) = 1}\nλ [(p:P)].\np->: prepared;\nresponded = union(responded, {p})"];
+    3 [label="CReceiveAbort3\ntid: Ct0(p:P)\n{Ct0(p:P) = 1}\nλ [(p:P)].\np->: abort;\naborted = union(aborted, {p})"];
+    4 [label="CSendCommit4\ntid: Ct2(p:P)\n{∀ p:P. Any(Ct0(p:P) = 2, Ct0(p:P) = 3)}\n{[aborted == {}]}\nλ [(p:P)].\n->p: commit"];
+    5 [label="CReceiveCommitAck5\ntid: Ct2(p:P)\n{Ct2(p:P) = 4}\nλ [(p:P)].\np->: commit_ack"];
+    6 [label="CSendAbort6\ntid: Ct1(p:P)\n{∀ p:P. Any(Ct0(p:P) = 2, Ct0(p:P) = 3)}\n{[aborted != {}]}\nλ [(p:P)].\n->p: abort"];
+    7 [label="CReceiveAbortAck7\ntid: Ct1(p:P)\n{Ct1(p:P) = 6}\nλ [(p:P)].\np->: abort_ack"];
+    6 -> 7;
+    4 -> 5;
+    3 -> 6;
     3 -> 4;
-    2 -> 5;
-    2 -> 3;
-    1 -> 5;
+    2 -> 6;
+    2 -> 4;
     1 -> 3;
-    0 -> 2;
-    0 -> 1;
+    1 -> 2;
   }
 
   $ protocol tla 2pc.spec --parties C,P
@@ -185,18 +185,18 @@ The classic two-phase commit protocol.
     /\ responded = [i \in C |-> {}]
     /\ aborted = [i \in C |-> {}]
     /\ messages = [i \in {} |-> 0]
-    /\ pc = [i \in participants |-> [j \in threadParticipants |-> -1]]
+    /\ pc = [i \in participants |-> [j \in threadParticipants |-> 0]]
   
-  CSendPrepare0(self, p) ==
+  CSendPrepare1(self, p) ==
     /\ pc[self][<<Ct0, p>>] = -1
-    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct0, p>>] = 0]]
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct0, p>>] = 1]]
     /\ 
       /\ messages' = Send([mtype |-> prepare, msrc |-> self, mdest |-> p], messages)
     /\ UNCHANGED <<responded, aborted>>
   
-  CReceivePrepared1(self, p) ==
-    /\ pc[self][<<Ct0, p>>] = 0
-    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct0, p>>] = 1]]
+  CReceivePrepared2(self, p) ==
+    /\ pc[self][<<Ct0, p>>] = 1
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct0, p>>] = 2]]
     /\ \E m \in DOMAIN messages : 
       /\ (messages[m] > 0)
       /\ m.mtype = prepared
@@ -205,9 +205,9 @@ The classic two-phase commit protocol.
       /\ messages' = Receive(m, messages)
     /\ UNCHANGED <<aborted>>
   
-  CReceiveAbort2(self, p) ==
-    /\ pc[self][<<Ct0, p>>] = 0
-    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct0, p>>] = 2]]
+  CReceiveAbort3(self, p) ==
+    /\ pc[self][<<Ct0, p>>] = 1
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct0, p>>] = 3]]
     /\ \E m \in DOMAIN messages : 
       /\ (messages[m] > 0)
       /\ m.mtype = abort
@@ -216,18 +216,18 @@ The classic two-phase commit protocol.
       /\ messages' = Receive(m, messages)
     /\ UNCHANGED <<responded>>
   
-  CSendCommit3(self, p) ==
+  CSendCommit4(self, p) ==
     /\ \A pi \in P : 
-      \/ pc[self][<<Ct0, p>>] = 1
       \/ pc[self][<<Ct0, p>>] = 2
-    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct2, p>>] = 3]]
+      \/ pc[self][<<Ct0, p>>] = 3
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct2, p>>] = 4]]
     /\ 
       /\ messages' = Send([mtype |-> commit, msrc |-> self, mdest |-> p], messages)
     /\ UNCHANGED <<responded, aborted>>
   
-  CReceiveCommitAck4(self, p) ==
-    /\ pc[self][<<Ct2, p>>] = 3
-    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct2, p>>] = 4]]
+  CReceiveCommitAck5(self, p) ==
+    /\ pc[self][<<Ct2, p>>] = 4
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct2, p>>] = 5]]
     /\ \E m \in DOMAIN messages : 
       /\ (messages[m] > 0)
       /\ m.mtype = commit_ack
@@ -235,18 +235,18 @@ The classic two-phase commit protocol.
       /\ messages' = Receive(m, messages)
     /\ UNCHANGED <<responded, aborted>>
   
-  CSendAbort5(self, p) ==
+  CSendAbort6(self, p) ==
     /\ \A pi \in P : 
-      \/ pc[self][<<Ct0, p>>] = 1
       \/ pc[self][<<Ct0, p>>] = 2
-    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct1, p>>] = 5]]
+      \/ pc[self][<<Ct0, p>>] = 3
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct1, p>>] = 6]]
     /\ 
       /\ messages' = Send([mtype |-> abort, msrc |-> self, mdest |-> p], messages)
     /\ UNCHANGED <<responded, aborted>>
   
-  CReceiveAbortAck6(self, p) ==
-    /\ pc[self][<<Ct1, p>>] = 5
-    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct1, p>>] = 6]]
+  CReceiveAbortAck7(self, p) ==
+    /\ pc[self][<<Ct1, p>>] = 6
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct1, p>>] = 7]]
     /\ \E m \in DOMAIN messages : 
       /\ (messages[m] > 0)
       /\ m.mtype = abort_ack
@@ -254,9 +254,9 @@ The classic two-phase commit protocol.
       /\ messages' = Receive(m, messages)
     /\ UNCHANGED <<responded, aborted>>
   
-  PReceivePrepare7(self, c) ==
+  PReceivePrepare8(self, c) ==
     /\ pc[self][<<Pt0, c>>] = -1
-    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 7]]
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 8]]
     /\ \E m \in DOMAIN messages : 
       /\ (messages[m] > 0)
       /\ m.mtype = prepare
@@ -264,25 +264,25 @@ The classic two-phase commit protocol.
       /\ messages' = Receive(m, messages)
     /\ UNCHANGED <<responded, aborted>>
   
-  PSendPrepared8(self, c) ==
-    /\ pc[self][<<Pt0, c>>] = 7
-    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 8]]
+  PSendPrepared9(self, c) ==
+    /\ pc[self][<<Pt0, c>>] = 8
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 9]]
     /\ 
       /\ messages' = Send([mtype |-> prepared, msrc |-> self, mdest |-> c], messages)
     /\ UNCHANGED <<responded, aborted>>
   
-  PSendAbort9(self, c) ==
-    /\ pc[self][<<Pt0, c>>] = 7
-    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 9]]
+  PSendAbort10(self, c) ==
+    /\ pc[self][<<Pt0, c>>] = 8
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 10]]
     /\ 
       /\ messages' = Send([mtype |-> abort, msrc |-> self, mdest |-> c], messages)
     /\ UNCHANGED <<responded, aborted>>
   
-  PReceiveCommit10(self, c) ==
+  PReceiveCommit11(self, c) ==
     /\ 
-      \/ pc[self][<<Pt0, c>>] = 8
       \/ pc[self][<<Pt0, c>>] = 9
-    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 10]]
+      \/ pc[self][<<Pt0, c>>] = 10
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 11]]
     /\ \E m \in DOMAIN messages : 
       /\ (messages[m] > 0)
       /\ m.mtype = commit
@@ -290,18 +290,18 @@ The classic two-phase commit protocol.
       /\ messages' = Receive(m, messages)
     /\ UNCHANGED <<responded, aborted>>
   
-  PSendCommitAck11(self, c) ==
-    /\ pc[self][<<Pt0, c>>] = 10
-    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 11]]
+  PSendCommitAck12(self, c) ==
+    /\ pc[self][<<Pt0, c>>] = 11
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 12]]
     /\ 
       /\ messages' = Send([mtype |-> commit_ack, msrc |-> self, mdest |-> c], messages)
     /\ UNCHANGED <<responded, aborted>>
   
-  PReceiveAbort12(self, c) ==
+  PReceiveAbort13(self, c) ==
     /\ 
-      \/ pc[self][<<Pt0, c>>] = 8
       \/ pc[self][<<Pt0, c>>] = 9
-    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 12]]
+      \/ pc[self][<<Pt0, c>>] = 10
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 13]]
     /\ \E m \in DOMAIN messages : 
       /\ (messages[m] > 0)
       /\ m.mtype = abort
@@ -309,28 +309,28 @@ The classic two-phase commit protocol.
       /\ messages' = Receive(m, messages)
     /\ UNCHANGED <<responded, aborted>>
   
-  PSendAbortAck13(self, c) ==
-    /\ pc[self][<<Pt0, c>>] = 12
-    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 13]]
+  PSendAbortAck14(self, c) ==
+    /\ pc[self][<<Pt0, c>>] = 13
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 14]]
     /\ 
       /\ messages' = Send([mtype |-> abort_ack, msrc |-> self, mdest |-> c], messages)
     /\ UNCHANGED <<responded, aborted>>
   
   Next ==
-    \/ \E self \in C : \E p \in P : CSendPrepare0(self, p)
-    \/ \E self \in C : \E p \in P : CReceivePrepared1(self, p)
-    \/ \E self \in C : \E p \in P : CReceiveAbort2(self, p)
-    \/ \E self \in C : \E p \in P : CSendCommit3(self, p)
-    \/ \E self \in C : \E p \in P : CReceiveCommitAck4(self, p)
-    \/ \E self \in C : \E p \in P : CSendAbort5(self, p)
-    \/ \E self \in C : \E p \in P : CReceiveAbortAck6(self, p)
-    \/ \E self \in P : \E c \in C : PReceivePrepare7(self, c)
-    \/ \E self \in P : \E c \in C : PSendPrepared8(self, c)
-    \/ \E self \in P : \E c \in C : PSendAbort9(self, c)
-    \/ \E self \in P : \E c \in C : PReceiveCommit10(self, c)
-    \/ \E self \in P : \E c \in C : PSendCommitAck11(self, c)
-    \/ \E self \in P : \E c \in C : PReceiveAbort12(self, c)
-    \/ \E self \in P : \E c \in C : PSendAbortAck13(self, c)
+    \/ \E self \in C : \E p \in P : CSendPrepare1(self, p)
+    \/ \E self \in C : \E p \in P : CReceivePrepared2(self, p)
+    \/ \E self \in C : \E p \in P : CReceiveAbort3(self, p)
+    \/ \E self \in C : \E p \in P : CSendCommit4(self, p)
+    \/ \E self \in C : \E p \in P : CReceiveCommitAck5(self, p)
+    \/ \E self \in C : \E p \in P : CSendAbort6(self, p)
+    \/ \E self \in C : \E p \in P : CReceiveAbortAck7(self, p)
+    \/ \E self \in P : \E c \in C : PReceivePrepare8(self, c)
+    \/ \E self \in P : \E c \in C : PSendPrepared9(self, c)
+    \/ \E self \in P : \E c \in C : PSendAbort10(self, c)
+    \/ \E self \in P : \E c \in C : PReceiveCommit11(self, c)
+    \/ \E self \in P : \E c \in C : PSendCommitAck12(self, c)
+    \/ \E self \in P : \E c \in C : PReceiveAbort13(self, c)
+    \/ \E self \in P : \E c \in C : PSendAbortAck14(self, c)
   
   Spec == Init /\ [][Next]_vars
   
@@ -338,6 +338,7 @@ The classic two-phase commit protocol.
 
   $ protocol monitor --parties C,P 2pc.spec
   monitorC.go
+  monitorP.go
 
   $ cat monitorC.go
   package rv
@@ -352,140 +353,292 @@ The classic two-phase commit protocol.
   	Aborted   map[string]bool
   }
   
-  func (m *Monitor) t0(g Global) bool {
-  	return (!reflect.DeepEqual(g.Aborted, map[string]bool{}) || reflect.DeepEqual(g.Responded, m.vars["P"]))
-  }
-  
-  type State int
-  
-  const (
-  	S_0_Y State = iota
-  	S_1_G
-  )
-  
   type Action int
   
   const (
-  	CSendPrepare0 Action = iota
-  	CReceivePrepared1
-  	CReceiveAbort2
-  	CSendCommit3
-  	CReceiveCommitAck4
-  	CSendAbort5
-  	CReceiveAbortAck6
+  	CSendPrepare1 Action = iota
+  	CReceivePrepared2
+  	CReceiveAbort3
+  	CSendCommit4
+  	CReceiveCommitAck5
+  	CSendAbort6
+  	CReceiveAbortAck7
   )
   
-  func (m *Monitor) precondition(action Action) bool {
+  func all(s []string, f func(string) bool) bool {
+  	b := true
+  	for _, v := range s {
+  		b = b && f(v)
+  	}
+  	return b
+  }
+  
+  func allSet(s map[string]bool, f func(string) bool) bool {
+  	b := true
+  	for k := range s {
+  		b = b && f(k)
+  	}
+  	return b
+  }
+  
+  func any(s []string, f func(string) bool) bool {
+  	b := false
+  	for _, v := range s {
+  		b = b || f(v)
+  	}
+  	return b
+  }
+  
+  func anySet(s map[string]bool, f func(string) bool) bool {
+  	b := false
+  	for k := range s {
+  		b = b || f(k)
+  	}
+  	return b
+  }
+  
+  func (m *Monitor) precondition(g *Global, action Action, params ...string) error {
   	switch action {
-  	case CSendPrepare0:
-  		return true
-  	case CReceivePrepared1:
-  		return m.pc == 0
-  	case CReceiveAbort2:
-  		return m.pc == 0
-  	case CSendCommit3:
-  		return m.pc == 2 || m.pc == 1
-  	case CReceiveCommitAck4:
-  		return m.pc == 3
-  	case CSendAbort5:
-  		return m.pc == 2 || m.pc == 1
-  	case CReceiveAbortAck6:
-  		return m.pc == 5
+  	case CSendPrepare1:
+  		if len(params) != 1 {
+  			return errors.New("expected 1 params")
+  		}
+  		// no preconditions
+  		if !(m.PC["Ct0_"+(params[0] /* p : P */)] == 0) {
+  			return errors.New("control precondition violated")
+  		}
+  		return nil
+  	case CReceivePrepared2:
+  		if len(params) != 1 {
+  			return errors.New("expected 1 params")
+  		}
+  		// no preconditions
+  		if !(m.PC["Ct0_"+(params[0] /* p : P */)] == 1) {
+  			return errors.New("control precondition violated")
+  		}
+  		return nil
+  	case CReceiveAbort3:
+  		if len(params) != 1 {
+  			return errors.New("expected 1 params")
+  		}
+  		// no preconditions
+  		if !(m.PC["Ct0_"+(params[0] /* p : P */)] == 1) {
+  			return errors.New("control precondition violated")
+  		}
+  		return nil
+  	case CSendCommit4:
+  		if len(params) != 1 {
+  			return errors.New("expected 1 params")
+  		}
+  		if g != nil && !(reflect.DeepEqual(g.Aborted, map[string]bool{})) {
+  			return errors.New("logical precondition violated")
+  		}
+  		if !(allSet(m.vars["P"], func(p string) bool { return m.PC["Ct0_"+(p)] == 2 || m.PC["Ct0_"+(p)] == 3 })) {
+  			return errors.New("control precondition violated")
+  		}
+  		return nil
+  	case CReceiveCommitAck5:
+  		if len(params) != 1 {
+  			return errors.New("expected 1 params")
+  		}
+  		// no preconditions
+  		if !(m.PC["Ct2_"+(params[0] /* p : P */)] == 4) {
+  			return errors.New("control precondition violated")
+  		}
+  		return nil
+  	case CSendAbort6:
+  		if len(params) != 1 {
+  			return errors.New("expected 1 params")
+  		}
+  		if g != nil && !(!reflect.DeepEqual(g.Aborted, map[string]bool{})) {
+  			return errors.New("logical precondition violated")
+  		}
+  		if !(allSet(m.vars["P"], func(p string) bool { return m.PC["Ct0_"+(p)] == 2 || m.PC["Ct0_"+(p)] == 3 })) {
+  			return errors.New("control precondition violated")
+  		}
+  		return nil
+  	case CReceiveAbortAck7:
+  		if len(params) != 1 {
+  			return errors.New("expected 1 params")
+  		}
+  		// no preconditions
+  		if !(m.PC["Ct1_"+(params[0] /* p : P */)] == 6) {
+  			return errors.New("control precondition violated")
+  		}
+  		return nil
   	default:
   		panic("invalid action")
   	}
   }
   
-  func (m *Monitor) applyPostcondition(action Action) {
+  func (m *Monitor) applyPostcondition(action Action, params ...string) error {
   	switch action {
-  	case CSendPrepare0:
-  		m.pc = 0
-  	case CReceivePrepared1:
-  		m.pc = 1
-  	case CReceiveAbort2:
-  		m.pc = 2
-  	case CSendCommit3:
-  		m.pc = 3
-  	case CReceiveCommitAck4:
-  		m.pc = 4
-  	case CSendAbort5:
-  		m.pc = 5
-  	case CReceiveAbortAck6:
-  		m.pc = 6
+  	case CSendPrepare1:
+  		if len(params) != 1 {
+  			return errors.New("expected 1 params")
+  		}
+  		m.PC["Ct0_"+(params[0] /* p : P */)] = 1
+  	case CReceivePrepared2:
+  		if len(params) != 1 {
+  			return errors.New("expected 1 params")
+  		}
+  		m.PC["Ct0_"+(params[0] /* p : P */)] = 2
+  	case CReceiveAbort3:
+  		if len(params) != 1 {
+  			return errors.New("expected 1 params")
+  		}
+  		m.PC["Ct0_"+(params[0] /* p : P */)] = 3
+  	case CSendCommit4:
+  		if len(params) != 1 {
+  			return errors.New("expected 1 params")
+  		}
+  		m.PC["Ct2_"+(params[0] /* p : P */)] = 4
+  	case CReceiveCommitAck5:
+  		if len(params) != 1 {
+  			return errors.New("expected 1 params")
+  		}
+  		m.PC["Ct2_"+(params[0] /* p : P */)] = 5
+  	case CSendAbort6:
+  		if len(params) != 1 {
+  			return errors.New("expected 1 params")
+  		}
+  		m.PC["Ct1_"+(params[0] /* p : P */)] = 6
+  	case CReceiveAbortAck7:
+  		if len(params) != 1 {
+  			return errors.New("expected 1 params")
+  		}
+  		m.PC["Ct1_"+(params[0] /* p : P */)] = 7
   	default:
   		panic("invalid action")
+  	}
+  	return nil
+  }
+  
+  // LTL property 0
+  
+  // Propositions
+  func (l *LTLMonitor0) t0(g Global) bool {
+  	return (!reflect.DeepEqual(g.Aborted, map[string]bool{}) || reflect.DeepEqual(g.Responded, l.vars["P"]))
+  }
+  
+  type State0 int
+  
+  const (
+  	S_0_Y State0 = iota
+  	S_1_G
+  )
+  
+  type LTLMonitor0 struct {
+  	state     State0
+  	succeeded bool
+  	failed    bool
+  	vars      map[string]map[string]bool
+  }
+  
+  func NewLTLMonitor0(vars map[string]map[string]bool) *LTLMonitor0 {
+  	return &LTLMonitor0{
+  		vars:      vars,
+  		state:     S_0_Y,
+  		succeeded: false,
+  		failed:    false,
+  	}
+  }
+  
+  func (l *LTLMonitor0) StepLTL0(g Global) error {
+  	if l.succeeded {
+  		return nil
+  	} else if l.failed {
+  		return errors.New("property falsified")
+  	}
+  
+  	// evaluate all the props
+  	t0 := l.t0(g)
+  
+  	// note the true ones, take that transition
+  	switch l.state {
+  	case S_0_Y:
+  		if t0 {
+  			l.state = S_1_G
+  			l.succeeded = true
+  			return nil
+  		} else {
+  			l.state = S_0_Y
+  			return nil
+  		}
+  	case S_1_G:
+  		if t0 {
+  			l.state = S_1_G
+  			l.succeeded = true
+  			return nil
+  		} else {
+  			l.state = S_1_G
+  			l.succeeded = true
+  			return nil
+  		}
+  	default:
+  		panic("invalid state")
   	}
   }
   
   type Monitor struct {
-  	state    State
   	previous Global
-  	done     bool
-  	dead     bool
-  	pc       int
+  	PC       map[string]int
   	//vars     map[string][]string
-  	vars map[string]map[string]bool
+  	vars        map[string]map[string]bool
+  	ltlMonitor0 *LTLMonitor0
   }
   
   //func NewMonitor(vars map[string][]string) *Monitor {
   func NewMonitor(vars map[string]map[string]bool) *Monitor {
   	return &Monitor{
-  		state: S_0_Y,
   		// previous is the empty Global
-  		done: false,
-  		dead: false,
-  		pc:   -1,
-  		vars: vars,
+  		PC:          map[string]int{},
+  		vars:        vars,
+  		ltlMonitor0: NewLTLMonitor0(vars),
   	}
   }
   
-  // For debugging
-  func (m *Monitor) InternalState() State {
-  	return m.state
-  }
-  
-  func (m *Monitor) Step(g Global, act Action) error {
-  	if m.done {
-  		return nil
-  	} else if m.dead {
-  		return errors.New("sink state")
-  	}
-  
-  	if !m.precondition(act) {
-  		return errors.New("precondition violation")
+  func (m *Monitor) Step(g Global, act Action, params ...string) error {
+  	if err := m.precondition(&g, act, params...); err != nil {
+  		return err
   	}
   
   	m.previous = g
   
-  	m.applyPostcondition(act)
-  
-  	// evaluate all the props
-  	t0 := m.t0(g)
-  
-  	// note the true ones, take that transition
-  	switch m.state {
-  	case S_0_Y:
-  		if t0 {
-  			m.state = S_1_G
-  			m.done = true
-  			return nil
-  		} else {
-  			m.state = S_0_Y
-  			return nil
-  		}
-  
-  	case S_1_G:
-  		if t0 {
-  			m.state = S_1_G
-  			m.done = true
-  			return nil
-  		} else {
-  			m.state = S_1_G
-  			m.done = true
-  			return nil
-  		}
-  
-  	default:
-  		panic("invalid state")
+  	if err := m.applyPostcondition(act, params...); err != nil {
+  		return err
   	}
+  
+  	// LTL monitors
+  
+  	if err := m.ltlMonitor0.StepLTL0(g); err != nil {
+  		return err
+  	}
+  
+  	return nil
+  }
+  
+  func (m *Monitor) StepA(act Action, params ...string) error {
+  	if err := m.precondition(nil, act, params...); err != nil {
+  		return err
+  	}
+  
+  	if err := m.applyPostcondition(act, params...); err != nil {
+  		return err
+  	}
+  
+  	return nil
+  }
+  
+  func (m *Monitor) StepS(g Global) error {
+  
+  	m.previous = g
+  
+  	// LTL monitors
+  
+  	if err := m.ltlMonitor0.StepLTL0(g); err != nil {
+  		return err
+  	}
+  
+  	return nil
   }

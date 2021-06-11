@@ -587,7 +587,7 @@ let to_tla env actions =
                           (* TODO note that this product needs to be extended for each additional level of nested quantification in a spec *)
                           (* "(threads \\X participants) \\union threads", *)
                           "threadParticipants",
-                          Term "-1" ) ) );
+                          Term (string_of_int default_pc_value) ) ) );
             ]) )
   in
   let next = Def ("Next", [], Disj (List.concat nexts)) in

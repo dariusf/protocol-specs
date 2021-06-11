@@ -24,8 +24,60 @@ module G = struct
     !res
 end
 
-let template ~extra_imports ~global_contents ~prop_fns ~states ~action_defs
-    ~preconditions ~postconditions ~initial_state ~prop_vars ~transitions () =
+let template_ltl ~i ~prop_fns ~states ~initial_state ~prop_vars ~transitions ()
+    =
+  Format.sprintf
+    {|
+// LTL property %d
+
+// Propositions
+%s
+
+type State%d int
+const (
+%s
+)
+
+type LTLMonitor%d struct {
+  state     State%d
+	succeeded bool
+	failed    bool
+  vars      map[string]map[string]bool
+}
+
+func NewLTLMonitor%d(vars map[string]map[string]bool) *LTLMonitor%d {
+  return &LTLMonitor%d{
+    vars: vars,
+    state: %s,
+    succeeded: false,
+    failed: false,
+  }
+}
+
+func (l *LTLMonitor%d) StepLTL%d(g Global) error {
+	if l.succeeded {
+		return nil
+	} else if l.failed {
+		return errors.New("property falsified")
+	}
+
+
+	// evaluate all the props
+	%s
+
+	// note the true ones, take that transition
+	switch l.state {
+	%s
+	default:
+		panic("invalid state")
+	}
+}
+|}
+    i prop_fns i states i i i i i initial_state i i prop_vars transitions
+
+let template_monitor ~extra_imports ~global_contents ~action_defs ~preconditions
+    ~postconditions ~ltl_monitor_defs ~ltl_monitor_fields ~ltl_monitor_init
+    ~ltl_monitor_step () =
   Format.sprintf
     {|
 package rv
@@ -39,19 +91,45 @@ type Global struct {
 %s
 }
 
-%s
-
-type State int
-const (
-%s
-)
-
 type Action int
 const (
 %s
 )
 
-func (m *Monitor) precondition(action Action) bool {
+
+func all(s []string, f func(string) bool) bool {
+	b := true
+	for _, v := range s {
+		b = b && f(v)
+	}
+	return b
+}
+
+func allSet(s map[string]bool, f func(string) bool) bool {
+	b := true
+	for k := range s {
+		b = b && f(k)
+	}
+	return b
+}
+
+func any(s []string, f func(string) bool) bool {
+	b := false
+	for _, v := range s {
+		b = b || f(v)
+	}
+	return b
+}
+
+func anySet(s map[string]bool, f func(string) bool) bool {
+	b := false
+	for k := range s {
+		b = b || f(k)
+	}
+	return b
+}
+
+func (m *Monitor) precondition(g *Global, action Action, params ...string) error {
 	switch action {
     %s
     default:
@@ -59,69 +137,79 @@ func (m *Monitor) precondition(action Action) bool {
 	}
 }
 
-func (m *Monitor) applyPostcondition(action Action) {
+func (m *Monitor) applyPostcondition(action Action, params ...string) error {
 	switch action {
     %s
     default:
    		panic("invalid action")
 	}
+  return nil
 }
+
+%s
 
 type Monitor struct {
-	state    State
 	previous Global
-	done     bool
-	dead     bool
-  pc       int
+  PC map[string]int
   //vars     map[string][]string
   vars     map[string]map[string]bool
+  %s
 }
 
 //func NewMonitor(vars map[string][]string) *Monitor {
 func NewMonitor(vars map[string]map[string]bool) *Monitor {
 	return &Monitor{
-    state: %s,
     // previous is the empty Global
-    done: false,
-    dead: false,
-    pc: -1,
+    PC: map[string]int{},
     vars: vars,
+    %s
   }
 }
 
-// For debugging
-func (m *Monitor) InternalState() State {
-	return m.state
-}
-
-func (m *Monitor) Step(g Global, act Action) error {
-	if m.done {
-		return nil
-	} else if m.dead {
-		return errors.New("sink state")
-	}
-
-	if !m.precondition(act) {
-		return errors.New("precondition violation")
+func (m *Monitor) Step(g Global, act Action, params ...string) error {
+	if err := m.precondition(&g, act, params...); err != nil {
+    return err
 	}
 
 	m.previous = g
 
-	m.applyPostcondition(act)
+	if err := m.applyPostcondition(act, params...); err != nil {
+    return err
+  }
 
-	// evaluate all the props
-	%s
+  // LTL monitors
 
-	// note the true ones, take that transition
-	switch m.state {
-	%s
-	default:
-		panic("invalid state")
-	}
+  %s
+
+  return nil
+}
+
+func (m *Monitor) StepA(act Action, params ...string) error {
+  if err := m.precondition(nil, act, params...); err != nil {
+    return err
+  }
+
+  if err := m.applyPostcondition(act, params...); err != nil {
+    return err
+  }
+
+  return nil
+}
+
+func (m *Monitor) StepS(g Global) error {
+
+  m.previous = g
+
+  // LTL monitors
+
+  %s
+
+  return nil
 }
 |}
-    extra_imports global_contents prop_fns states action_defs preconditions
-    postconditions initial_state prop_vars transitions
+    extra_imports global_contents action_defs preconditions postconditions
+    ltl_monitor_defs ltl_monitor_fields ltl_monitor_init ltl_monitor_step
+    ltl_monitor_step
 
 let fresh =
   let n = ref 0 in
@@ -337,7 +425,7 @@ let rec compile parties te =
       let f1 = match f with "size" -> "len" | _ -> f in
       Format.sprintf "%s(%s)" f1 (String.concat ", " args)
   | Var (V (_, v)) when List.mem ~eq:String.equal v parties ->
-    Format.sprintf "m.vars[\"%s\"]" (state_var_name v)
+    Format.sprintf "l.vars[\"%s\"]" (state_var_name v)
   | Var (V (_, v)) -> Format.sprintf "g.%s" (state_var_name v)
   | Tuple (_, _) -> nyi "compile tuple"
 
@@ -348,60 +436,208 @@ let check_monitorability env ltl node_colors =
   then
     bad_input "%a is not monitorable" (Print.pp_texpr ~env) ltl
 
-let translate_party_ltl env ltl_i (pname, ltl) tprotocol action_graph
-    action_nodes parties =
-  (* TODO use ltl_i when having multiple properties falsified is supported *)
-  (* TODO use pname to qualify stuff *)
-  let fmls =
-    ltl
-    |> List.map (fun ltl ->
-           let (ltl1, bindings) = extract_subexprs env ltl in
-           let fml = ltl1 |> fml_to_ltl3tools in
-           let output = fml |> invoke_ltl2mon in
-           if debug then
-             (* TODO re-print the graphviz file with updated names? *)
-             write_to_file
-               ~filename:(Format.sprintf "ltl-%s-%d.dot" pname ltl_i)
-               output;
-           let (node_colors, edges, graph) = output |> parse_graphviz_output in
-           check_monitorability env ltl node_colors;
-           let initial_state =
-             G.find_vertices
-               (fun v ->
-                 G.in_degree graph v = 0
-                 || G.in_degree graph v = 1
-                    && List.mem ~eq:String.equal v (G.pred graph v))
-               graph
-             |> List.head_opt
-             |> Option.get_exn_or "no initial state"
-           in
-           (node_colors, bindings, edges, initial_state))
+let generate_ltl_monitor ltl_i env parties pname ltl =
+  let (ltl1, bindings) = extract_subexprs env ltl in
+  let fml = ltl1 |> fml_to_ltl3tools in
+  let output = fml |> invoke_ltl2mon in
+  if debug then (* TODO re-print the graphviz file with updated names? *)
+    write_to_file ~filename:(Format.sprintf "ltl-%s-%d.dot" pname ltl_i) output;
+  let (node_colors, edges, graph) = output |> parse_graphviz_output in
+  check_monitorability env ltl node_colors;
+  let initial_state =
+    G.find_vertices
+      (fun v ->
+        G.in_degree graph v = 0
+        || G.in_degree graph v = 1
+           && List.mem ~eq:String.equal v (G.pred graph v))
+      graph
+    |> List.head_opt
+    |> Option.get_exn_or "no initial state"
   in
-  let node_colors = List.map (fun (a, _, _, _) -> a) fmls in
-  let bindings = List.map (fun (_, a, _, _) -> a) fmls in
-  let edges = List.map (fun (_, _, a, _) -> a) fmls in
-  let initial_state = List.map (fun (_, _, _, a) -> a) fmls in
 
-  (* TODO support generating more than one automaton, need to eliminate the return in the state machine transitions *)
-  let node_colors = List.hd node_colors in
-  let bindings = List.hd bindings in
-  let edges = List.hd edges in
-  let initial_state = List.hd initial_state in
+  (* (node_colors, bindings, edges, initial_state) *)
+  let states =
+    match node_colors |> SMap.keys |> List.of_iter with
+    | [] -> bad_input "states should not be empty"
+    | n :: rest ->
+      Format.sprintf "%s State%d = iota\n%s\n" n ltl_i
+        (rest |> String.concat "\n")
+  in
+  let prop_vars =
+    bindings |> SMap.bindings
+    |> List.map (fun (v, _) ->
+           if debug then
+             Format.sprintf "%s := l.%s(g)\nprintln(\"%s\", %s)" v v v v
+           else
+             Format.sprintf "%s := l.%s(g)" v v)
+    |> String.concat "\n"
+  in
+  let prop_fns =
+    bindings |> SMap.bindings
+    |> List.map (fun (v, te) ->
+           Format.sprintf
+             "func (l *LTLMonitor%d) %s(g Global) bool {\nreturn %s\n}" ltl_i v
+             (compile parties te))
+    |> String.concat "\n"
+  in
+  let generate_ifs eligible_edges vars props =
+    let rec aux vars props =
+      match vars with
+      | [] ->
+        (* find new state *)
+        let new_state =
+          match
+            eligible_edges |> List.filter (fun (_, _, s) -> SSet.equal props s)
+          with
+          | [(_, t, _)] -> t
+          | _ -> bug "could not find state"
+        in
+        let color = SMap.find new_state node_colors in
+        let outcome =
+          match color with
+          | "green" -> {|l.succeeded = true
+          return nil|}
+          | "red" ->
+            {|l.failed = true
+          return errors.New("property falsified")|}
+          | "yellow" -> "return nil"
+          | _ -> bug "invalid color %s" color
+        in
+        Format.sprintf "l.state = %s\n%s" new_state outcome
+      | v :: vs ->
+        (* split on one of the propositions *)
+        Format.sprintf
+          {|if %s {
+          %s
+        } else {
+          %s
+        }|}
+          v
+          (aux vs (SSet.add v props))
+          (aux vs props)
+    in
+    aux vars props
+  in
+  let transitions =
+    node_colors |> SMap.keys |> List.of_iter
+    |> List.map (fun n ->
+           let eligible =
+             edges |> List.filter (fun (f, _, _) -> String.equal f n)
+           in
+           Format.sprintf "case %s:\n%s" n
+             (generate_ifs eligible
+                (bindings |> SMap.keys |> List.of_iter)
+                SSet.empty))
+    |> String.concat "\n"
+  in
+  let type_name = Format.sprintf "LTLMonitor%d" ltl_i in
+  let field_name = Format.sprintf "ltlMonitor%d" ltl_i in
+  let fields = Format.sprintf "%s *%s" field_name type_name in
+  let inits = Format.sprintf "%s: NewLTLMonitor%d(vars)," field_name ltl_i in
+  let steps =
+    Format.sprintf
+      {|if err := m.%s.StepLTL%d(g); err != nil {
+    return err
+  }|}
+      field_name ltl_i
+  in
 
+  let defs =
+    template_ltl ~i:ltl_i ~prop_fns ~states ~initial_state ~prop_vars
+      ~transitions ()
+  in
+  (defs, fields, inits, steps)
+
+let translate_party_ltl env ltl_i pname ltl tprotocol action_graph action_nodes
+    parties =
+  (* TODO use pname to qualify stuff *)
+  let ltl_monitors =
+    List.map (generate_ltl_monitor ltl_i env parties pname) ltl
+  in
+  let ltl_monitor_defs =
+    ltl_monitors |> List.map (fun (d, _, _, _) -> d) |> String.concat "\n\n"
+  in
+  let ltl_monitor_fields =
+    ltl_monitors |> List.map (fun (_, f, _, _) -> f) |> String.concat "\n"
+  in
+  let ltl_monitor_init =
+    ltl_monitors |> List.map (fun (_, _, i, _) -> i) |> String.concat "\n"
+  in
+  let ltl_monitor_step =
+    ltl_monitors |> List.map (fun (_, _, _, s) -> s) |> String.concat "\n"
+  in
   let assigned = Actions.assigned_variables tprotocol in
 
+  let pc = "PC" in
   (* start filling in the template *)
+  let tid_to_string bound (t : tid) =
+    match t.params with
+    | [] -> t.name
+    | _ ->
+      Format.sprintf "\"%s_\" + (%s)" t.name
+        (List.mapi
+           (fun i (v, s) ->
+             if List.mem_assoc ~eq:String.equal v bound then
+               Format.sprintf "%s" v
+             else
+               Format.sprintf "params[%d] /* %s : %s */" i v s)
+           t.params
+        |> String.concat "+")
+  in
+  let params_check params =
+    match params with
+    | [] -> ""
+    | _ ->
+      let l = List.length params in
+      Format.sprintf
+        {|if len(params) != %d { return errors.New("expected %d params") }|} l l
+  in
   let preconditions =
+    let open Actions in
+    let fence_to_precondition act (f : fence_cond) =
+      let rec aux bound f =
+        match f with
+        | ThreadStart ->
+          let current_tid = act.protocol.pmeta.tid in
+          Format.sprintf "m.%s[%s] == %d" pc
+            (tid_to_string bound current_tid)
+            default_pc_value
+        | AnyOf fs -> List.map (aux bound) fs |> String.concat " || "
+        | AllOf fs -> List.map (aux bound) fs |> String.concat " && "
+        | Forall (v, s, z) ->
+          Format.sprintf
+            "allSet(m.vars[\"%s\"], func(%s string) bool { return %s })" s v
+            (aux ((v, s) :: bound) z)
+        | Cond (tid, i) ->
+          Format.sprintf "m.%s[%s] == %d" pc (tid_to_string bound tid) i
+      in
+      aux [] f
+    in
     IMap.bindings action_nodes
     |> List.map (fun (id, act) ->
-           let preds = Actions.G.pred action_graph id in
-           let body =
-             match preds with
-             | [] -> Format.sprintf "return true"
+           let pres =
+             match act.preconditions with
+             | [] -> "// no preconditions"
              | _ ->
-               Format.sprintf "return %s"
-                 (List.map (fun p -> Format.sprintf "m.pc == %d" p) preds
-                 |> String.concat " || ")
+               act.preconditions
+               |> List.map (fun p ->
+                      Format.sprintf
+                        {|if g != nil && !(%s) {
+              return errors.New("logical precondition violated")
+            }|}
+                        (compile parties p))
+               |> String.concat "\n"
+           in
+           let body =
+             Format.sprintf
+               {|%s
+               %s
+               if ! (%s) {
+                 return errors.New("control precondition violated")
+               }
+               return nil|}
+               (params_check act.params) pres
+               (fence_to_precondition act act.fence)
            in
            Format.sprintf "case %s:\n%s"
              (Actions.node_name pname (id, act))
@@ -409,11 +645,16 @@ let translate_party_ltl env ltl_i (pname, ltl) tprotocol action_graph
     |> String.concat "\n"
   in
   let postconditions =
+    let open Actions in
     IMap.bindings action_nodes
     |> List.map (fun (id, act) ->
-           Format.sprintf "case %s:\nm.pc = %d"
+           let tid = act.protocol.pmeta.tid in
+           Format.sprintf
+             {|case %s:
+           %s
+           m.%s[%s] = %d|}
              (Actions.node_name pname (id, act))
-             id)
+             (params_check act.params) pc (tid_to_string [] tid) id)
     |> String.concat "\n"
   in
   let action_defs =
@@ -432,78 +673,20 @@ let translate_party_ltl env ltl_i (pname, ltl) tprotocol action_graph
            Format.sprintf "%s %s" (state_var_name v) (compile_typ env info.typ))
     |> String.concat "\n"
   in
-  let states =
-    match node_colors |> SMap.keys |> List.of_iter with
-    | [] -> bad_input "states should not be empty"
-    | n :: rest ->
-      Format.sprintf "%s State = iota\n%s\n" n (rest |> String.concat "\n")
-  in
-  let prop_vars =
-    bindings |> SMap.bindings
-    |> List.map (fun (v, _) ->
-           if debug then
-             Format.sprintf "%s := m.%s(g)\nprintln(\"%s\", %s)" v v v v
-           else
-             Format.sprintf "%s := m.%s(g)" v v)
-    |> String.concat "\n"
-  in
-  let prop_fns =
-    bindings |> SMap.bindings
-    |> List.map (fun (v, te) ->
-           Format.sprintf "func (m *Monitor) %s(g Global) bool {\nreturn %s\n}"
-             v (compile parties te))
-    |> String.concat "\n"
-  in
-  let generate_ifs eligible_edges vars props =
-    let rec aux vars props =
-      match vars with
-      | [] ->
-        (* find new state *)
-        let new_state =
-          match
-            eligible_edges |> List.filter (fun (_, _, s) -> SSet.equal props s)
-          with
-          | [(_, t, _)] -> t
-          | _ -> bug "could not find state"
-        in
-        let color = SMap.find new_state node_colors in
-        let outcome =
-          match color with
-          | "green" -> "m.done = true\nreturn nil"
-          | "red" -> "m.dead = true\nreturn errors.New(\"sink state\")"
-          | "yellow" -> "return nil"
-          | _ -> bug "invalid color %s" color
-        in
-        Format.sprintf "m.state = %s\n%s" new_state outcome
-      | v :: vs ->
-        (* split on one of the propositions *)
-        Format.sprintf "if %s {\n%s\n} else {\n%s\n}\n" v
-          (aux vs (SSet.add v props))
-          (aux vs props)
-    in
-    aux vars props
-  in
-  let transitions =
-    node_colors |> SMap.keys |> List.of_iter
-    |> List.map (fun n ->
-           let eligible =
-             edges |> List.filter (fun (f, _, _) -> String.equal f n)
-           in
-           Format.sprintf "case %s:\n%s" n
-             (generate_ifs eligible
-                (bindings |> SMap.keys |> List.of_iter)
-                SSet.empty))
-    |> String.concat "\n"
-  in
   let extra_imports = if !uses_reflect then "\"reflect\"" else "" in
-  template ~extra_imports ~global_contents ~prop_fns ~states ~action_defs
-    ~preconditions ~postconditions ~initial_state ~prop_vars ~transitions ()
+  (* ~prop_fns ~states  *)
+  (* ~initial_state ~prop_vars  *)
+  (* ~transitions  *)
+  template_monitor ~extra_imports ~global_contents ~action_defs ~preconditions
+    ~postconditions ~ltl_monitor_defs ~ltl_monitor_fields ~ltl_monitor_init
+    ~ltl_monitor_step ()
 
-let translate_party_ltl env _ltl_i (pname, ltl) tprotocol action_graph
-    action_nodes parties =
-  let code =
-    translate_party_ltl env _ltl_i (pname, ltl) tprotocol action_graph
-      action_nodes parties
-    |> invoke_gofmt
-  in
-  write_to_file ~filename:(Format.sprintf "monitor%s.go" pname) code
+let translate_party_ltl env i pname ltl tprotocol action_graph action_nodes
+    parties =
+  if not (IMap.is_empty action_nodes) then
+    let code =
+      translate_party_ltl env i pname ltl tprotocol action_graph action_nodes
+        parties
+      |> invoke_gofmt
+    in
+    write_to_file ~filename:(Format.sprintf "monitor%s.go" pname) code

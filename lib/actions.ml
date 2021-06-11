@@ -99,8 +99,10 @@ type node = {
 }
 [@@deriving show { with_path = false }]
 
+let default_pc_value = 0
+
 let fresh_node_id =
-  let n = ref 0 in
+  let n = ref (default_pc_value + 1) in
   fun () ->
     let r = !n in
     incr n;

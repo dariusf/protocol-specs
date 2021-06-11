@@ -24,110 +24,194 @@
   	A int
   }
   
-  func (m *Monitor) t0(g Global) bool {
-  	return (g.A > 0)
-  }
-  
-  type State int
-  
-  const (
-  	S_0_R State = iota
-  	S_1_Y
-  )
-  
   type Action int
   
   const (
-  	CChangeA0 Action = iota
+  	CChangeA1 Action = iota
   )
   
-  func (m *Monitor) precondition(action Action) bool {
+  func all(s []string, f func(string) bool) bool {
+  	b := true
+  	for _, v := range s {
+  		b = b && f(v)
+  	}
+  	return b
+  }
+  
+  func allSet(s map[string]bool, f func(string) bool) bool {
+  	b := true
+  	for k := range s {
+  		b = b && f(k)
+  	}
+  	return b
+  }
+  
+  func any(s []string, f func(string) bool) bool {
+  	b := false
+  	for _, v := range s {
+  		b = b || f(v)
+  	}
+  	return b
+  }
+  
+  func anySet(s map[string]bool, f func(string) bool) bool {
+  	b := false
+  	for k := range s {
+  		b = b || f(k)
+  	}
+  	return b
+  }
+  
+  func (m *Monitor) precondition(g *Global, action Action, params ...string) error {
   	switch action {
-  	case CChangeA0:
-  		return true
+  	case CChangeA1:
+  
+  		// no preconditions
+  		if !(m.PC[Cmain] == 0) {
+  			return errors.New("control precondition violated")
+  		}
+  		return nil
   	default:
   		panic("invalid action")
   	}
   }
   
-  func (m *Monitor) applyPostcondition(action Action) {
+  func (m *Monitor) applyPostcondition(action Action, params ...string) error {
   	switch action {
-  	case CChangeA0:
-  		m.pc = 0
+  	case CChangeA1:
+  
+  		m.PC[Cmain] = 1
   	default:
   		panic("invalid action")
+  	}
+  	return nil
+  }
+  
+  // LTL property 0
+  
+  // Propositions
+  func (l *LTLMonitor0) t0(g Global) bool {
+  	return (g.A > 0)
+  }
+  
+  type State0 int
+  
+  const (
+  	S_0_R State0 = iota
+  	S_1_Y
+  )
+  
+  type LTLMonitor0 struct {
+  	state     State0
+  	succeeded bool
+  	failed    bool
+  	vars      map[string]map[string]bool
+  }
+  
+  func NewLTLMonitor0(vars map[string]map[string]bool) *LTLMonitor0 {
+  	return &LTLMonitor0{
+  		vars:      vars,
+  		state:     S_1_Y,
+  		succeeded: false,
+  		failed:    false,
+  	}
+  }
+  
+  func (l *LTLMonitor0) StepLTL0(g Global) error {
+  	if l.succeeded {
+  		return nil
+  	} else if l.failed {
+  		return errors.New("property falsified")
+  	}
+  
+  	// evaluate all the props
+  	t0 := l.t0(g)
+  
+  	// note the true ones, take that transition
+  	switch l.state {
+  	case S_0_R:
+  		if t0 {
+  			l.state = S_0_R
+  			l.failed = true
+  			return errors.New("property falsified")
+  		} else {
+  			l.state = S_0_R
+  			l.failed = true
+  			return errors.New("property falsified")
+  		}
+  	case S_1_Y:
+  		if t0 {
+  			l.state = S_1_Y
+  			return nil
+  		} else {
+  			l.state = S_0_R
+  			l.failed = true
+  			return errors.New("property falsified")
+  		}
+  	default:
+  		panic("invalid state")
   	}
   }
   
   type Monitor struct {
-  	state    State
   	previous Global
-  	done     bool
-  	dead     bool
-  	pc       int
+  	PC       map[string]int
   	//vars     map[string][]string
-  	vars map[string]map[string]bool
+  	vars        map[string]map[string]bool
+  	ltlMonitor0 *LTLMonitor0
   }
   
   //func NewMonitor(vars map[string][]string) *Monitor {
   func NewMonitor(vars map[string]map[string]bool) *Monitor {
   	return &Monitor{
-  		state: S_1_Y,
   		// previous is the empty Global
-  		done: false,
-  		dead: false,
-  		pc:   -1,
-  		vars: vars,
+  		PC:          map[string]int{},
+  		vars:        vars,
+  		ltlMonitor0: NewLTLMonitor0(vars),
   	}
   }
   
-  // For debugging
-  func (m *Monitor) InternalState() State {
-  	return m.state
-  }
-  
-  func (m *Monitor) Step(g Global, act Action) error {
-  	if m.done {
-  		return nil
-  	} else if m.dead {
-  		return errors.New("sink state")
-  	}
-  
-  	if !m.precondition(act) {
-  		return errors.New("precondition violation")
+  func (m *Monitor) Step(g Global, act Action, params ...string) error {
+  	if err := m.precondition(&g, act, params...); err != nil {
+  		return err
   	}
   
   	m.previous = g
   
-  	m.applyPostcondition(act)
-  
-  	// evaluate all the props
-  	t0 := m.t0(g)
-  
-  	// note the true ones, take that transition
-  	switch m.state {
-  	case S_0_R:
-  		if t0 {
-  			m.state = S_0_R
-  			m.dead = true
-  			return errors.New("sink state")
-  		} else {
-  			m.state = S_0_R
-  			m.dead = true
-  			return errors.New("sink state")
-  		}
-  
-  	case S_1_Y:
-  		if t0 {
-  			m.state = S_1_Y
-  			return nil
-  		} else {
-  			m.state = S_0_R
-  			m.dead = true
-  			return errors.New("sink state")
-  		}
-  
-  	default:
-  		panic("invalid state")
+  	if err := m.applyPostcondition(act, params...); err != nil {
+  		return err
   	}
+  
+  	// LTL monitors
+  
+  	if err := m.ltlMonitor0.StepLTL0(g); err != nil {
+  		return err
+  	}
+  
+  	return nil
+  }
+  
+  func (m *Monitor) StepA(act Action, params ...string) error {
+  	if err := m.precondition(nil, act, params...); err != nil {
+  		return err
+  	}
+  
+  	if err := m.applyPostcondition(act, params...); err != nil {
+  		return err
+  	}
+  
+  	return nil
+  }
+  
+  func (m *Monitor) StepS(g Global) error {
+  
+  	m.previous = g
+  
+  	// LTL monitors
+  
+  	if err := m.ltlMonitor0.StepLTL0(g); err != nil {
+  		return err
+  	}
+  
+  	return nil
   }
