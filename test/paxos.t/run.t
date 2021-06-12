@@ -26,13 +26,13 @@ Single-decree Paxos
       size(p.promise_responses) > p.majority =>*
         (forall a1 in p.promise_responses
            p->a1: propose(pn=p.proposal, pv=p.value);
-           a2 = a1;
+           ac2 = a1;
            (pn == a1.highest_proposal =>
               a1.accepted_proposal = pn;
               a1.accepted_value = pv;
               a1->p: accept;
               (forall l in L
-                 a2->l: accept)))))
+                 ac2->l: accept)))))
 
   $ protocol print paxos.spec --parties P,A,L --types
   (forall (p : party P;global) in (P : {party P};global)
@@ -60,13 +60,13 @@ Single-decree Paxos
       size((p.promise_responses : {party A};P)) > (p.majority : int;P) =>*
         (forall (a1 : party A;P) in (p.promise_responses : {party A};P)
            (p : party P;global)->(a1 : party A;P): propose((pn : int;A)=(p.proposal : int;P), (pv : int;A)=(p.value : int;P));
-           (a2 : party A;A) = (a1 : party A;A);
+           (ac2 : party A;A) = (a1 : party A;A);
            ((pn : int;A) == (a1.highest_proposal : int;A) =>
               (a1.accepted_proposal : int;A) = (pn : int;A);
               (a1.accepted_value : int;A) = (pv : int;A);
               (a1 : party A;A)->(p : party P;A): accept;
               (forall (l : party L;global) in (L : {party L};global)
-                 (a2 : party A;A)->(l : party L;global): accept)))))
+                 (ac2 : party A;A)->(l : party L;global): accept)))))
 
   $ protocol print paxos.spec --parties P,A,L --project P
   proposal = 0;
@@ -99,7 +99,7 @@ Single-decree Paxos
          ->p: promise(cp=a.accepted_proposal, cv=a.accepted_value))
       ||
       p->: propose(pn, pv);
-      a2 = a1;
+      ac2 = a1;
       (pn == a1.highest_proposal =>
          accepted_proposal = pn;
          accepted_value = pv;
@@ -110,6 +110,6 @@ Single-decree Paxos
   $ protocol print paxos.spec --parties P,A,L --project L
   (forall p in P
      (forall a1 in p.promise_responses
-        a2->: accept))
+        ac2->: accept))
 
   $ protocol print paxos.spec > paxos1.spec && protocol print paxos1.spec | protocol print > paxos2.spec && git diff --no-index paxos1.spec paxos2.spec

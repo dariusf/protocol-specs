@@ -31,7 +31,7 @@ monitor:
 	protocol monitor --parties C,P --project C <<< 'forall c in C c.a = 1 ltl ([] (a > 0))'
 
 clean:
-	rm -rf *.png *.tla
+	rm -rf *.png *.tla *.cfg *.dot *.log *.go
 
 dev:
 	# dune test -w

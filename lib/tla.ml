@@ -35,14 +35,17 @@ type def =
 
 type tla = def list
 
-let cfg_file_template ~constants =
-  Format.sprintf {|
+let cfg_file_template ~constants ~symmetry =
+  Format.sprintf
+    {|
 CONSTANTS
 %s
+%s
 SPECIFICATION Spec
+VIEW vars
 \* INVARIANT Inv
 |}
-    constants
+    constants symmetry
 
 let with_preamble name spec =
   Format.sprintf
@@ -67,19 +70,21 @@ Receive(m, msgs) ==
 
 VARIABLE pc
 
+VARIABLE history
 @[<h>%a@]
 
-Spec == Init /\ [][Next]_vars
+Spec == Init /\ [][Next]_<<vars, history>>
 
 ===============================================================================
 |}
     name
-    (PPrint.ToFormatter.pretty 0.8 120)
+    (Print.PP.ToFormatter.pretty 0.8 120)
     spec
 
 (* |> ignore; *)
 (* Format.sprintf "@[<h>%a@]" (PPrint.ToFormatter.pretty 0.8 120) spec *)
 
+(* TODO this is a terrible idea in general as fml is a write-only data structure *)
 let subst_fml ~sub ~replacement (f : fml) =
   let rec aux f =
     match f with
@@ -280,7 +285,10 @@ let rec translate_expr (e : texpr) =
     | "!=" -> Op ("/=", args)
     | "&" -> Op ("/\\", args)
     | "==" -> Op ("=", args)
-    | "+" | "*" | "-" | "/" | "<" | "<=" | ">" | ">=" -> Op (f, args)
+    | "/" ->
+      (* integer division *)
+      Op ("\\div", args)
+    | "+" | "*" | "-" | "<" | "<=" | ">" | ">=" -> Op (f, args)
     | _ -> Apply (f, args))
   | Var (V (_, v)) -> Term v
   | List _ -> nyi "do expr list"
@@ -352,31 +360,39 @@ let rec translate_protocol (p : tprotocol) =
   | Emp -> bug "do protocol emp"
   | Comment (_, _, _) -> bug "do protocol comment"
 
-let translate_tid (t : tid) =
+let translate_tid bound (t : tid) =
   match t.params with
   | [] -> Format.sprintf "%s" t.name
   | ps ->
-    Format.sprintf "<<%s>>" (String.concat ", " (t.name :: List.map fst ps))
+    let ps1 =
+      ps
+      |> List.map (fun (p, _) ->
+             match List.assoc_opt ~eq:String.equal p bound with
+             | None -> p
+             | Some p1 -> p1)
+    in
+    Format.sprintf "<<%s>>" (String.concat ", " (t.name :: ps1))
 
 let fence_to_pc tid f =
-  let rec aux f =
+  let rec aux bound f =
     match f with
     | ThreadStart ->
       (* use the current thread *)
-      let pc = Format.sprintf "pc[self][%s]" (translate_tid tid) in
-      Equals (pc, Term "-1")
-    | AnyOf fs -> Disj (List.map aux fs)
-    | AllOf fs -> Conj (List.map aux fs)
+      let pc = Format.sprintf "pc[self][%s]" (translate_tid bound tid) in
+      Equals (pc, Term (string_of_int Actions.default_pc_value))
+    | AnyOf fs -> Disj (List.map (aux bound) fs)
+    | AllOf fs -> Conj (List.map (aux bound) fs)
     | Cond (t, i) ->
       (* use the thread that this part is dependent on *)
-      let pc = Format.sprintf "pc[self][%s]" (translate_tid t) in
+      let pc = Format.sprintf "pc[self][%s]" (translate_tid bound t) in
       Equals (pc, Term (string_of_int i))
     | Forall (v, s, b) ->
       (* rename the variable in case it conflicts with that of the quantifier in scope *)
       let v1 = v ^ "i" in
-      Forall ([(v1, Term s)], subst_fml ~sub:v ~replacement:v1 (aux b))
+      let bound = (v, v1) :: bound in
+      Forall ([(v1, Term s)], aux bound b)
   in
-  aux f
+  aux [] f
 
 let translate_node all_vars graph pname (id, node) =
   (* not sure if we want to get this from the graph? *)
@@ -384,7 +400,21 @@ let translate_node all_vars graph pname (id, node) =
   let pc_current = fence_to_pc tid node.fence in
   let pc_next =
     AssignLocal
-      ("pc", MapUpdate ("pc[self]", translate_tid tid, Term (string_of_int id)))
+      ( "pc",
+        MapUpdate ("pc[self]", translate_tid [] tid, Term (string_of_int id)) )
+  in
+  let name = Actions.node_name pname (id, node) in
+  let history_next =
+    AssignGlobal
+      ( "history",
+        Apply
+          ( "Append",
+            [
+              List
+                ([Term (Format.sprintf {|"%s"|} name)]
+                @ (node.params |> List.map (fun (p, _) -> Term p)));
+              Term "history";
+            ] ) )
   in
   let body = translate_protocol node.protocol in
   let assigned = assignments_fml body in
@@ -398,13 +428,15 @@ let translate_node all_vars graph pname (id, node) =
     | u -> [Unchanged u]
   in
   Def
-    ( Actions.node_name pname (id, node),
+    ( name,
       "self" :: (node.params |> List.map fst),
-      Conj ([pc_current; pc_next; body] @ unchanged) )
+      Conj ([pc_current; pc_next; history_next; body] @ unchanged) )
 
 let rec default_value_of_type env t =
   match t with
-  | TyParty _ -> nyi "default party party"
+  | TyParty _ ->
+    (* TODO does this matter? *)
+    Term "0"
   | TySet _ -> Set []
   | TyList _ -> List []
   | TyVar v -> default_value_of_type env (IMap.find (UF.value v) env.types)
@@ -466,7 +498,7 @@ let single_party_to_tla all_vars env graph nodes pname protocol =
   in
   (variables, init, next, actions, vars_def)
 
-let to_tla env actions =
+let to_tla env party_sizes actions =
   let all_vars =
     (actions |> SMap.bindings
     |> List.map (fun (_, (_g, _n, p)) -> p)
@@ -492,13 +524,15 @@ let to_tla env actions =
     |> List.uniq ~eq:String.equal
     (* equal_tid *)
   in
-  let party_sizes = SMap.of_list [("C", 1); ("P", 2)] in
   let party_sets =
     SMap.mapi
       (fun k v ->
-        List.range 1 v
-        |> List.map (fun n ->
-               Format.sprintf "%s%d" (String.lowercase_ascii k) n))
+        if v < 1 then
+          []
+        else (* this works for both increasing and decreasng ranges! *)
+          List.range 1 v
+          |> List.map (fun n ->
+                 Format.sprintf "%s%d" (String.lowercase_ascii k) n))
       party_sizes
   in
   (* https://groups.google.com/g/tlaplus/c/WTb6JZDxorE/m/XpOrtsS8AgAJ
@@ -565,6 +599,18 @@ let to_tla env actions =
   in
   let thread_constants = Constants all_threads in
   let party_constants = Constants (actions |> SMap.bindings |> List.map fst) in
+  let (symmetry_def, symmetry_cfg) =
+    let def = "Symmetry" in
+    let cfg = Format.sprintf "SYMMETRY %s" def in
+    ( Def
+        ( def,
+          [],
+          Op
+            ( "\\union",
+              actions |> SMap.bindings |> List.map fst
+              |> List.map (fun c -> Apply ("Permutations", [Term c])) ) ),
+      cfg )
+  in
   let party_member_constants =
     Constants (party_sets |> SMap.bindings |> List.concat_map snd)
   in
@@ -577,6 +623,7 @@ let to_tla env actions =
           (List.concat inits
           @ [
               Equals ("messages", SetCompConstant ("i", "{}", Term "0"));
+              Equals ("history", List []);
               Equals
                 ( "pc",
                   SetCompConstant
@@ -596,24 +643,28 @@ let to_tla env actions =
       [
         [
           party_constants; party_member_constants; thread_constants;
-          msg_type_constants;
+          msg_type_constants; symmetry_def;
         ]; List.concat variables; var_defs;
         [all_vars_def; threads_def; participants_def; participant_threads_def];
         [init]; List.concat actions1; [next];
       ]
   in
   let cfg =
-    let ts =
+    let thread_constants =
       all_threads |> List.map (fun t -> Format.sprintf "  %s = %s" t t)
     in
-    let ps =
+    let psets =
       actions |> SMap.bindings |> List.map fst
       |> List.concat_map (fun c ->
              let mem = SMap.find c party_sets in
              Format.sprintf "  %s = {%s}" c (mem |> String.concat ", ")
              :: (mem |> List.map (fun m -> Format.sprintf "  %s = %s" m m)))
     in
-    let mts = msg_types |> List.map (fun m -> Format.sprintf "  %s = %s" m m) in
-    cfg_file_template ~constants:(String.concat "\n" (ps @ mts @ ts))
+    let mtypes =
+      msg_types |> List.map (fun m -> Format.sprintf "  %s = %s" m m)
+    in
+    cfg_file_template
+      ~constants:(String.concat "\n" (psets @ mtypes @ thread_constants))
+      ~symmetry:symmetry_cfg
   in
   (spec, cfg)

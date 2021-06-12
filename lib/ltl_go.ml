@@ -270,9 +270,12 @@ let fml_ownership env (t : texpr) =
 
 let invoke_ltl2mon s =
   let res = CCUnix.call_full "ltl2mon '%s'" s in
-  (* Format.printf "error code %d@." res#errcode; *)
-  (* Format.printf "stderr %s@." res#stderr; *)
-  res#stdout
+  if res#errcode <> 0 then
+    bad_input "unable to invoke ltl2mon"
+  else
+    (* Format.printf "error code %d@." res#errcode; *)
+    (* Format.printf "stderr %s@." res#stderr; *)
+    res#stdout
 
 let debug = false
 
@@ -674,9 +677,6 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_graph action_nodes
     |> String.concat "\n"
   in
   let extra_imports = if !uses_reflect then "\"reflect\"" else "" in
-  (* ~prop_fns ~states  *)
-  (* ~initial_state ~prop_vars  *)
-  (* ~transitions  *)
   template_monitor ~extra_imports ~global_contents ~action_defs ~preconditions
     ~postconditions ~ltl_monitor_defs ~ltl_monitor_fields ~ltl_monitor_init
     ~ltl_monitor_step ()

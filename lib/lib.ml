@@ -3,7 +3,20 @@ open Common
 open Ast
 
 let parse_parties s =
-  s |> String.split ~by:"," |> List.map (fun repr -> { repr = var repr })
+  let combined =
+    s |> String.split ~by:","
+    |> List.map (fun pc ->
+           match String.split ~by:":" pc with
+           | [repr] -> (repr, 0)
+           | [repr; c] -> (repr, int_of_string c)
+           | _ -> bad_input "unable to parse party spec")
+  in
+
+  let parties = List.map (fun (p, _) -> { repr = var p }) combined in
+  let party_sizes =
+    combined |> List.map (fun (p, c) -> (p, c)) |> SMap.of_list
+  in
+  (parties, party_sizes)
 
 let parse file =
   let spec = Infer.parse_spec file in
@@ -17,7 +30,7 @@ let parse file =
 
 let require_parties p =
   match Option.map parse_parties p with
-  | None | Some [] -> bad_input "--parties must be given to infer types"
+  | None | Some ([], _) -> bad_input "--parties must be given to infer types"
   | Some ps -> ps
 
 let require_project_party =
@@ -45,7 +58,7 @@ let print project_party parties ast types actions file =
       protocol |> Print.render_protocol
       |> PPrint.ToChannel.pretty 0.8 120 stdout
   | _ ->
-    let parties = require_parties parties in
+    let (parties, _) = require_parties parties in
     let (env, tprotocol) = typecheck parties protocol in
     let tprotocol =
       match project_party with
@@ -75,7 +88,7 @@ let print project_party parties ast types actions file =
 
 let tla parties file =
   let spec_name = file |> Filename.remove_extension |> Filename.basename in
-  let parties = require_parties parties in
+  let (parties, party_sizes) = require_parties parties in
   let spec = parse file in
   let protocol = spec.protocol in
   let (env, tprotocol) = typecheck parties protocol in
@@ -88,13 +101,13 @@ let tla parties file =
            (graph, nodes, p))
   in
 
-  let (tla, cfg) = Tla.to_tla env actions in
+  let (tla, cfg) = Tla.to_tla env party_sizes actions in
   let tla = Tla.Render.render_tla tla in
   let tla_s = Tla.with_preamble spec_name tla in
   write_to_file ~filename:(Format.sprintf "%s.tla" spec_name) tla_s;
   let cfg_filename = Format.sprintf "%s.cfg" spec_name in
-  if not (Sys.file_exists cfg_filename) then
-    write_to_file ~filename:cfg_filename cfg
+  (* if not (Sys.file_exists cfg_filename) then *)
+  write_to_file ~filename:cfg_filename cfg
 
 let tla parties file =
   try tla parties file with Check_failure s -> Format.printf "%s@." s
@@ -105,7 +118,7 @@ let monitor parties file =
   let spec = parse file in
   let protocol = spec.protocol in
 
-  let parties = require_parties parties in
+  let (parties, _) = require_parties parties in
 
   (* infer type for protocol *)
   let (env, tprotocol) = typecheck parties protocol in
