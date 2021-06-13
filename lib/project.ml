@@ -52,6 +52,14 @@ let rec project_aux : party_info list -> env -> tprotocol -> tprotocol list =
                ReceiveOnly { from; msg = msg_destruct msg }
              else
                Emp)
+    | Call (f, _) ->
+      let owner = (SMap.find f env.subprotocols).initiator in
+      parties
+      |> List.map (fun party ->
+             if String.equal owner (party.repr |> var_name) then
+               pr.p
+             else
+               Emp)
     | Imply (c, body) ->
       List.map2
         (fun party body1 ->

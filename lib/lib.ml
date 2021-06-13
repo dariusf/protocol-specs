@@ -36,9 +36,41 @@ let require_parties p =
 let require_project_party =
   Option.get_exn_or "a party must be chosen using --project"
 
-let typecheck parties protocol =
+let typecheck parties spec =
   let env = Infer.initial_env parties in
-  let (tp, env) = Infer.infer_parties protocol env in
+  let fns =
+    spec.decls
+    |> List.filter_map (function
+         | Function (f, args, p) -> Some (f, args, p)
+         | _ -> None)
+  in
+  let env =
+    List.fold_left
+      (fun env (fname, fparams, p) ->
+        let env =
+          List.fold_right
+            (fun c env ->
+              let (env, v) = Infer.fresh_var env c in
+              { env with bindings = SMap.add c v env.bindings })
+            fparams env
+        in
+        let (tp, env) = Infer.infer_parties p env in
+        Infer.check_instantiated env tp;
+        {
+          env with
+          subprotocols =
+            SMap.add fname
+              {
+                fname;
+                fparams;
+                tp;
+                initiator = (Infer.initiator env tp).repr |> var_name;
+              }
+              env.subprotocols;
+        })
+      env fns
+  in
+  let (tp, env) = Infer.infer_parties spec.protocol env in
   Infer.check_instantiated env tp;
   (env, tp)
 
@@ -49,17 +81,16 @@ let project parties env tprotocol =
 
 let print project_party parties ast types actions file =
   let spec = parse file in
-  let protocol = spec.protocol in
   match parties with
   | None ->
     if ast then (* protocol |> show_protocol |> print_endline *)
       spec |> show_spec |> print_endline
     else
-      protocol |> Print.render_protocol
+      spec.protocol |> Print.render_protocol
       |> PPrint.ToChannel.pretty 0.8 120 stdout
   | _ ->
     let (parties, _) = require_parties parties in
-    let (env, tprotocol) = typecheck parties protocol in
+    let (env, tprotocol) = typecheck parties spec in
     let tprotocol =
       match project_party with
       | None -> tprotocol
@@ -90,8 +121,7 @@ let tla parties file =
   let spec_name = file |> Filename.remove_extension |> Filename.basename in
   let (parties, party_sizes) = require_parties parties in
   let spec = parse file in
-  let protocol = spec.protocol in
-  let (env, tprotocol) = typecheck parties protocol in
+  let (env, tprotocol) = typecheck parties spec in
   let all = project parties env tprotocol in
 
   let actions =
@@ -116,12 +146,11 @@ let monitor parties file =
   (* TODO is this needed? *)
   let _spec_name = Filename.remove_extension file in
   let spec = parse file in
-  let protocol = spec.protocol in
 
   let (parties, _) = require_parties parties in
 
   (* infer type for protocol *)
-  let (env, tprotocol) = typecheck parties protocol in
+  let (env, tprotocol) = typecheck parties spec in
 
   (* project *)
   let all = project parties env tprotocol in

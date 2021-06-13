@@ -5,6 +5,7 @@ let show_token t =
   let open P in
   match t with
   | WHEN -> "WHEN"
+  | DOLLAR -> "DOLLAR"
   | STAR -> "STAR"
   | SEMI -> "SEMI"
   | COLON -> "COLON"

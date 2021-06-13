@@ -136,6 +136,7 @@ and ('a, 'e, 'v) _protocol' =
   | Seq of ('a, 'e, 'v) _protocol list
   | Par of ('a, 'e, 'v) _protocol list
   | Disj of ('a, 'e, 'v) _protocol * ('a, 'e, 'v) _protocol
+  | Call of string * 'e list
   | Send of {
       from : 'v;
       to_ : 'v;
@@ -212,6 +213,14 @@ let empty_party_info repr = { repr }
 type scheme = Forall of UF.t list * typ
 [@@deriving show { with_path = false }]
 
+type subprotocol = {
+  fname : string;
+  fparams : string list;
+  tp : tprotocol;
+  initiator : string;
+}
+[@@deriving show { with_path = false }]
+
 type env = {
   (* known parties and types *)
   parties : party_info IMap.t;
@@ -220,6 +229,7 @@ type env = {
   bindings : var_info SMap.t;
   local_bindings : var_info SMap.t;
   polymorphic : scheme SMap.t;
+  subprotocols : subprotocol SMap.t;
 }
 [@@deriving show { with_path = false }]
 
@@ -230,6 +240,7 @@ let empty_env =
     bindings = SMap.empty;
     local_bindings = SMap.empty;
     polymorphic = SMap.empty;
+    subprotocols = SMap.empty;
   }
 
 let party_list parties = parties |> IMap.values |> List.of_iter

@@ -362,8 +362,8 @@ and infer_parties_expr : expr -> env -> texpr * env =
     (* infer_all [a; b] env *)
     nyi "infer_parties_expr tuple"
 
-let%trace rec infer_parties : ?in_seq:bool -> protocol -> env -> tprotocol * env
-    =
+(* can no longer use ppx_debug because of labelled arg *)
+let rec infer_parties : ?in_seq:bool -> protocol -> env -> tprotocol * env =
  fun ?(in_seq = false) p env ->
   if debug then (
     dump_env env;
@@ -371,6 +371,17 @@ let%trace rec infer_parties : ?in_seq:bool -> protocol -> env -> tprotocol * env
   let p1 = { p = Emp; pmeta = pmeta ~loc:p.pmeta () } in
   match p.p with
   | Emp -> ({ p1 with p = Emp }, env)
+  | Call (f, args) ->
+    (* TODO lookup the function environment *)
+    let (args, env) =
+      List.fold_left
+        (fun (ts, env) c ->
+          let (te, env) = infer_parties_expr c env in
+          (te :: ts, env))
+        ([], env) args
+    in
+    let args = List.rev args in
+    ({ p1 with p = Call (f, args) }, env)
   | Send { from; to_; msg = Message { args; typ = mtype } } ->
     let (fm, tm) = (from.meta, to_.meta) in
     let (V (fp, from)) = must_be_var from in
@@ -644,23 +655,47 @@ let%trace rec infer_parties : ?in_seq:bool -> protocol -> env -> tprotocol * env
   | SendOnly _ -> bug "infer_parties doesn't expect send only"
   | ReceiveOnly _ -> bug "infer_parties doesn't expect receive only"
 
-let has_initiative (V (_, party)) p =
+let initiator env p =
   let rec aux p =
     match p.p with
-    | Emp -> false
     | Seq (s :: _) -> aux s
-    | Seq _ -> false
-    | Par ps -> List.exists aux ps
-    | Disj (a, b) -> List.for_all aux [a; b]
-    | Send { from = V (_, pn); _ } -> String.equal party pn
-    | Assign (_, _) -> true
-    | Imply (_, _) -> true
-    | BlockingImply (_, _) -> false
-    | Forall (_, _, p) -> aux p
-    | Exists (_, _, p) -> aux p
-    | SendOnly _ -> true
-    | ReceiveOnly _ -> false
-    | Comment _ -> false
+    | Seq _ -> bug "empty seq"
+    | Par [] -> bug "empty par"
+    | Par ps ->
+      let it = List.map aux ps in
+      foldr1
+        (fun (c, p) (t, _) ->
+          if equal_party_info c t then
+            (c, p)
+          else
+            fail ~loc:p.pmeta.loc "different initiator in par")
+        (List.combine it ps)
+      |> ignore;
+      List.hd it
+    | Disj (a, b) ->
+      let ia = aux a in
+      let ib = aux b in
+      if equal_party_info ia ib then
+        ia
+      else
+        fail ~loc:p.pmeta.loc "different initiator in disjunction" List.for_all
+          aux [a; b]
+    | Send { from; _ } ->
+      (match from.meta.info.typ with
+      | TyParty p -> IMap.find (UF.value p) env.parties
+      | _ -> fail ~loc:from.meta.loc "no initiator")
+    | Call (f, _) ->
+      (match SMap.find_opt f env.subprotocols with
+      | None -> fail ~loc:p.pmeta.loc "undefined function %s" f
+      | Some { initiator; _ } -> { repr = var initiator })
+    | Assign (e, _) | BlockingImply (e, _) | Imply (e, _) ->
+      (match e.meta.info.own with
+      | Party p -> IMap.find (UF.value p) env.parties
+      | _ -> fail ~loc:e.meta.loc "no initiator")
+    | Forall (_, _, p) | Exists (_, _, p) -> aux p
+    | ReceiveOnly _ | SendOnly _ -> bug "initiator: multiparty spec only"
+    | Comment _ -> bug "initiator comment"
+    | Emp -> bug "initiator empty"
   in
   aux p
 
@@ -769,6 +804,7 @@ let rec check_instantiated env p =
     check_instantiated_expr env from;
     check_instantiated_expr env to_;
     List.iter (fun (_, e) -> check_instantiated_expr env e) args
+  | Call (_, args) -> List.iter (check_instantiated_expr env) args
   | Assign (v, e) ->
     check_instantiated_expr env v;
     check_instantiated_expr env e

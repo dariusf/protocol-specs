@@ -349,6 +349,7 @@ let rec translate_protocol (p : tprotocol) =
   | Imply (c, body) ->
     If (translate_expr c, translate_protocol body, Term "TRUE")
   | BlockingImply (c, body) -> Conj [translate_expr c; translate_protocol body]
+  | Call _ -> nyi "translate protocol call"
   (* these should have been removed by now *)
   | ReceiveOnly _ -> bug "receive should appear only inside a seq by this point"
   | Exists (_, _, _) -> nyi "do protocol exists"

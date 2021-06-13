@@ -31,7 +31,8 @@ module G = struct
     let edges =
       all_edges g |> List.map (fun (a, b) -> Format.sprintf "%d -> %d" a b)
     in
-    Format.fprintf fmt "%a %a" (List.pp Int.pp) vertices (List.pp String.pp)
+    Format.fprintf fmt "(%a, %a)" (List.pp Int.pp) vertices
+      (List.pp ~start:"{" ~stop:"}" String.pp)
       edges
 
   let merge_graphs g1 g2 =
@@ -39,14 +40,17 @@ module G = struct
     |> fold_vertex (fun v g -> add_vertex g v) g1
     |> fold_edges_e (fun e g -> add_edge_e g e) g1
 
-  (** glues two dags together: the ending nodes of g1 get edges to the starting nodes of g2.  a cyclic graph would require something fancier. *)
-  let concat_graphs g1 g2 =
-    let ending = find_vertices (fun v -> out_degree g1 v = 0) g1 in
-    let starting = find_vertices (fun v -> in_degree g2 v = 0) g2 in
+  let concat_graphs_with ~starting ~ending g1 g2 =
     merge_graphs g1 g2
     |> List.fold_right
          (fun s g -> List.fold_right (fun e g -> add_edge g e s) ending g)
          starting
+
+  (** glues two dags together: the ending nodes of g1 get edges to the starting nodes of g2. use concat_graphs_with for cyclic graphs *)
+  let concat_graphs g1 g2 =
+    let ending = find_vertices (fun v -> out_degree g1 v = 0) g1 in
+    let starting = find_vertices (fun v -> in_degree g2 v = 0) g2 in
+    concat_graphs_with ~starting ~ending g1 g2
 end
 
 type fence_cond =
@@ -70,6 +74,7 @@ let rec render_fence f =
   | Forall (s, v, b) -> Format.sprintf "∀ %s:%s. %s" s v (render_fence b)
   | Cond (tid, pc) -> Format.sprintf "%a = %d" Print.pp_tid tid pc
 
+(** the condition that the successor of this would have to wait for *)
 let compute_fence tid id (t : tprotocol) =
   let rec aux t =
     match t.p with
@@ -79,6 +84,9 @@ let compute_fence tid id (t : tprotocol) =
       Forall (v, s, aux b)
     | Par ps -> AllOf (List.map aux ps)
     | Disj (a, b) -> AnyOf [aux a; aux b]
+    | Call _ ->
+      (* there's no successor for now, as calls transfer control entirely *)
+      AnyOf []
     | SendOnly _ | ReceiveOnly _ | Seq _ | Assign (_, _) -> Cond (tid, id)
     | Imply (_, b) | BlockingImply (_, b) -> aux b
     | Exists (_, _, _) -> nyi "compute fence Exists"
@@ -128,6 +136,9 @@ let rec used_names (t : tprotocol) =
   | ReceiveOnly { from; msg = MessageD { args; _ } } ->
     List.concat_map used_names_expr ([from] @ args)
   | Exists (_, _, _) -> nyi "used names exists"
+  | Call (_, args) ->
+    (* not higher-order *)
+    List.concat_map used_names_expr args
   | Send _ -> bug "used names send"
   | Comment (_, _, _) -> bug "used names comment"
   | Emp -> bug "used names emp"
@@ -151,12 +162,14 @@ let rec used_names (t : tprotocol) =
     there are other longer sequences which could be actions, like a+ s, but we'll keep it simple for now.
 *)
 let%trace rec group_seq :
+    env ->
     texpr list ->
     (string * string) list ->
     pmeta ->
+    (string * (int list * int list * G.t * node IMap.t * fence_cond)) list ->
     tprotocol list ->
-    (G.t * node IMap.t * fence_cond) list =
- fun preconditions params meta (ts : tprotocol list) ->
+    (int list * int list * G.t * node IMap.t * fence_cond) list =
+ fun env preconditions params meta proc_actions (ts : tprotocol list) ->
   let rec loop curr acc (ts : tprotocol list) =
     match ts with
     | [] ->
@@ -208,34 +221,38 @@ let%trace rec group_seq :
         }
       in
       let m = IMap.singleton id node in
-      (g, m, Cond (thread, id) (* node.fence *))
-    | [pp] -> split_actions preconditions params pp
+      ([id], [id], g, m, Cond (thread, id) (* node.fence *))
+    | [pp] -> split_actions env preconditions params proc_actions pp
     | _ -> bug "not a valid composite action"
   in
   loop [] [] ts |> List.map label_action
 
 and split_actions :
+    env ->
     texpr list ->
     (string * string) list ->
+    (string * (int list * int list * G.t * node IMap.t * fence_cond)) list ->
     tprotocol ->
-    G.t * node IMap.t * fence_cond =
- fun preconditions params (t : tprotocol) ->
+    int list * int list * G.t * node IMap.t * fence_cond =
+ fun env preconditions params proc_actions (t : tprotocol) ->
   match t.p with
   | Forall (v, s, p) ->
     let (V (_, v1)) = must_be_var_t v in
     let (V (_, s1)) = must_be_var_t s in
-    let (g, n, f) = split_actions preconditions ((v1, s1) :: params) p in
-    (g, n, Forall (v1, s1, f))
+    let (starting, ending, g, n, f) =
+      split_actions env preconditions ((v1, s1) :: params) proc_actions p
+    in
+    (starting, ending, g, n, Forall (v1, s1, f))
   | Seq ps ->
     (* empty precondition *)
-    let ps1 = group_seq [] params t.pmeta ps in
+    let ps1 = group_seq env [] params t.pmeta proc_actions ps in
 
     (* only the first in a seq gets the precondition, because it may invalidate it, and we don't check for that atm *)
     let ps1 =
       List.mapi
-        (fun i ((g, n, f) as p) ->
+        (fun i ((s, e, g, n, f) as p) ->
           if i = 0 then
-            (g, n |> IMap.map (fun v -> { v with preconditions }), f)
+            (s, e, g, n |> IMap.map (fun v -> { v with preconditions }), f)
           else
             p)
         ps1
@@ -244,53 +261,145 @@ and split_actions :
     (* the fence cond is what the SUCCESSOR of a node has to wait for *)
     let nodes = ps1 in
 
-    let res =
+    let (s, e, g, m, f) =
       foldl1
-        (fun (gt, mt, ft) (gc, mc, fc) ->
-          let g1 = G.concat_graphs gt gc in
-          ( g1,
+        (fun (st, et, gt, mt, ft) (sc, ec, gc, mc, fc) ->
+          let g1 = G.concat_graphs_with ~ending:et ~starting:sc gt gc in
+          (* Format.eprintf
+             "folding seq: fence between nodes %s (%s %s) and %s (%s %s): %a \
+              and %a@."
+             ([%derive.show: int list] (G.find_vertices (fun _ -> true) gt))
+             ([%derive.show: int list] st)
+             ([%derive.show: int list] et)
+             ([%derive.show: int list] (G.find_vertices (fun _ -> true) gc))
+             ([%derive.show: int list] sc)
+             ([%derive.show: int list] ec)
+             pp_fence_cond ft pp_fence_cond fc; *)
+          ( st,
+            ec,
+            g1,
             IMap.union
               (fun _ _ _ -> bug "failed to merge node")
               mt
               (mc
-              |> IMap.mapi (fun id n ->
+              (* |> IMap.mapi (fun id n ->
                      match G.in_degree gc id with
                      | 0 -> { n with fence = ft }
-                     | _ -> n)),
+                     | _ -> n
+                     ) *)
+              |> IMap.mapi (fun id n ->
+                     if List.mem ~eq:Int.equal id sc then
+                       { n with fence = ft }
+                     else
+                       n)),
             (* move to the next one *)
             fc ))
         nodes
     in
-
-    let (_, bb, cc) = res in
-    res
+    (s, e, g, m, f)
   | SendOnly _ | ReceiveOnly _ | Assign (_, _) ->
     (* this happens when an assignment is on its own, outside a seq. the simplest thing to do is treat it as a seq *)
-    split_actions preconditions params { t with p = Seq [t] }
+    split_actions env preconditions params proc_actions { t with p = Seq [t] }
   | Par ps ->
-    let nodes = List.map (split_actions preconditions params) ps in
-    let (g, n, f) =
+    let nodes =
+      List.map (split_actions env preconditions params proc_actions) ps
+    in
+    let (s, e, g, n, f) =
       List.fold_right
-        (fun (gc, mc, fc) (gt, mt, ft) ->
+        (fun (sc, ec, gc, mc, fc) (st, et, gt, mt, ft) ->
           (* take disjoint union of the two graphs *)
-          ( G.merge_graphs gc gt,
+          ( sc @ st,
+            ec @ et,
+            G.merge_graphs gc gt,
             IMap.union (fun _ _ _ -> bug "failed to merge node") mc mt,
             fc :: ft ))
-        nodes (G.empty, IMap.empty, [])
+        nodes
+        ([], [], G.empty, IMap.empty, [])
     in
-    (g, n, AllOf f)
+    (s, e, g, n, AllOf f)
   | Disj (a, b) ->
     (* TODO mutually exclusive constraints *)
-    let (ag, am, af) = split_actions preconditions params a in
-    let (bg, bm, bf) = split_actions preconditions params b in
-    ( G.merge_graphs ag bg,
+    let (as_, ae, ag, am, af) =
+      split_actions env preconditions params proc_actions a
+    in
+    let (bs, be, bg, bm, bf) =
+      split_actions env preconditions params proc_actions b
+    in
+    ( as_ @ bs,
+      ae @ be,
+      G.merge_graphs ag bg,
       IMap.union (fun _ _ _ -> bug "failed to merge node") am bm,
       AnyOf [af; bf] )
   | Imply (c, p) | BlockingImply (c, p) ->
-    split_actions (c :: preconditions) params p
+    split_actions env (c :: preconditions) params proc_actions p
+  | Call (name, _) ->
+    (* possibly cyclic graph *)
+    (match List.assoc_opt ~eq:String.equal name proc_actions with
+    | None ->
+      let body = SMap.find name env.subprotocols in
+      (* create the beginning node *)
+      let node =
+        {
+          constraints = [];
+          params;
+          preconditions;
+          protocol =
+            {
+              p = Emp;
+              pmeta =
+                pmeta
+                  ~loc:
+                    {
+                      start = { line = 0; col = 0 };
+                      stop = { line = 0; col = 0 };
+                    }
+                  ();
+            };
+          fence = (* don't know this at this point *)
+                  AllOf [];
+        }
+      in
+      let id = fresh_node_id () in
+      let m = IMap.singleton id node in
+      let g = G.add_vertex G.empty id in
+      let s = [id] in
+      let e = [id] in
+      (* the fence for that node is the current call site's *)
+      let fence = Cond (t.pmeta.tid, id) in
+
+      let (s1, e1, g1, m1, f) =
+        split_actions env preconditions params
+          ((name, (s, e, g, m, fence)) :: proc_actions)
+          body.tp
+      in
+      (* Format.eprintf "emerged from fn body %a@." pp_fence_cond f; *)
+      (* if there's recursion in the body, it's possible the fence here will be of the form AnyOf[id; ...].
+         this is harmless so we don't filter it out *)
+      (* problems:
+         - immediate successors of function nodes don't have its preconditions
+         - function nodes don't have preconditions of recursive calls
+      *)
+      ( [id],
+        e1,
+        G.concat_graphs_with ~starting:s1 ~ending:[id] g g1,
+        (* it's possible the same node reappears due to recursion *)
+        IMap.union
+          (fun _ a b ->
+            (* Format.eprintf "node a %a@." pp_node a; *)
+            (* Format.eprintf "node b %a@." pp_node a; *)
+            Some { a with fence = AnyOf [a.fence; b.fence] })
+          m m1,
+        f )
+    | Some (s, e, g, m, f) ->
+      (* recursive call. add our fence to theirs *)
+      (* Format.eprintf "recursive call %s %s@."
+         ([%derive.show: int list] s)
+         ([%derive.show: int list] e); *)
+      (s, e, g, m, f)
+      (* () *))
   | Exists (_, _, _) -> nyi "find actions exists"
   | Comment (_, _, _) -> bug "find actions comment"
-  | Emp -> (G.empty, IMap.empty, ThreadStart)
+  | Emp -> ([], [], G.empty, IMap.empty, ThreadStart)
   | Send _ -> bug "find actions send"
 
 let compact = false
@@ -406,7 +515,7 @@ let label_threads env party (p : tprotocol) : tprotocol =
         Forall (v, s, aux { name = tp; params = (v1, s_pname) :: tid.params } b)
       | Seq s -> Seq (List.map (aux tid) s)
       | Disj (a, b) -> Disj (aux tid a, aux tid b)
-      | SendOnly _ | ReceiveOnly _ | Assign _ ->
+      | SendOnly _ | ReceiveOnly _ | Assign _ | Call _ ->
         (* nothing to do *)
         p.p
       | Imply (c, b) -> Imply (c, aux tid b)
@@ -423,7 +532,7 @@ let label_threads env party (p : tprotocol) : tprotocol =
 let split_into_actions : string -> env -> tprotocol -> G.t * node IMap.t =
  fun party env t ->
   let t = label_threads env party t in
-  let (g, m, _f) = split_actions [] [] t in
+  let (_s, _e, g, m, _f) = split_actions env [] [] [] t in
   (g, m)
 
 let collect_message_types (p : tprotocol) =
@@ -436,7 +545,9 @@ let collect_message_types (p : tprotocol) =
       [typ]
     | Par es | Seq es -> List.concat_map aux es
     | Disj (a, b) -> List.concat_map aux [a; b]
-    | Emp | Assign (_, _) -> []
+    | Emp | Assign _ | Call _ ->
+      (* call is empty because we don't use this to traverse the spec, that should be done higher up *)
+      []
     | Imply (_, b) | Forall (_, _, b) | Exists (_, _, b) | BlockingImply (_, b)
       ->
       aux b
@@ -459,6 +570,7 @@ let assigned_variables (t : tprotocol) =
     | SendOnly _ | ReceiveOnly _ ->
       (* ignore variables *)
       []
+    | Call _ -> []
     | Exists (_, _, _) -> nyi "used variables exists"
     | Send _ -> bug "used variable send"
     | Comment (_, _, _) -> bug "used variables comment"
@@ -472,7 +584,7 @@ let all_tids (t : tprotocol) =
     thread
     ::
     (match t.p with
-    | SendOnly _ | ReceiveOnly _ | Assign _ -> []
+    | SendOnly _ | ReceiveOnly _ | Assign _ | Call _ -> []
     | Seq es | Par es -> List.concat_map aux es
     | Disj (a, b) -> aux a @ aux b
     | Imply (_, b) | BlockingImply (_, b) | Forall (_, _, b) -> aux b

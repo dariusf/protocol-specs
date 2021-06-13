@@ -29,7 +29,7 @@ let rec normalize_once p =
         | (_, b) when not (useful b) -> (normalize_once a).p
         | _ -> Disj (normalize_once a, normalize_once b)
       end
-    | Emp | Send _ | Assign (_, _) -> p.p
+    | Emp | Send _ | Assign _ | Call _ -> p.p
     | Imply (c, p) -> Imply (c, normalize_once p)
     | BlockingImply (c, p) -> BlockingImply (c, normalize_once p)
     | Forall (v, s, p) -> Forall (v, s, normalize_once p)

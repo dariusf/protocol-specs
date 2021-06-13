@@ -168,7 +168,7 @@ let render_protocol_ : ('e -> document) -> ('a, 'e, 'v) _protocol -> document =
   let rec render_protocol ?(pctx = { prec = 0; last = false }) p =
     let n = get_protocol_prec p in
     match p.p with
-    | Emp -> failwith "emp?"
+    | Emp -> string "skip"
     | Seq ps ->
       separate (semi ^^ nl)
         (ps
@@ -187,6 +187,12 @@ let render_protocol_ : ('e -> document) -> ('a, 'e, 'v) _protocol -> document =
            ([a; b]
            |> map_last (fun last p ->
                   render_protocol ~pctx:{ prec = n; last } p))
+    | Call (f, args) ->
+      concat
+        [
+          string "$"; string f;
+          parens (separate (spaced comma) (List.map render_expr args));
+        ]
     | Send { from; to_; msg = Message { typ; args } } ->
       concat
         [

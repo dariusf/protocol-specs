@@ -26,6 +26,7 @@ rule f = parse
   | "protocol" { PROTOCOL }
   | "ltl" { LTL }
   | ident as i { IDENT i }
+  | "$" { DOLLAR }
   | "&" { AND }
   | "|" { OR }
   | "!" { NOT }
