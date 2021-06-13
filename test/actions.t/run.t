@@ -12,8 +12,8 @@ Actions
   >     c.m = 1
   > EOF
   digraph G {
-    1 [label="PReceiveM1\ntid: Pt0(c:C)\n{start}\nλ [(c:C)].\nc->: m"];
-    2 [label="PSendN2\ntid: Pt0(c:C)\n{Pt0(c:C) = 1}\nλ [(c:C)].\n->c: n"];
+    1 [label="PReceiveM1\ntid: Pt0(c:C)\n{start}\nthis: {Pt0(c:C) = 1}\nparams: [(c:C)]\nc->: m"];
+    2 [label="PSendN2\ntid: Pt0(c:C)\n{Pt0(c:C) = 1}\nthis: {Pt0(c:C) = 2}\nparams: [(c:C)]\n->c: n"];
     1 -> 2;
   }
 
@@ -43,8 +43,8 @@ Actions
   >     c.x = 4
   > EOF
   digraph G {
-    1 [label="CChangeA1\ntid: Ct0(p:P)\n{start}\na = 1;\nx = 2"];
-    2 [label="CChangeA2\ntid: Ct1(p:P)\n{∀ p:P. Ct0(p:P) = 1}\na = 3;\nx = 4"];
+    1 [label="CChangeA1\ntid: Ct0(p:P)\n{start}\nthis: {Ct0(p:P) = 1}\na = 1;\nx = 2"];
+    2 [label="CChangeA2\ntid: Ct1(p:P)\n{∀ p:P. Ct0(p:P) = 1}\nthis: {Ct1(p:P) = 2}\na = 3;\nx = 4"];
     1 -> 2;
   }
 

@@ -104,6 +104,7 @@ type node = {
   params : (string * string) list;
   constraints : constr list;
   fence : fence_cond;
+  my_fence : fence_cond;
 }
 [@@deriving show { with_path = false }]
 
@@ -203,13 +204,18 @@ let%trace rec group_seq :
          in *)
       let g = G.add_vertex G.empty id in
       let used_params =
-        List.filter
-          (fun (pa, _) ->
-            List.mem ~eq:String.equal pa
-              (prs |> List.concat_map used_names |> List.uniq ~eq:String.equal))
-          params
+        params
+        |> List.filter (fun (pa, _) ->
+               List.mem ~eq:String.equal pa
+                 (prs |> List.concat_map used_names
+                |> List.uniq ~eq:String.equal))
       in
 
+      let unq_fence = Cond (thread, id) in
+      let my_fence =
+        (* List.fold_right (fun (v, s) t -> Forall (v, s, t)) params *)
+        unq_fence
+      in
       let node =
         {
           constraints = [];
@@ -218,10 +224,11 @@ let%trace rec group_seq :
           protocol = { p = Seq prs; pmeta = meta };
           (* temporarily, a more specific one is filled in when this appears as part of a larger structure *)
           fence = ThreadStart;
+          my_fence;
         }
       in
       let m = IMap.singleton id node in
-      ([id], [id], g, m, Cond (thread, id) (* node.fence *))
+      ([id], [id], g, m, unq_fence)
     | [pp] -> split_actions env preconditions params proc_actions pp
     | _ -> bug "not a valid composite action"
   in
@@ -266,8 +273,8 @@ and split_actions :
         (fun (st, et, gt, mt, ft) (sc, ec, gc, mc, fc) ->
           let g1 = G.concat_graphs_with ~ending:et ~starting:sc gt gc in
           (* Format.eprintf
-             "folding seq: fence between nodes %s (%s %s) and %s (%s %s): %a \
-              and %a@."
+             "folding seq: fence between nodes %s (%s to %s) and %s (%s to %s): \
+              %a and %a@."
              ([%derive.show: int list] (G.find_vertices (fun _ -> true) gt))
              ([%derive.show: int list] st)
              ([%derive.show: int list] et)
@@ -338,38 +345,38 @@ and split_actions :
     | None ->
       let body = SMap.find name env.subprotocols in
       (* create the beginning node *)
+      let id = fresh_node_id () in
+      let my_fence =
+        (* List.fold_right
+           (fun (v, s) t -> Forall (v, s, t))
+           params *)
+        Cond (t.pmeta.tid, id)
+      in
+      (* Format.eprintf "%a %s@."
+         (List.pp (Print.pp_tprotocol_untyped ~env))
+         prs
+         ([%derive.show: (string * string) list] used_params); *)
       let node =
         {
           constraints = [];
           params;
           preconditions;
           protocol =
-            {
-              p = Emp;
-              pmeta =
-                pmeta
-                  ~loc:
-                    {
-                      start = { line = 0; col = 0 };
-                      stop = { line = 0; col = 0 };
-                    }
-                  ();
-            };
+            { p = Emp; pmeta = pmeta ~tid:t.pmeta.tid ~loc:t.pmeta.loc () };
           fence = (* don't know this at this point *)
                   AllOf [];
+          my_fence;
         }
       in
-      let id = fresh_node_id () in
       let m = IMap.singleton id node in
       let g = G.add_vertex G.empty id in
       let s = [id] in
       let e = [id] in
-      (* the fence for that node is the current call site's *)
-      let fence = Cond (t.pmeta.tid, id) in
 
+      (* the fence for that node is the current call site's *)
       let (s1, e1, g1, m1, f) =
         split_actions env preconditions params
-          ((name, (s, e, g, m, fence)) :: proc_actions)
+          ((name, (s, e, g, m, my_fence)) :: proc_actions)
           body.tp
       in
       (* Format.eprintf "emerged from fn body %a@." pp_fence_cond f; *)
@@ -384,11 +391,17 @@ and split_actions :
         G.concat_graphs_with ~starting:s1 ~ending:[id] g g1,
         (* it's possible the same node reappears due to recursion *)
         IMap.union
-          (fun _ a b ->
+          (fun _ a _ ->
             (* Format.eprintf "node a %a@." pp_node a; *)
             (* Format.eprintf "node b %a@." pp_node a; *)
-            Some { a with fence = AnyOf [a.fence; b.fence] })
-          m m1,
+            (* Some { a with fence = AnyOf [a.fence; b.fence] } *)
+            Some a)
+          m m1
+        (* |> IMap.mapi (fun id n ->
+               if List.mem ~eq:Int.equal id s1 then
+                 { n with fence = my_fence }
+               else
+                 n) *),
         f )
     | Some (s, e, g, m, f) ->
       (* recursive call. add our fence to theirs *)
@@ -433,7 +446,14 @@ let to_graphviz env pname g m =
   let nodes =
     IMap.bindings m
     |> List.map (fun (id, node) ->
-           let { preconditions; params; constraints = _; protocol; fence } =
+           let {
+             preconditions;
+             params;
+             constraints = _;
+             protocol;
+             fence;
+             my_fence;
+           } =
              node
            in
            let name = node_name pname (id, node) in
@@ -446,18 +466,21 @@ let to_graphviz env pname g m =
                  preconditions
            in
            let fence = Format.sprintf "{%s}\\n" (render_fence fence) in
+           let my_fence =
+             Format.sprintf "this: {%s}\\n" (render_fence my_fence)
+           in
            let params =
              match params with
              | [] -> ""
              | _ ->
-               Format.sprintf "λ %a.\\n"
+               Format.sprintf "params: %a\\n"
                  (List.pp
                     (Pair.pp ~sep:":" Format.pp_print_string
                        Format.pp_print_string))
                  params
            in
-           Format.sprintf "%d [label=\"%s\\ntid: %a\\n%s%s%s%a\"];" id name
-             Print.pp_tid protocol.pmeta.tid fence pre params
+           Format.sprintf "%d [label=\"%s\\ntid: %a\\n%s%s%s%s%a\"];" id name
+             Print.pp_tid protocol.pmeta.tid fence my_fence pre params
              (Print.pp_tprotocol_untyped ~env)
              protocol
            |> strip_whitespace |> ( ^ ) maybe_indent)
@@ -529,10 +552,59 @@ let label_threads env party (p : tprotocol) : tprotocol =
   in
   aux { name = main_thread; params = [] } p
 
+let postprocess_graph g m =
+  let fn_nodes =
+    IMap.bindings m
+    |> List.filter (fun (_, n) ->
+           match n.protocol.p with Emp -> true | _ -> false)
+  in
+  let fn_node_preconditions =
+    fn_nodes
+    |> List.map (fun (id, _) ->
+           ( id,
+             AnyOf
+               (G.pred g id |> List.map (fun n1 -> (IMap.find n1 m).my_fence))
+           ))
+  in
+  (* Format.eprintf "fn nodes %s@."
+     ([%derive.show: int list] (fn_nodes |> List.map fst)); *)
+  let fn_node_successor_preconditions =
+    fn_nodes
+    |> List.concat_map (fun (id, n) ->
+           G.succ g id |> List.map (fun suc -> (suc, n.my_fence)))
+  in
+  (* Format.eprintf "pred %s@."
+       ([%derive.show: (int * fence_cond) list] fn_node_preconditions);
+     Format.eprintf "succ %s@."
+       ([%derive.show: (int * fence_cond) list] fn_node_successor_preconditions); *)
+  (* let m =
+       List.fold_right
+         (fun (id, f) m1 -> IMap.add id { (IMap.find id m1) with fence = f } m1)
+         fn_node_preconditions m
+     in *)
+  let m =
+    List.fold_right
+      (fun (id, f) m1 -> IMap.add id { (IMap.find id m1) with fence = f } m1)
+      fn_node_successor_preconditions m
+  in
+  (g, m)
+
 let split_into_actions : string -> env -> tprotocol -> G.t * node IMap.t =
  fun party env t ->
   let t = label_threads env party t in
+  (* TODO this doesn't work properly because the spec needs to be done all at once *)
+  let env =
+    {
+      env with
+      subprotocols =
+        env.subprotocols
+        |> SMap.map (fun sp ->
+               { sp with tp = sp.tp |> label_threads env party });
+    }
+  in
   let (_s, _e, g, m, _f) = split_actions env [] [] [] t in
+  (* this is necessary because cyclic structures can't be dealt with using recursion *)
+  let (g, m) = postprocess_graph g m in
   (g, m)
 
 let collect_message_types (p : tprotocol) =
