@@ -60,6 +60,7 @@ rule f = parse
   | "]" { RBRACKET }
   | "<>" { DIAMOND }
   | "[]" { BOX }
+  | '"' { STRING (string (Buffer.create 100) lexbuf) }
   | "//" { comments lexbuf }
   | _ { raise SyntaxError }
   | eof { EOF }
@@ -67,3 +68,19 @@ rule f = parse
 and comments = parse
   | '\n' { Lexing.new_line lexbuf; f lexbuf }
   | _ { comments lexbuf }
+
+and string buf = parse
+| [^'"' '\n' '\\']+
+  { Buffer.add_string buf (Lexing.lexeme lexbuf); string buf lexbuf }
+| '\n'
+  { Buffer.add_string buf (Lexing.lexeme lexbuf); Lexing.new_line lexbuf; string buf lexbuf }
+| '\\' '"'
+  { Buffer.add_char buf '"'; string buf lexbuf }
+| '\\'
+  { Buffer.add_char buf '\\'; string buf lexbuf }
+| '"'
+  { Buffer.contents buf }
+| eof
+  { raise SyntaxError }
+| _
+  { raise SyntaxError }

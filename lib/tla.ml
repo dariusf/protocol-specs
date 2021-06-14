@@ -276,6 +276,7 @@ let rec translate_expr (e : texpr) =
   match e.expr with
   | Int i -> Term (string_of_int i)
   | Bool b -> Term (b |> string_of_bool |> String.uppercase_ascii)
+  | String s -> Term (Format.sprintf {|"%s"|} s)
   | Set es -> Set (List.map translate_expr es)
   | App (f, args) ->
     let args = List.map translate_expr args in
@@ -443,6 +444,7 @@ let rec default_value_of_type env t =
   | TyVar v -> default_value_of_type env (IMap.find (UF.value v) env.types)
   | TyInt -> Term "0"
   | TyBool -> Term "FALSE"
+  | TyString -> Term {|""|}
   | TyFn (_, _) -> nyi "default party fn"
 
 let single_party_to_tla all_vars env graph nodes pname protocol =

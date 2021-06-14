@@ -236,8 +236,9 @@ let rec extract_subexprs env (t : texpr) =
         maps SMap.empty
     in
     (res, merged_maps)
-  | App (_, _) | Int _ | Bool _ | Set _ | List _ | Map _ | Var _ | Tuple (_, _)
-    ->
+  | App (_, _)
+  | Int _ | Bool _ | String _ | Set _ | List _ | Map _ | Var _
+  | Tuple (_, _) ->
     let v = fresh () in
     ({ t with expr = Var (V (None, v)) }, SMap.singleton v t)
 
@@ -248,7 +249,9 @@ let rec fml_to_ltl3tools (t : texpr) =
   | App ("==>", [a; b]) ->
     Format.sprintf "%s -> %s" (fml_to_ltl3tools a) (fml_to_ltl3tools b)
   | Var (V (_, v)) -> v
-  | App (_, _) | Int _ | Bool _ | Set _ | List _ | Map _ | Tuple (_, _) ->
+  | App (_, _)
+  | Int _ | Bool _ | String _ | Set _ | List _ | Map _
+  | Tuple (_, _) ->
     bug "fml to ltl3 unexpected node"
 
 let fml_ownership env (t : texpr) =
@@ -262,7 +265,7 @@ let fml_ownership env (t : texpr) =
     @
     match t.expr with
     | Set args | List args | App (_, args) -> List.concat_map aux args
-    | Int _ | Bool _ | Var _ -> []
+    | Int _ | Bool _ | String _ | Var _ -> []
     | Map _ -> nyi "fml ownership tuple"
     | Tuple (_, _) -> nyi "fml ownership tuple"
   in
@@ -396,6 +399,7 @@ let rec compile_typ env t =
   | TyVar v -> compile_typ env (IMap.find (UF.value v) env.types)
   | TyInt -> "int"
   | TyBool -> "bool"
+  | TyString -> "string"
   | TyFn (_, _) -> nyi "compile type fn"
 
 let uses_reflect = ref false
@@ -404,6 +408,7 @@ let rec compile parties te =
   match te.expr with
   | Int i -> string_of_int i
   | Bool b -> string_of_bool b
+  | String s -> Format.sprintf {|"%s"|} s
   | Set es ->
     let values =
       List.map (compile parties) es

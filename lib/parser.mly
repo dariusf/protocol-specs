@@ -9,6 +9,7 @@
 %token TRUE FALSE LBRACKET RBRACKET LCURLY RCURLY
 %token <int> INT
 %token <string> IDENT
+%token <string> STRING
 %token FORALL EXISTS IN DOT IF WHEN DISJ SEMI PAR ARROW EQ STAR DOLLAR
 %token INVARIANT LTL PROTOCOL
 
@@ -75,6 +76,8 @@ protocol :
 
 expr :
   | n = INT; { with_pos $startpos $endpos (Int n) }
+
+  | s = STRING; { with_pos $startpos $endpos (String s) }
 
   | i = IDENT;
     { with_pos $startpos $endpos (Var (V (None, i))) }

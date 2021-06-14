@@ -14,7 +14,7 @@ let is_party parties env party (v : texpr) =
 
 let rec vars_in e =
   match e.expr with
-  | Int _ | Bool _ -> []
+  | Int _ | Bool _ | String _ -> []
   | Var _ -> [e]
   | App (_, s) | Set s | List s -> List.concat_map vars_in s
   | Map s -> List.concat_map vars_in (List.map snd s)

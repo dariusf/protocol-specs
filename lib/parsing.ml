@@ -20,6 +20,7 @@ let show_token t =
   | IF -> "IF"
   | IMPLIES -> "IMPLIES"
   | IDENT i -> Format.sprintf "IDENT %s" i
+  | STRING i -> Format.sprintf "STRING %s" i
   | FORALL -> "FORALL"
   | EXISTS -> "EXISTS"
   | EQ -> "EQ"

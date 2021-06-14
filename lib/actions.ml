@@ -119,7 +119,7 @@ let fresh_node_id =
 
 let rec used_names_expr (t : texpr) =
   match t.expr with
-  | Int _ | Bool _ -> []
+  | Int _ | Bool _ | String _ -> []
   | Map kvs -> List.concat_map (fun (_, v) -> used_names_expr v) kvs
   | Set args | List args | App (_, args) -> List.concat_map used_names_expr args
   | Var (V (_, v)) -> [v]

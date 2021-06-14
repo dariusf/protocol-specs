@@ -17,7 +17,7 @@ let rec subst ~from ~to_ in_ =
     to_
   else
     match in_ with
-    | TyParty _ | TyVar _ | TyInt | TyBool -> in_
+    | TyParty _ | TyVar _ | TyInt | TyBool | TyString -> in_
     | TySet c -> TySet (subst ~from ~to_ c)
     | TyList c -> TyList (subst ~from ~to_ c)
     | TyFn (args, r) ->
@@ -90,7 +90,7 @@ let%trace rec unify :
   if debug then
     Format.printf "unify: %a and %a @." pp_typ a pp_typ b;
   match (a, b) with
-  | (TyInt, TyInt) | (TyBool, TyBool) -> Ok env
+  | (TyInt, TyInt) | (TyBool, TyBool) | (TyString, TyString) -> Ok env
   | (TyParty a1, TyParty b1) -> unify_party_variables a1 b1 env
   | (TyVar a, TyVar b) ->
     let unify_type_variables a b env =
@@ -192,7 +192,7 @@ let%trace unify_ownership :
 let rec concretize env t =
   match t with
   | TyParty p -> TyParty (UF.find p)
-  | TyInt | TyBool -> t
+  | TyInt | TyBool | TyString -> t
   | TySet s -> TySet (concretize env s)
   | TyList l -> TyList (concretize env l)
   | TyFn (args, ret) -> TyFn (List.map (concretize env) args, concretize env ret)
@@ -247,6 +247,12 @@ and infer_parties_expr : expr -> env -> texpr * env =
     ( {
         meta = { loc = expr.meta; info = { typ = TyBool; own = Global } };
         expr = Bool b;
+      },
+      env )
+  | String s ->
+    ( {
+        meta = { loc = expr.meta; info = { typ = TyString; own = Global } };
+        expr = String s;
       },
       env )
   | Var (V (p, v)) ->
@@ -519,9 +525,9 @@ let rec infer_parties : ?in_seq:bool -> protocol -> env -> tprotocol * env =
     let env =
       match unify tlhs trhs.meta.info.typ env with
       | Ok env -> env
-      | Error (`Parties_instantiated_but_different _)
-      | Error (`Does_not_unify _) ->
-        fail ~loc:vm "could not unify sides of assignment"
+      | Error (`Parties_instantiated_but_different s)
+      | Error (`Does_not_unify s) ->
+        fail ~loc:vm "could not unify sides of assignment: %s" s
     in
     (* right and left sides must be owned by same party *)
     (match unify_ownership olhs trhs.meta.info.own env with
@@ -776,14 +782,14 @@ let rec type_instantiated env t =
     (match IMap.find_opt (UF.value v) env.types with
     | None -> false
     | Some v -> type_instantiated env v)
-  | TyInt | TyBool -> true
+  | TyInt | TyBool | TyString -> true
   | TySet a | TyList a -> type_instantiated env a
   | TyFn (args, ret) ->
     List.for_all (type_instantiated env) args && type_instantiated env ret
 
 let rec check_instantiated_expr env (t : texpr) =
   match t.expr with
-  | Int _ | Bool _ -> ()
+  | Int _ | Bool _ | String _ -> ()
   | Set s -> List.iter (check_instantiated_expr env) s
   | List l -> List.iter (check_instantiated_expr env) l
   | Var (V (_, v)) ->

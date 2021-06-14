@@ -41,6 +41,7 @@ type typ =
   | TyVar of UF.t
   | TyInt
   | TyBool
+  | TyString
   | TyFn of typ list * typ
 [@@deriving show { with_path = false }, eq]
 
@@ -71,6 +72,7 @@ type 'a _expr = {
 and 'a _expr' =
   | Int of int
   | Bool of bool
+  | String of string
   | Set of 'a _expr list
   | List of 'a _expr list
   | Map of (string * 'a _expr) list

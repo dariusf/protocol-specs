@@ -45,6 +45,7 @@ let render_expr_ :
   match e.expr with
   | Int i -> string (string_of_int i)
   | Bool b -> string (string_of_bool b)
+  | String s -> string (Format.sprintf {|"%s"|} s)
   | Set es -> braces (List.map f es |> separate (spaced comma))
   | List es -> brackets (List.map f es |> separate (spaced comma))
   | Map es ->
@@ -82,6 +83,7 @@ let rec strip_type : texpr -> expr =
     match e.expr with
     | Int i -> Int i
     | Bool b -> Bool b
+    | String s -> String s
     | Var v -> Var v
     | Set es -> Set (List.map strip_type es)
     | List es -> List (List.map strip_type es)
@@ -114,6 +116,7 @@ let rec render_typ ~env t =
     | Some t -> render_typ ~env t)
   | TyInt -> string "int"
   | TyBool -> string "bool"
+  | TyString -> string "string"
   | TyFn (args, r) ->
     separate
       (enclose space space arrow)
