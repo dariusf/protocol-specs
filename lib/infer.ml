@@ -367,6 +367,7 @@ and infer_parties_expr : expr -> env -> texpr * env =
   | Tuple (_, _) ->
     (* infer_all [a; b] env *)
     nyi "infer_parties_expr tuple"
+  | Else | Timeout -> nyi "else/timeout"
 
 (* can no longer use ppx_debug because of labelled arg *)
 let rec infer_parties : ?in_seq:bool -> protocol -> env -> tprotocol * env =
@@ -801,6 +802,7 @@ let rec check_instantiated_expr env (t : texpr) =
   | App (_, args) -> List.iter (check_instantiated_expr env) args
   | Map _ -> nyi "map check_instanted_expr"
   | Tuple (_, _) -> nyi "tuple check_instanted_expr"
+  | Else | Timeout -> nyi "else/timeout"
 
 let rec check_instantiated env p =
   match p.p with

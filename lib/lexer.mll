@@ -25,6 +25,8 @@ rule f = parse
   | "invariant" { INVARIANT }
   | "protocol" { PROTOCOL }
   | "ltl" { LTL }
+  | "timeout" { TIMEOUT }
+  | "else" { ELSE }
   | ident as i { IDENT i }
   | "$" { DOLLAR }
   | "&" { AND }

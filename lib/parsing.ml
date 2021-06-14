@@ -5,6 +5,8 @@ let show_token t =
   let open P in
   match t with
   | WHEN -> "WHEN"
+  | TIMEOUT -> "TIMEOUT"
+  | ELSE -> "ELSE"
   | DOLLAR -> "DOLLAR"
   | STAR -> "STAR"
   | SEMI -> "SEMI"

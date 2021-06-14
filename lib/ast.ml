@@ -73,6 +73,8 @@ and 'a _expr' =
   | Int of int
   | Bool of bool
   | String of string
+  | Timeout
+  | Else
   | Set of 'a _expr list
   | List of 'a _expr list
   | Map of (string * 'a _expr) list

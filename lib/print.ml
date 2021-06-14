@@ -46,6 +46,8 @@ let render_expr_ :
   | Int i -> string (string_of_int i)
   | Bool b -> string (string_of_bool b)
   | String s -> string (Format.sprintf {|"%s"|} s)
+  | Timeout -> string "timeout"
+  | Else -> string "else"
   | Set es -> braces (List.map f es |> separate (spaced comma))
   | List es -> brackets (List.map f es |> separate (spaced comma))
   | Map es ->
@@ -84,6 +86,8 @@ let rec strip_type : texpr -> expr =
     | Int i -> Int i
     | Bool b -> Bool b
     | String s -> String s
+    | Timeout -> Timeout
+    | Else -> Else
     | Var v -> Var v
     | Set es -> Set (List.map strip_type es)
     | List es -> List (List.map strip_type es)

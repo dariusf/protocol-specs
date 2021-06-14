@@ -236,6 +236,7 @@ let rec extract_subexprs env (t : texpr) =
         maps SMap.empty
     in
     (res, merged_maps)
+  | Else | Timeout -> nyi "else timeout"
   | App (_, _)
   | Int _ | Bool _ | String _ | Set _ | List _ | Map _ | Var _
   | Tuple (_, _) ->
@@ -249,9 +250,8 @@ let rec fml_to_ltl3tools (t : texpr) =
   | App ("==>", [a; b]) ->
     Format.sprintf "%s -> %s" (fml_to_ltl3tools a) (fml_to_ltl3tools b)
   | Var (V (_, v)) -> v
-  | App (_, _)
-  | Int _ | Bool _ | String _ | Set _ | List _ | Map _
-  | Tuple (_, _) ->
+  | App (_, _) | Else | Timeout -> nyi "else/timeout"
+  | Int _ | Bool _ | String _ | Set _ | List _ | Map _ | Tuple (_, _) ->
     bug "fml to ltl3 unexpected node"
 
 let fml_ownership env (t : texpr) =
@@ -266,6 +266,8 @@ let fml_ownership env (t : texpr) =
     match t.expr with
     | Set args | List args | App (_, args) -> List.concat_map aux args
     | Int _ | Bool _ | String _ | Var _ -> []
+    | Else -> nyi "fml ownership else"
+    | Timeout -> nyi "fml ownership timeout"
     | Map _ -> nyi "fml ownership tuple"
     | Tuple (_, _) -> nyi "fml ownership tuple"
   in
@@ -436,6 +438,8 @@ let rec compile parties te =
     Format.sprintf "l.vars[\"%s\"]" (state_var_name v)
   | Var (V (_, v)) -> Format.sprintf "g.%s" (state_var_name v)
   | Tuple (_, _) -> nyi "compile tuple"
+  | Else -> nyi "compile else"
+  | Timeout -> nyi "compile timeout"
 
 let check_monitorability env ltl node_colors =
   if

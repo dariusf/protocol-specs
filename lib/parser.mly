@@ -7,6 +7,7 @@
 %token AND OR NOT PLUS MINUS DIV LT LE GT GE EQEQ NEQ
 %token BOX DIAMOND IMPLIES
 %token TRUE FALSE LBRACKET RBRACKET LCURLY RCURLY
+%token TIMEOUT ELSE
 %token <int> INT
 %token <string> IDENT
 %token <string> STRING
@@ -78,6 +79,8 @@ expr :
   | n = INT; { with_pos $startpos $endpos (Int n) }
 
   | s = STRING; { with_pos $startpos $endpos (String s) }
+  | TIMEOUT; { with_pos $startpos $endpos Timeout }
+  | ELSE; { with_pos $startpos $endpos Else }
 
   | i = IDENT;
     { with_pos $startpos $endpos (Var (V (None, i))) }

@@ -124,6 +124,7 @@ let rec used_names_expr (t : texpr) =
   | Set args | List args | App (_, args) -> List.concat_map used_names_expr args
   | Var (V (_, v)) -> [v]
   | Tuple (_, _) -> nyi "tuple used names"
+  | Else | Timeout -> nyi "else/timeout"
 
 let rec used_names (t : tprotocol) =
   match t.p with

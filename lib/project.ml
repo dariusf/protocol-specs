@@ -19,6 +19,7 @@ let rec vars_in e =
   | App (_, s) | Set s | List s -> List.concat_map vars_in s
   | Map s -> List.concat_map vars_in (List.map snd s)
   | Tuple (a, b) -> List.concat_map vars_in [a; b]
+  | Else | Timeout -> nyi "else/timeout"
 
 (** Given the environment (which knows about all the parties),
     and a protocol to project, returns a list of protocols projected
