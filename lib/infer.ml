@@ -201,6 +201,113 @@ let rec concretize env t =
   | None -> t
   | Some t1 -> concretize env t1
 
+module Cast = struct
+  let must_be_var (e : expr) =
+    match e.expr with Var v -> v | _ -> fail ~loc:e.meta "expr must be a var"
+
+  let must_be_var_t (e : texpr) =
+    match e.expr with
+    | Var v -> v
+    | _ -> fail ~loc:e.meta.loc "texpr must be a var"
+
+  let must_be_party_set env te =
+    (* we need to concretize because it may be a variable *)
+    match concretize env te.meta.info.typ with
+    | TySet (TyParty p) ->
+      (match IMap.find_opt (UF.value p) env.parties with
+      | None ->
+        fail ~loc:te.meta.loc "unknown party for %a" (Print.pp_texpr ~env) te
+      | Some p -> p.repr |> var_name)
+    | t ->
+      fail ~loc:te.meta.loc "expected %a to be a set of parties but got %a"
+        (Print.pp_texpr ~env) te (Print.pp_typ ~env) t
+
+  let must_be_party env te =
+    (* we need to concretize because it may be a variable *)
+    match concretize env te.meta.info.typ with
+    | TyParty p ->
+      (match IMap.find_opt (UF.value p) env.parties with
+      | None ->
+        fail ~loc:te.meta.loc "unknown party for %a" (Print.pp_texpr ~env) te
+      | Some p -> p.repr |> var_name)
+    | t ->
+      fail ~loc:te.meta.loc "expected %a to be a party but got %a"
+        (Print.pp_texpr ~env) te (Print.pp_typ ~env) t
+
+  let as_party_set_or_less env te =
+    match te.expr with
+    | Var _ ->
+      let s = must_be_party_set env te in
+      let name = must_be_var_t te |> var_name in
+      (s, name, [])
+    | App ("\\", [left; right]) ->
+      let pname = must_be_party_set env left in
+      let name = must_be_var_t left |> var_name in
+      let minus =
+        match right.expr with
+        | Set vs -> vs |> List.map must_be_var_t |> List.map var_name
+        | _ ->
+          fail ~loc:right.meta.loc
+            "expected right side to be a constant set instead of %a"
+            (Print.pp_texpr ~env) right
+      in
+      (pname, name, minus)
+    | _ ->
+      fail ~loc:te.meta.loc
+        "expected %a to be an expression that can be interpreted as a party \
+         set minus some"
+        (Print.pp_texpr ~env) te
+end
+
+open Cast
+
+let find_party_var_by_type_of env var =
+  let { typ; own } = var.meta.info in
+  let loc = var.meta.loc in
+  let name = var |> must_be_var_t |> var_name in
+  let check_env e =
+    e |> SMap.bindings
+    |> List.filter (fun (v, info) ->
+           (match (concretize env info.typ, own) with
+           | (TyParty p1, Party p2) -> UF.equal p1 p2
+           | _ -> false)
+           && not (String.equal v name))
+  in
+  match typ with
+  | TyParty _ ->
+    (* don't qualify things like the operands of send *)
+    None
+  | _
+    when List.mem ~eq:String.equal name
+           (env.parties |> IMap.bindings |> List.map snd
+           |> List.map (fun p -> p.repr |> var_name)) ->
+    (* principal party set, ignore those *)
+    None
+  | _ ->
+    let candidate =
+      match env.local_bindings |> check_env with
+      | [] ->
+        (match env.bindings |> check_env with
+        | [] ->
+          dump_env env;
+          fail ~loc "could not insert qualifier for %a"
+            (Print.pp_texpr_untyped ~env)
+            var
+        | [(c, _)] -> c
+        | cs ->
+          fail ~loc "more than one possible qualifier for %a: %a"
+            (Print.pp_texpr_untyped ~env)
+            var (List.pp String.pp)
+            (cs |> List.map fst))
+      | [(c, _)] -> c
+      | cs ->
+        fail ~loc "more than one possible qualifier for %a: %a"
+          (Print.pp_texpr_untyped ~env)
+          var (List.pp String.pp)
+          (cs |> List.map fst)
+    in
+    Some (Party candidate : party)
+
 let%trace unify_type_owner :
     env ->
     typ ->
@@ -225,13 +332,13 @@ let%trace rec infer_all : expr list -> env -> texpr list * ownership * env =
  fun exprs env ->
   List.fold_right
     (fun c (tes, own, env) ->
-      let (te, env) = infer_parties_expr c env in
+      let (te, env) = infer_expr c env in
       match unify_ownership own te.meta.info.own env with
       | Ok (own1, env) -> (te :: tes, own1, env)
       | Error (`Does_not_unify s) -> fail ~loc:te.meta.loc "%s" s)
     exprs ([], Global, env)
 
-and infer_parties_expr : expr -> env -> texpr * env =
+and infer_expr : expr -> env -> texpr * env =
  fun expr env ->
   if debug then (
     dump_env env;
@@ -239,19 +346,19 @@ and infer_parties_expr : expr -> env -> texpr * env =
   match expr.expr with
   | Int i ->
     ( {
-        meta = { loc = expr.meta; info = { typ = TyInt; own = Global } };
+        meta = { loc = expr.meta; info = { typ = TyInt; own = Global }; env };
         expr = Int i;
       },
       env )
   | Bool b ->
     ( {
-        meta = { loc = expr.meta; info = { typ = TyBool; own = Global } };
+        meta = { loc = expr.meta; info = { typ = TyBool; own = Global }; env };
         expr = Bool b;
       },
       env )
   | String s ->
     ( {
-        meta = { loc = expr.meta; info = { typ = TyString; own = Global } };
+        meta = { loc = expr.meta; info = { typ = TyString; own = Global }; env };
         expr = String s;
       },
       env )
@@ -259,7 +366,7 @@ and infer_parties_expr : expr -> env -> texpr * env =
     let { own; typ } = lookup_var ~loc:expr.meta env v in
     let te = Var (V (p, v)) in
     let texpr =
-      { meta = { loc = expr.meta; info = { typ; own } }; expr = te }
+      { meta = { loc = expr.meta; info = { typ; own }; env }; expr = te }
     in
     (* check if a party is given for this variable *)
     (match p with
@@ -304,7 +411,7 @@ and infer_parties_expr : expr -> env -> texpr * env =
           fail ~loc:expr.meta "could not unify result type: %s" s
       in
       ( {
-          meta = { loc = expr.meta; info = { own; typ = rtyp } };
+          meta = { loc = expr.meta; info = { own; typ = rtyp }; env };
           expr = App (fn, tes);
         },
         env )
@@ -326,6 +433,7 @@ and infer_parties_expr : expr -> env -> texpr * env =
                       | List _ -> TyList (fresh_type ())
                       | _ -> bug "unexpected");
                   };
+                env;
               };
             expr =
               (match expr.expr with
@@ -358,7 +466,10 @@ and infer_parties_expr : expr -> env -> texpr * env =
             TySet (typ |> Option.get_exn_or "nonempty set should have a type")
           | _ -> bug "unexpected"
         in
-        ( { meta = { loc = expr.meta; info = { own; typ } }; expr = Set tes },
+        ( {
+            meta = { loc = expr.meta; info = { own; typ }; env };
+            expr = Set tes;
+          },
           env )
     end
   | Map _ ->
@@ -370,25 +481,25 @@ and infer_parties_expr : expr -> env -> texpr * env =
   | Else | Timeout -> nyi "else/timeout"
 
 (* can no longer use ppx_debug because of labelled arg *)
-let rec infer_parties : ?in_seq:bool -> protocol -> env -> tprotocol * env =
+let rec infer : ?in_seq:bool -> protocol -> env -> tprotocol * env =
  fun ?(in_seq = false) p env ->
   if debug then (
     dump_env env;
     Format.printf "infer %a@." pp_protocol p);
-  let p1 = { p = Emp; pmeta = pmeta ~loc:p.pmeta () } in
+  let loc = p.pmeta in
   match p.p with
-  | Emp -> ({ p1 with p = Emp }, env)
+  | Emp -> ({ p = Emp; pmeta = pmeta ~loc ~env () }, env)
   | Call (f, args) ->
     (* TODO lookup the function environment *)
     let (args, env) =
       List.fold_left
         (fun (ts, env) c ->
-          let (te, env) = infer_parties_expr c env in
+          let (te, env) = infer_expr c env in
           (te :: ts, env))
         ([], env) args
     in
     let args = List.rev args in
-    ({ p1 with p = Call (f, args) }, env)
+    ({ p = Call (f, args); pmeta = pmeta ~loc ~env () }, env)
   | Send { from; to_; msg = Message { args; typ = mtype } } ->
     let (fm, tm) = (from.meta, to_.meta) in
     let (V (fp, from)) = must_be_var from in
@@ -425,7 +536,7 @@ let rec infer_parties : ?in_seq:bool -> protocol -> env -> tprotocol * env =
     let (targs, env) =
       List.fold_right
         (fun (k, arg) (targs, env) ->
-          let (targ, env) = infer_parties_expr arg env in
+          let (targ, env) = infer_expr arg env in
 
           let env =
             match unify_type_owner env f_vi.typ targ.meta.info.own with
@@ -458,7 +569,7 @@ let rec infer_parties : ?in_seq:bool -> protocol -> env -> tprotocol * env =
               env
           in
           let k1 =
-            { expr = Var (V (pv, v)); meta = { loc = k.meta; info = vi } }
+            { expr = Var (V (pv, v)); meta = { loc = k.meta; info = vi; env } }
           in
 
           ((k1, targ) :: targs, env))
@@ -496,22 +607,24 @@ let rec infer_parties : ?in_seq:bool -> protocol -> env -> tprotocol * env =
     in
 
     ( {
-        p1 with
         p =
           Send
             {
               from =
                 {
-                  meta = { loc = fm; info = { typ = f_vi.typ; own = f_vi.own } };
+                  meta =
+                    { loc = fm; info = { typ = f_vi.typ; own = f_vi.own }; env };
                   expr = Var (V (fp, from));
                 };
               to_ =
                 {
-                  meta = { loc = tm; info = { typ = t_vi.typ; own = t_vi.own } };
+                  meta =
+                    { loc = tm; info = { typ = t_vi.typ; own = t_vi.own }; env };
                   expr = Var (V (tp, to_));
                 };
               msg = Message { args = targs; typ = mtype };
             };
+        pmeta = pmeta ~loc ~env ();
       },
       env )
   | Assign (v, e) ->
@@ -522,7 +635,7 @@ let rec infer_parties : ?in_seq:bool -> protocol -> env -> tprotocol * env =
       (* whether or not to look up existing variables controls if the a subsequent assignment to a variable can fill in a previously-abstract type *)
       match lookup env v with None -> fresh_var env v | Some vi -> (env, vi)
     in
-    let (trhs, env) = infer_parties_expr e env in
+    let (trhs, env) = infer_expr e env in
     let env =
       match unify tlhs trhs.meta.info.typ env with
       | Ok env -> env
@@ -547,21 +660,16 @@ let rec infer_parties : ?in_seq:bool -> protocol -> env -> tprotocol * env =
           | Error (`Parties_instantiated_but_different s) -> fail ~loc:vm "%s" s
           | Error `Type_not_party -> fail ~loc:vm "type is not a party")
       in
-
-      ( {
-          p1 with
-          p =
-            Assign
-              ( {
-                  expr = Var (V (vp, v));
-                  meta = { loc = vm; info = { typ = tlhs; own = olhs } };
-                },
-                trhs );
-        },
-        env ))
+      let tlhs =
+        {
+          expr = Var (V (vp, v));
+          meta = { loc = vm; info = { typ = tlhs; own = olhs }; env };
+        }
+      in
+      ({ p = Assign (tlhs, trhs); pmeta = pmeta ~loc ~env () }, env))
   | Imply (c, p) ->
-    let (tc, env) = infer_parties_expr c env in
-    let (tp, env) = infer_parties p env in
+    let (tc, env) = infer_expr c env in
+    let (tp, env) = infer p env in
 
     (match unify tc.meta.info.typ TyBool env with
     | Ok _ -> ()
@@ -569,24 +677,24 @@ let rec infer_parties : ?in_seq:bool -> protocol -> env -> tprotocol * env =
     | Error (`Parties_instantiated_but_different s) ->
       fail ~loc:tc.meta.loc "%s" s);
 
-    ({ p1 with p = Imply (tc, tp) }, env)
+    ({ p = Imply (tc, tp); pmeta = pmeta ~loc ~env () }, env)
   | BlockingImply (c, p) ->
-    let (tc, env) = infer_parties_expr c env in
-    let (tp, env) = infer_parties p env in
+    let (tc, env) = infer_expr c env in
+    let (tp, env) = infer p env in
     (match unify tc.meta.info.typ TyBool env with
     | Ok _ -> ()
     | Error (`Does_not_unify s) -> fail ~loc:tc.meta.loc "%s" s
     | Error (`Parties_instantiated_but_different s) ->
       fail ~loc:tc.meta.loc "%s" s);
 
-    ({ p1 with p = BlockingImply (tc, tp) }, env)
+    ({ p = BlockingImply (tc, tp); pmeta = pmeta ~loc ~env () }, env)
   | Seq s ->
     (* List.fold_right infer_parties s env *)
     let local_bindings = env.local_bindings in
     let (ts, env) =
       List.fold_left
         (fun (ts, env) c ->
-          let (te, env) = infer_parties ~in_seq:true c env in
+          let (te, env) = infer ~in_seq:true c env in
           (te :: ts, env))
         ([], env) s
     in
@@ -595,30 +703,30 @@ let rec infer_parties : ?in_seq:bool -> protocol -> env -> tprotocol * env =
     (* restore *)
     let env = { env with local_bindings } in
 
-    ({ p1 with p = Seq ts }, env)
+    ({ p = Seq ts; pmeta = pmeta ~loc ~env () }, env)
   | Par ps ->
     let (ts, env) =
       List.fold_left
         (fun (ts, env) p ->
-          let (tp, env) = infer_parties p env in
+          let (tp, env) = infer p env in
           (tp :: ts, env))
         ([], env) ps
     in
     let ts = List.rev ts in
-    ({ p1 with p = Par ts }, env)
+    ({ p = Par ts; pmeta = pmeta ~loc ~env () }, env)
   | Disj (a, b) ->
-    let (ta, env) = infer_parties a env in
-    let (tb, env) = infer_parties b env in
-    ({ p1 with p = Disj (ta, tb) }, env)
+    let (ta, env) = infer a env in
+    let (tb, env) = infer b env in
+    ({ p = Disj (ta, tb); pmeta = pmeta ~loc ~env () }, env)
   | Forall (e, s, pb) ->
-    let (em, sm) = (e.meta, s.meta) in
+    let em = e.meta in
     let (V (pe, e)) = must_be_var e in
-    let (V (ps, s)) = must_be_var s in
+    let (s, env) = infer_expr s env in
 
     (* this binds only one new name, e. s is already defined *)
     let (env, party, own) =
       let pl = p.pmeta in
-      match lookup_var ~loc:pl env s with
+      match s.meta.info with
       | { typ = TySet (TyParty _ as p); own } -> (env, p, own)
       (* | Some vi -> fail "not a party set: %a" pp_var_info vi *)
       | { typ; own } ->
@@ -637,7 +745,7 @@ let rec infer_parties : ?in_seq:bool -> protocol -> env -> tprotocol * env =
       { env with bindings = SMap.add e { typ = party; own } env.bindings }
     in
 
-    let (tp1, env) = infer_parties pb env in
+    let (tp1, env) = infer pb env in
 
     (* unbind the bound variable *)
     let env = { env with bindings = SMap.remove e env.bindings } in
@@ -646,17 +754,10 @@ let rec infer_parties : ?in_seq:bool -> protocol -> env -> tprotocol * env =
     let e =
       {
         expr = Var (V (pe, e));
-        meta = { loc = em; info = { typ = party; own } };
+        meta = { loc = em; info = { typ = party; own }; env };
       }
     in
-    let s =
-      {
-        expr = Var (V (ps, s));
-        meta = { loc = sm; info = { typ = TySet party; own } };
-      }
-    in
-
-    ({ p1 with p = Forall (e, s, tp1) }, env)
+    ({ p = Forall (e, s, tp1); pmeta = pmeta ~loc ~env () }, env)
   | Exists (_, _, _) -> nyi "infer_parties exists"
   | Comment (_, _, _) -> bug "infer_parties doesn't expect comments"
   | SendOnly _ -> bug "infer_parties doesn't expect send only"
@@ -675,7 +776,7 @@ let initiator env p =
           if equal_party_info c t then
             (c, p)
           else
-            fail ~loc:p.pmeta.loc "different initiator in par")
+            fail ~loc:p.pmeta.ploc "different initiator in par")
         (List.combine it ps)
       |> ignore;
       List.hd it
@@ -685,7 +786,7 @@ let initiator env p =
       if equal_party_info ia ib then
         ia
       else
-        fail ~loc:p.pmeta.loc "different initiator in disjunction" List.for_all
+        fail ~loc:p.pmeta.ploc "different initiator in disjunction" List.for_all
           aux [a; b]
     | Send { from; _ } ->
       (match from.meta.info.typ with
@@ -693,7 +794,7 @@ let initiator env p =
       | _ -> fail ~loc:from.meta.loc "no initiator")
     | Call (f, _) ->
       (match SMap.find_opt f env.subprotocols with
-      | None -> fail ~loc:p.pmeta.loc "undefined function %s" f
+      | None -> fail ~loc:p.pmeta.ploc "undefined function %s" f
       | Some { initiator; _ } -> { repr = var initiator })
     | Assign (e, _) | BlockingImply (e, _) | Imply (e, _) ->
       (match e.meta.info.own with
@@ -736,6 +837,10 @@ let initial_env parties =
       SMap.of_list
         [
           ( "union",
+            let a = UF.elt (fresh ()) in
+            let set_a = TySet (TyVar a) in
+            Forall ([a], TyFn ([set_a; set_a], set_a)) );
+          ( "\\",
             let a = UF.elt (fresh ()) in
             let set_a = TySet (TyVar a) in
             Forall ([a], TyFn ([set_a; set_a], set_a)) );
@@ -827,3 +932,85 @@ let rec check_instantiated env p =
   | SendOnly _ -> bug "send only should not appear"
   | ReceiveOnly _ -> bug "receive only should not appear"
   | Comment (_, _, _) -> bug "comment should not appear"
+
+let rec qualify_vars_expr _ (t : texpr) =
+  let env = t.meta.env in
+  match t.expr with
+  | Int _ | Bool _ | String _ -> t
+  | Set s -> { t with expr = Set (List.map (qualify_vars_expr env) s) }
+  | List l -> { t with expr = List (List.map (qualify_vars_expr env) l) }
+  | Var (V (p, v)) ->
+    (match p with
+    | None ->
+      let party = find_party_var_by_type_of env t in
+      { t with expr = Var (V (party, v)) }
+    | Some _ -> t)
+  | App (f, args) ->
+    { t with expr = App (f, List.map (qualify_vars_expr env) args) }
+  | Map _ -> nyi "map check_instanted_expr"
+  | Tuple (_, _) -> nyi "tuple check_instanted_expr"
+  | Else | Timeout -> nyi "else/timeout"
+
+(** this approach of separately traversing the AST is taken because
+  trying to qualify during type inference won't work, as types won't be fully
+  instantiated.
+
+  to ensure that this works in the presence of transient bindings, we save the
+  environment each expression is constructed with (it's persistent anyway) so
+  the types of all other variables are in scope at the time are available. *)
+let rec qualify_vars env p =
+  match p.p with
+  | Seq s -> { p with p = Seq (List.map (qualify_vars env) s) }
+  | Par s -> { p with p = Par (List.map (qualify_vars env) s) }
+  | Disj (a, b) -> { p with p = Disj (qualify_vars env a, qualify_vars env b) }
+  | Send { from; to_; msg = Message { typ; args } } ->
+    {
+      p with
+      p =
+        Send
+          {
+            from = qualify_vars_expr env from;
+            to_ = qualify_vars_expr env to_;
+            msg =
+              Message
+                {
+                  typ;
+                  args =
+                    args
+                    |> List.map (fun (k, v) -> (k, (qualify_vars_expr env) v));
+                };
+          };
+    }
+  | Call (f, args) ->
+    { p with p = Call (f, List.map (qualify_vars_expr env) args) }
+  | Assign (v, e) ->
+    { p with p = Assign (qualify_vars_expr env v, qualify_vars_expr env e) }
+  | Imply (c, b) ->
+    { p with p = Imply (qualify_vars_expr env c, qualify_vars env b) }
+  | BlockingImply (c, b) ->
+    { p with p = BlockingImply (qualify_vars_expr env c, qualify_vars env b) }
+  | Forall (v, s, b) ->
+    {
+      p with
+      p =
+        Forall
+          (qualify_vars_expr env v, qualify_vars_expr env s, qualify_vars env b);
+    }
+  | Exists _ -> nyi "exists qualifer vars"
+  | Emp -> bug "emp should not appear"
+  | SendOnly _ -> bug "send only should not appear"
+  | ReceiveOnly _ -> bug "receive only should not appear"
+  | Comment (_, _, _) -> bug "comment should not appear"
+
+let check_expr env e =
+  let (te, env) = infer_expr env e in
+  check_instantiated_expr env te;
+  (* don't insert qualifier. may not be possible for an expression checked in insolation, such as an LTL property. also unnecessary as such expressions are not projected and must reside entirely on one side *)
+  (* let te = qualify_vars_expr env te in *)
+  (te, env)
+
+let check env p =
+  let (tp, env) = infer env p in
+  check_instantiated env tp;
+  let tp = qualify_vars env tp in
+  (tp, env)

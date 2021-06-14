@@ -4,7 +4,7 @@
 
 %token EOF
 %token LPAREN RPAREN COLON COMMA
-%token AND OR NOT PLUS MINUS DIV LT LE GT GE EQEQ NEQ
+%token AND OR NOT PLUS MINUS SETMINUS DIV LT LE GT GE EQEQ NEQ
 %token BOX DIAMOND IMPLIES
 %token TRUE FALSE LBRACKET RBRACKET LCURLY RCURLY
 %token TIMEOUT ELSE
@@ -28,7 +28,7 @@
 %left AND
 %left EQEQ NEQ
 %left LT LE GT GE
-%left PLUS MINUS
+%left PLUS MINUS SETMINUS
 %left DIV STAR
 %nonassoc NOT
 
@@ -69,6 +69,8 @@ protocol :
   | b = expr; WHEN; p = protocol;
     { p_with_pos $startpos $endpos (BlockingImply (b, p)) }
   | FORALL; v = var; IN; s = var; p = protocol; %prec forall_exists
+    { p_with_pos $startpos $endpos (Forall (v, s, p)) }
+  | FORALL; v = var; IN; LPAREN; s = expr; RPAREN; p = protocol; %prec forall_exists
     { p_with_pos $startpos $endpos (Forall (v, s, p)) }
   | EXISTS; v = var; IN; s = var; p = protocol; %prec forall_exists
     { p_with_pos $startpos $endpos (Exists (v, s, p)) }
@@ -117,6 +119,7 @@ msg_kvp :
 %inline binop :
   | PLUS { "+" }
   | MINUS { "-" }
+  | SETMINUS { "\\" }
   | STAR { "*" }
   | DIV { "/" }
   | AND { "&" }

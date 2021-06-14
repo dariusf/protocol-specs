@@ -2,6 +2,7 @@ open Containers
 open Common
 open Common.Printing
 open Ast
+open Infer.Cast
 
 type fml =
   | Conj of fml list

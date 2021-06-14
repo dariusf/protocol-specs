@@ -1,4 +1,4 @@
-Simplest example
+Simplest multiparty examples
 
   $ protocol print --parties C,P --project C <<EOF
   > forall c in C
@@ -19,6 +19,8 @@ Simplest example
   forall c in C
     c->: m;
     ->c: n
+
+Dynamic party set (i.e. types are used to compute projection)
 
   $ protocol print --parties C,P --project P <<EOF
   > forall c in C
@@ -123,23 +125,71 @@ A chain of messages that ends at C.
       p->: n(c);
       ->c: msg
 
-Multiple uses of the same party set
+Multiple uses of the same party set.
+
+Classic example from the paper
+
+  $ protocol print --parties C --project C - <<EOF
+  > forall c in C
+  >   forall d in (C \ {c})
+  >     c->d: m;
+  >     d.a = 1;
+  >     c.b = 2
+  > EOF
+  forall d in (C \ {self})
+    ->d: m;
+    b = 2
+  ||
+  forall c in (C \ {self})
+    c->: m;
+    a = 1
+
+Including self-send
 
   $ protocol print --parties C --project C - <<EOF
   > forall c in C
   >   forall d in C
-  >     c->d: m
+  >     c->d: m;
+  >     d.a = 1;
+  >     c.b = 2
   > EOF
-  error at line 3, col 4:
-  self-send not allowed
+  ->self: m;
+  a = 1;
+  b = 2
+  ||
+  forall d in (C \ {self})
+    ->d: m;
+    b = 2
+  ||
+  forall c in (C \ {self})
+    c->: m;
+    a = 1
+
+Explicit self-send
 
   $ protocol print --parties C --project C - <<EOF
-  > forall d in C
-  >   forall c in C
+  > forall c in C
+  >   c->c: m;
+  >   forall d in (C \ {c})
   >     c->d: m
   > EOF
-  error at line 3, col 4:
-  self-send not allowed
+  ->self: m;
+  (forall d in (C \ {self})
+     ->d: m)
+  ||
+  forall c in (C \ {self})
+    c->: m
+
+Literal self-send
+
+  $ protocol print --parties C --project C - <<EOF
+  > forall c in C
+  >   c->c: m
+  > EOF
+  ->self: m
+
+Unintuitive example. If |C| = 1, only one message is received from P (in the first thread).
+If |C| = 2, both threads receive messages.
 
   $ protocol print --parties C,P --project C - <<EOF
   > forall c in C
@@ -149,6 +199,10 @@ Multiple uses of the same party set
   > EOF
   forall p in P
     p->: m
+  ||
+  forall c in (C \ {self})
+    forall p in P
+      p->: m
 
   $ protocol print --parties C,P --project P - <<EOF
   > forall c in C
@@ -159,3 +213,23 @@ Multiple uses of the same party set
   forall c in C
     forall d in C
       ->d: m
+
+More standard variations
+
+  $ protocol print --parties C,P --project C - <<EOF
+  > forall p in P
+  >   forall d in C
+  >     p->d: m
+  > EOF
+  forall p in P
+    p->: m
+
+  $ protocol print --parties C,P --project C - <<EOF
+  > forall c in C
+  >   forall p in P
+  >     forall d in (C \ {c})
+  >       p->d: m
+  > EOF
+  forall c in (C \ {self})
+    forall p in P
+      p->: m

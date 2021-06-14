@@ -37,6 +37,7 @@ let show_token t =
   | FALSE -> "FALSE"
   | PLUS -> "PLUS"
   | MINUS -> "MINUS"
+  | SETMINUS -> "SETMINUS"
   | DIV -> "DIV"
   | LCURLY -> "LCURLY"
   | RCURLY -> "RCURLY"
@@ -68,7 +69,7 @@ let parse_mono_ic file ic =
     let tok = Lexing.lexeme lexer in
     (* (Printexc.to_string e) *)
     Error
-      (Format.sprintf "parse error near \"%s\", %s, line %d, col %d@." tok
+      (Format.sprintf "parse error near %s, %s, line %d, col %d@." tok
          pos.pos_fname pos.pos_lnum
          (pos.pos_cnum - pos.pos_bol + 1))
   | Lexer.SyntaxError ->

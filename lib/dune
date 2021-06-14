@@ -13,6 +13,7 @@
   (file ../ppx_debug.json))
  (preprocess
   (pps
+   visitors.ppx
    ppx_debug
    ppx_expect
    ppx_deriving.show

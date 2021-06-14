@@ -113,7 +113,9 @@ end
 module String = struct
   include String
 
-  let pp = Format.pp_print_string
+  let pp = String.pp
+  (* printing quotes is essential for parsing by ppx_debug *)
+  (* Format.pp_print_string *)
 end
 
 module SMap = struct

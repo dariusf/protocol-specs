@@ -54,8 +54,7 @@ let typecheck parties spec =
               { env with bindings = SMap.add c v env.bindings })
             fparams env
         in
-        let (tp, env) = Infer.infer_parties p env in
-        Infer.check_instantiated env tp;
+        let (tp, env) = Infer.check p env in
         {
           env with
           subprotocols =
@@ -70,8 +69,7 @@ let typecheck parties spec =
         })
       env fns
   in
-  let (tp, env) = Infer.infer_parties spec.protocol env in
-  Infer.check_instantiated env tp;
+  let (tp, env) = Infer.check spec.protocol env in
   (env, tp)
 
 let project parties env tprotocol =
@@ -105,13 +103,14 @@ let print project_party parties ast types actions file =
       let project_party = require_project_party project_party in
       let (g, nodes) = Actions.split_into_actions project_party env tprotocol in
       print_endline (Actions.to_graphviz env project_party g nodes)
-    else
+    else (
       tprotocol
       |> (if types then
             Print.render_tprotocol ~env
          else
            Print.render_tprotocol_untyped ~env)
-      |> PPrint.ToChannel.pretty 0.8 120 stdout
+      |> PPrint.ToChannel.pretty 0.8 120 stdout;
+      print_endline "")
 
 let print project_party parties ast types actions file =
   try print project_party parties ast types actions file
@@ -164,12 +163,11 @@ let monitor parties file =
   let (ltl_fml, env) =
     List.fold_right
       (fun e (ts, env) ->
-        let (te, env) = Infer.infer_parties_expr e env in
+        let (te, env) = Infer.check_expr e env in
         (te :: ts, env))
       ltl_fml ([], env)
   in
 
-  List.iter (Infer.check_instantiated_expr env) ltl_fml;
   let ltl_fml =
     ltl_fml
     |> List.map (fun l ->

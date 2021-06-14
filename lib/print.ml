@@ -25,7 +25,7 @@ let get_expr_prec op =
   | "&" -> 4
   | "==" | "!=" -> 5
   | "<" | "<=" | ">" | ">=" -> 6
-  | "+" | "-" -> 7
+  | "+" | "-" | "\\" -> 7
   | "/" | "*" -> 8
   | "!" -> 10
   | _ -> 0
@@ -258,8 +258,11 @@ let render_protocol_ : ('e -> document) -> ('a, 'e, 'v) _protocol -> document =
       @@ nest 2
            (concat
               [
-                forall; space; render_expr v; space; in_; space; render_expr s;
-                nl; render_protocol ~pctx:{ pctx with prec = n } p;
+                forall; space; render_expr v; space; in_; space;
+                (match s.expr with
+                | Var _ -> render_expr s
+                | _ -> parens (render_expr s)); nl;
+                render_protocol ~pctx:{ pctx with prec = n } p;
               ])
     | Exists (v, s, p) ->
       parens_multiline_if ~pctx ~n

@@ -44,16 +44,16 @@ The classic two-phase commit protocol.
     (forall (p : party P;global) in (P : {party P};global)
        (c : party C;global)->(p : party P;global): prepare;
        ((p : party P;P)->(c : party C;P): prepared;
-        (responded : {party P};C) = union((responded : {party P};C), {(p : party P;C)})
+        (c.responded : {party P};C) = union((c.responded : {party P};C), {(p : party P;C)})
         \/
         (p : party P;P)->(c : party C;P): abort;
-        (aborted : {party P};C) = union((aborted : {party P};C), {(p : party P;C)})));
-    ((aborted : {party P};C) == {} =>
+        (c.aborted : {party P};C) = union((c.aborted : {party P};C), {(p : party P;C)})));
+    ((c.aborted : {party P};C) == {} =>
        (forall (p : party P;global) in (P : {party P};global)
           (c : party C;global)->(p : party P;global): commit;
           (p : party P;P)->(c : party C;P): commit_ack)
      \/
-     (aborted : {party P};C) != {} =>
+     (c.aborted : {party P};C) != {} =>
        (forall (p : party P;global) in (P : {party P};global)
           (c : party C;global)->(p : party P;global): abort;
           (p : party P;P)->(c : party C;P): abort_ack))

@@ -36,6 +36,7 @@ rule f = parse
   | ";" { SEMI }
   | "||" { PAR }
   | "\\/" { DISJ }
+  | "\\" { SETMINUS }
   (* | "/\\" { CONJ } *)
   | ":" { COLON }
   | "," { COMMA }

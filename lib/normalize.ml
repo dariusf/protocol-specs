@@ -9,7 +9,8 @@ let rec normalize_once p =
   in
   let p1 =
     match p.p with
-    | Seq [] -> Emp
+    | Seq [] | Par [] -> Emp
+    | Seq [s] | Par [s] -> s.p
     | Seq s ->
       let s = s |> List.map normalize_once |> List.filter useful in
       Seq
@@ -30,9 +31,13 @@ let rec normalize_once p =
         | _ -> Disj (normalize_once a, normalize_once b)
       end
     | Emp | Send _ | Assign _ | Call _ -> p.p
+    | Imply (_, { p = Emp; _ }) -> Emp
     | Imply (c, p) -> Imply (c, normalize_once p)
+    | BlockingImply (c, { p = Emp; _ }) -> Emp
     | BlockingImply (c, p) -> BlockingImply (c, normalize_once p)
+    | Forall (_, _, { p = Emp; _ }) -> Emp
     | Forall (v, s, p) -> Forall (v, s, normalize_once p)
+    | Exists (_, _, { p = Emp; _ }) -> Emp
     | Exists (v, s, p) -> Exists (v, s, normalize_once p)
     | SendOnly _ | ReceiveOnly _ -> p.p
     | Comment (pa, s, p) -> Comment (pa, s, normalize_once p)

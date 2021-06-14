@@ -1,6 +1,7 @@
 open Containers
 open Common
 open Ast
+open Infer.Cast
 module Tracing = Ppx_debug.Tracing
 
 module Node = struct
@@ -194,15 +195,8 @@ let%trace rec group_seq :
     | { p = ReceiveOnly _; pmeta } :: _
     | { p = SendOnly _; pmeta } :: _
     | { p = Assign _; pmeta } :: _ ->
-      (* t *)
-      (* print_endline "atomic"; *)
       let id = fresh_node_id () in
       let thread = pmeta.tid in
-      (* let thread =
-           match pr with
-           | [] -> bug "empty protocol produced by grouping"
-           | p :: _ -> p.pmeta.tid
-         in *)
       let g = G.add_vertex G.empty id in
       let used_params =
         params
@@ -363,7 +357,11 @@ and split_actions :
           params;
           preconditions;
           protocol =
-            { p = Emp; pmeta = pmeta ~tid:t.pmeta.tid ~loc:t.pmeta.loc () };
+            {
+              p = Emp;
+              pmeta =
+                pmeta ~tid:t.pmeta.tid ~loc:t.pmeta.ploc ~env:t.pmeta.penv ();
+            };
           fence = (* don't know this at this point *)
                   AllOf [];
           my_fence;

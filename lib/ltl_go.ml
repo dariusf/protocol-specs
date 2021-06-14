@@ -377,7 +377,7 @@ digraph G {
     ([%derive.show: (string * string) list] (G.all_edges graph));
   [%expect
     {|
-    {S_0_R -> "red";S_1_Y -> "yellow";S_2_G
+    {"S_0_R" -> "red";"S_1_Y" -> "yellow";"S_2_G"
     -> "green"}
     [("S_2_G", "S_2_G", {b}); ("S_2_G", "S_2_G", {a});
       ("S_2_G", "S_2_G", {a, b}); ("S_2_G", "S_2_G", {});

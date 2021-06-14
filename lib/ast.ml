@@ -58,34 +58,41 @@ type var_info = {
 }
 [@@deriving show { with_path = false }, eq]
 
-type tmeta = {
-  loc : loc;
-  info : var_info;
-}
-[@@deriving show { with_path = false }, eq]
+module Expr = struct
+  type 'm _expr = {
+    meta : 'm;
+    expr : 'm _expr';
+  }
 
-type 'a _expr = {
-  meta : 'a;
-  expr : 'a _expr';
-}
+  and 'm _expr' =
+    | Int of int
+    | Bool of bool
+    | String of string
+    | Timeout
+    | Else
+    | Set of 'm _expr list
+    | List of 'm _expr list
+    | Map of (string * 'm _expr) list
+    | App of string * 'm _expr list
+    | Var of var
+    | Tuple of 'm _expr * 'm _expr
+  [@@deriving
+    show { with_path = false }, eq, visitors { variety = "map"; name = "map" }]
 
-and 'a _expr' =
-  | Int of int
-  | Bool of bool
-  | String of string
-  | Timeout
-  | Else
-  | Set of 'a _expr list
-  | List of 'a _expr list
-  | Map of (string * 'a _expr) list
-  | App of string * 'a _expr list
-  | Var of var
-  | Tuple of 'a _expr * 'a _expr
-[@@deriving show { with_path = false }, eq]
+  class ['self] map_expr =
+    object (_ : 'self)
+      inherit [_] map
+
+      method visit_'m _env m = m
+
+      method visit_var _env v = v
+    end
+end
+[@warning "-17"]
+
+include Expr
 
 type expr = loc _expr [@@deriving show { with_path = false }, eq]
-
-type texpr = tmeta _expr [@@deriving show { with_path = false }, eq]
 
 let with_pos start stop expr =
   Lexing.
@@ -130,51 +137,64 @@ let msg name = Message { typ = name; args = [] }
 let msg_destruct (Message { typ; args }) =
   MessageD { typ; args = List.map fst args }
 
-type ('a, 'e, 'v) _protocol = {
-  pmeta : 'a;
-  p : ('a, 'e, 'v) _protocol';
-}
+module Protocol = struct
+  type ('a, 'e, 'v) _protocol = {
+    pmeta : 'a;
+    p : ('a, 'e, 'v) _protocol';
+  }
 
-and ('a, 'e, 'v) _protocol' =
-  | Emp
-  | Seq of ('a, 'e, 'v) _protocol list
-  | Par of ('a, 'e, 'v) _protocol list
-  | Disj of ('a, 'e, 'v) _protocol * ('a, 'e, 'v) _protocol
-  | Call of string * 'e list
-  | Send of {
-      from : 'v;
-      to_ : 'v;
-      msg : ('e, 'v) msg;
-    }
-  | Assign of 'v * 'e
-  | Imply of 'e * ('a, 'e, 'v) _protocol
-  | BlockingImply of 'e * ('a, 'e, 'v) _protocol
-  (* TODO use bindlib? *)
-  | Forall of 'v * 'e * ('a, 'e, 'v) _protocol
-  | Exists of 'v * 'e * ('a, 'e, 'v) _protocol
-  (* extras *)
-  | SendOnly of {
-      to_ : 'v;
-      msg : ('e, 'v) msg;
-    }
-  | ReceiveOnly of {
-      from : 'v;
-      msg : 'v msg_destruct;
-    }
-  (* cst *)
-  | Comment of var option * string * ('a, 'e, 'v) _protocol
-(* cst would have parens too *)
-[@@deriving show { with_path = false }, eq]
+  and ('a, 'e, 'v) _protocol' =
+    | Emp
+    | Seq of ('a, 'e, 'v) _protocol list
+    | Par of ('a, 'e, 'v) _protocol list
+    | Disj of ('a, 'e, 'v) _protocol * ('a, 'e, 'v) _protocol
+    | Call of string * 'e list
+    | Send of {
+        from : 'v;
+        to_ : 'v;
+        msg : ('e, 'v) msg;
+      }
+    | Assign of 'v * 'e
+    | Imply of 'e * ('a, 'e, 'v) _protocol
+    | BlockingImply of 'e * ('a, 'e, 'v) _protocol
+    (* TODO use bindlib? *)
+    | Forall of 'v * 'e * ('a, 'e, 'v) _protocol
+    | Exists of 'v * 'e * ('a, 'e, 'v) _protocol
+    (* extras *)
+    | SendOnly of {
+        to_ : 'v;
+        msg : ('e, 'v) msg;
+      }
+    | ReceiveOnly of {
+        from : 'v;
+        msg : 'v msg_destruct;
+      }
+    (* cst *)
+    | Comment of var option * string * ('a, 'e, 'v) _protocol
+  (* cst would have parens too *)
+  [@@deriving
+    show { with_path = false }, eq, visitors { variety = "map"; name = "map" }]
 
-let must_be_var e =
-  match e.expr with
-  | Var v -> v
-  | _ -> failwith (Format.sprintf "%a must be a var" pp_expr e)
+  class ['self] map_protocol =
+    object (_ : 'self)
+      inherit [_] map
 
-let must_be_var_t e =
-  match e.expr with
-  | Var v -> v
-  | _ -> failwith (Format.sprintf "%a must be a var" pp_texpr e)
+      method visit_'v _env m = m
+
+      method visit_'e _env m = m
+
+      method visit_'a _env m = m
+
+      method visit_var _env m = m
+
+      method visit_msg _ _ _env m = m
+
+      method visit_msg_destruct _env _ m = m
+    end
+end
+[@warning "-17"]
+
+include Protocol
 
 type protocol = (loc, expr, expr) _protocol
 [@@deriving show { with_path = false }, eq]
@@ -185,16 +205,62 @@ type tid = {
 }
 [@@deriving show { with_path = false }, eq]
 
-type pmeta = {
-  tid : tid;
+type party_info = { (* representative set, will be nonempty *)
+                    repr : var }
+[@@deriving show { with_path = false }, eq]
+
+let empty_party_info repr = { repr }
+
+type scheme = Forall of UF.t list * typ
+[@@deriving show { with_path = false }, eq]
+
+type tmeta = {
   loc : loc;
+  info : var_info;
+  env : env;
+}
+
+and texpr = tmeta _expr
+
+and pmeta = {
+  tid : tid;
+  ploc : loc;
+  penv : env;
+}
+
+and tprotocol = (pmeta, texpr, texpr) _protocol
+
+and subprotocol = {
+  fname : string;
+  fparams : string list;
+  tp : tprotocol;
+  initiator : string;
+}
+
+and env = {
+  (* known parties and types *)
+  parties : party_info IMap.t;
+  types : typ IMap.t;
+  (* tracks the types of variables, will have pointers into above fields *)
+  bindings : var_info SMap.t;
+  local_bindings : var_info SMap.t;
+  polymorphic : scheme SMap.t;
+  subprotocols : subprotocol SMap.t;
 }
 [@@deriving show { with_path = false }, eq]
 
-let pmeta ?(tid = { name = "main"; params = [] }) ~loc () = { loc; tid }
+let empty_env =
+  {
+    parties = IMap.empty;
+    types = IMap.empty;
+    bindings = SMap.empty;
+    local_bindings = SMap.empty;
+    polymorphic = SMap.empty;
+    subprotocols = SMap.empty;
+  }
 
-type tprotocol = (pmeta, texpr, texpr) _protocol
-[@@deriving show { with_path = false }, eq]
+let pmeta ?(tid = { name = "main"; params = [] }) ~loc ~env () =
+  { ploc = loc; tid; penv = env }
 
 let p_with_pos start stop p =
   Lexing.
@@ -207,45 +273,6 @@ let p_with_pos start stop p =
         };
       p;
     }
-
-type party_info = { (* representative set, will be nonempty *)
-                    repr : var }
-[@@deriving show { with_path = false }, eq]
-
-let empty_party_info repr = { repr }
-
-type scheme = Forall of UF.t list * typ
-[@@deriving show { with_path = false }]
-
-type subprotocol = {
-  fname : string;
-  fparams : string list;
-  tp : tprotocol;
-  initiator : string;
-}
-[@@deriving show { with_path = false }]
-
-type env = {
-  (* known parties and types *)
-  parties : party_info IMap.t;
-  types : typ IMap.t;
-  (* tracks the types of variables, will have pointers into above fields *)
-  bindings : var_info SMap.t;
-  local_bindings : var_info SMap.t;
-  polymorphic : scheme SMap.t;
-  subprotocols : subprotocol SMap.t;
-}
-[@@deriving show { with_path = false }]
-
-let empty_env =
-  {
-    parties = IMap.empty;
-    types = IMap.empty;
-    bindings = SMap.empty;
-    local_bindings = SMap.empty;
-    polymorphic = SMap.empty;
-    subprotocols = SMap.empty;
-  }
 
 let party_list parties = parties |> IMap.values |> List.of_iter
 

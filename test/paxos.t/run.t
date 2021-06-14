@@ -49,24 +49,24 @@ Single-decree Paxos
      ((p.proposal : int;P) = (p.proposal : int;P) + 1;
       (forall (a : party A;global) in (A : {party A};global)
          (p : party P;global)->(a : party A;global): prepare((n : int;A)=p2i((p : party P;global)) * 100 + (p.proposal : int;P));
-         ((n : int;A) > (a.highest_proposal : int;A) =>
-            (a.highest_proposal : int;A) = (n : int;A);
+         ((a.n : int;A) > (a.highest_proposal : int;A) =>
+            (a.highest_proposal : int;A) = (a.n : int;A);
             (a : party A;A)->(p : party P;A): promise((cp : int;P)=(a.accepted_proposal : int;A), (cv : int;P)=(a.accepted_value : int;A));
             (p.promise_responses : {party A};P) = union((p.promise_responses : {party A};P), {(a : party A;P)});
-            ((cp : int;P) > 0 & (cp : int;P) > (p.cp : int;P) =>
-               (p.cp : int;P) = (cp : int;P);
-               (p.value : int;P) = (cv : int;P))))
+            ((p.cp : int;P) > 0 & (p.cp : int;P) > (p.cp : int;P) =>
+               (p.cp : int;P) = (p.cp : int;P);
+               (p.value : int;P) = (p.cv : int;P))))
       ||
       size((p.promise_responses : {party A};P)) > (p.majority : int;P) =>*
         (forall (a1 : party A;P) in (p.promise_responses : {party A};P)
            (p : party P;global)->(a1 : party A;P): propose((pn : int;A)=(p.proposal : int;P), (pv : int;A)=(p.value : int;P));
-           (ac2 : party A;A) = (a1 : party A;A);
-           ((pn : int;A) == (a1.highest_proposal : int;A) =>
-              (a1.accepted_proposal : int;A) = (pn : int;A);
-              (a1.accepted_value : int;A) = (pv : int;A);
+           (a1.ac2 : party A;A) = (a1 : party A;A);
+           ((a1.pn : int;A) == (a1.highest_proposal : int;A) =>
+              (a1.accepted_proposal : int;A) = (a1.pn : int;A);
+              (a1.accepted_value : int;A) = (a1.pv : int;A);
               (a1 : party A;A)->(p : party P;A): accept;
               (forall (l : party L;global) in (L : {party L};global)
-                 (ac2 : party A;A)->(l : party L;global): accept)))))
+                 (a1.ac2 : party A;A)->(l : party L;global): accept)))))
 
   $ protocol print paxos.spec --parties P,A,L --project P
   proposal = 0;
@@ -74,18 +74,18 @@ Single-decree Paxos
   cp = {0, 0};
   majority = size(A) / 2 + 1;
   promise_responses = {};
-  (proposal = p.proposal + 1;
+  (proposal = proposal + 1;
    (forall a in A
-      ->a: prepare(n=p2i(p) * 100 + p.proposal);
+      ->a: prepare(n=p2i(self) * 100 + self.proposal);
       a->: promise(cp, cv);
-      promise_responses = union(p.promise_responses, {a});
-      (cp > 0 & cp > p.cp =>
+      promise_responses = union(promise_responses, {a});
+      (cp > 0 & cp > cp =>
          cp = cp;
          value = cv))
    ||
-   size(p.promise_responses) > p.majority =>*
-     (forall a1 in p.promise_responses
-        ->a1: propose(pn=p.proposal, pv=p.value);
+   size(promise_responses) > majority =>*
+     (forall a1 in promise_responses
+        ->a1: propose(pn=self.proposal, pv=self.value);
         a1->: accept))
 
   $ protocol print paxos.spec --parties P,A,L --project A
@@ -94,22 +94,20 @@ Single-decree Paxos
   accepted_value = 0;
   (forall p in P
      (p->: prepare(n);
-      (n > a.highest_proposal =>
+      (n > highest_proposal =>
          highest_proposal = n;
-         ->p: promise(cp=a.accepted_proposal, cv=a.accepted_value))
+         ->p: promise(cp=self.accepted_proposal, cv=self.accepted_value))
       ||
       p->: propose(pn, pv);
-      ac2 = a1;
-      (pn == a1.highest_proposal =>
+      ac2 = self;
+      (pn == highest_proposal =>
          accepted_proposal = pn;
          accepted_value = pv;
-         ->p: accept;
-         (forall l in L
-            ->l: accept))))
+         ->p: accept)))
 
   $ protocol print paxos.spec --parties P,A,L --project L
-  (forall p in P
-     (forall a1 in p.promise_responses
-        ac2->: accept))
+  forall p in P
+    forall a1 in promise_responses
+      a1.ac2->: accept
 
   $ protocol print paxos.spec > paxos1.spec && protocol print paxos1.spec | protocol print > paxos2.spec && git diff --no-index paxos1.spec paxos2.spec
