@@ -203,7 +203,8 @@ let render_protocol_ : ('e -> document) -> ('a, 'e, 'v) _protocol -> document =
     | Send { from; to_; msg = Message { typ; args } } ->
       concat
         [
-          render_expr from; arrow; render_expr to_; colon; space; string typ;
+          render_expr from; arrow; render_expr to_; enclose space space colon;
+          string typ;
           (match args with
           | [] -> empty
           | _ ->
@@ -217,7 +218,7 @@ let render_protocol_ : ('e -> document) -> ('a, 'e, 'v) _protocol -> document =
     | SendOnly { to_; msg = Message { typ; args }; _ } ->
       concat
         [
-          arrow; render_expr to_; colon; space; string typ;
+          arrow; render_expr to_; enclose space space colon; string typ;
           (match args with
           | [] -> empty
           | _ ->
@@ -231,7 +232,7 @@ let render_protocol_ : ('e -> document) -> ('a, 'e, 'v) _protocol -> document =
     | ReceiveOnly { from; msg = MessageD { typ; args }; _ } ->
       concat
         [
-          render_expr from; arrow; colon; space; string typ;
+          render_expr from; arrow; enclose space space colon; string typ;
           (match args with
           | [] -> empty
           | _ -> parens (separate (spaced comma) (List.map render_expr args)));

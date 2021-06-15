@@ -12,8 +12,8 @@ Actions
   >     c.m = 1
   > EOF
   digraph G {
-    1 [label="PReceiveM1\ntid: Pt0(c:C)\n{start}\nthis: {Pt0(c:C) = 1}\nparams: [(c:C)]\nc->: m"];
-    2 [label="PSendN2\ntid: Pt0(c:C)\n{Pt0(c:C) = 1}\nthis: {Pt0(c:C) = 2}\nparams: [(c:C)]\n->c: n"];
+    1 [label="PReceiveM1\ntid: Pt0(c:C)\n{start}\nthis: {Pt0(c:C) = 1}\nparams: [(c:C)]\nc-> : m"];
+    2 [label="PSendN2\ntid: Pt0(c:C)\n{Pt0(c:C) = 1}\nthis: {Pt0(c:C) = 2}\nparams: [(c:C)]\n->c : n"];
     1 -> 2;
   }
 

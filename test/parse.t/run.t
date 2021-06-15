@@ -130,7 +130,7 @@ Note that the parens are only added when necessary.
   ||
   a.b = {a: 1}
   ||
-  s->r: m(a=1, b=2)
+  s->r : m(a=1, b=2)
   ||
   1 =>
     a.b = 1;

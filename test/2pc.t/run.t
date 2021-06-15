@@ -3,90 +3,90 @@ The classic two-phase commit protocol.
   $ protocol print 2pc.spec
   forall c in C
     (forall p in P
-       c->p: prepare;
-       (p->c: prepared;
+       c->p : prepare;
+       (p->c : prepared;
         responded = union(responded, {p})
         \/
-        p->c: abort;
+        p->c : abort;
         aborted = union(aborted, {p})));
     (aborted == {} =>
        (forall p in P
-          c->p: commit;
-          p->c: commit_ack)
+          c->p : commit;
+          p->c : commit_ack)
      \/
      aborted != {} =>
        (forall p in P
-          c->p: abort;
-          p->c: abort_ack))
+          c->p : abort;
+          p->c : abort_ack))
 
   $ protocol print 2pc-wait.spec
   forall c in C
     forall p in P
-      c->p: prepare;
-      (p->c: prepared;
+      c->p : prepare;
+      (p->c : prepared;
        responded = union(responded, {p})
        \/
-       p->c: abort;
+       p->c : abort;
        aborted = union(aborted, {p}))
   ||
   responded == P =>*
     (forall p in P
-       c->p: commit;
-       p->c: commit_ack)
+       c->p : commit;
+       p->c : commit_ack)
   \/
   aborted != {} =>*
     (forall p in P
-       c->p: abort;
-       p->c: abort_ack)
+       c->p : abort;
+       p->c : abort_ack)
 
   $ protocol print --parties P,C --types 2pc.spec
   forall (c : party C;global) in (C : {party C};global)
     (forall (p : party P;global) in (P : {party P};global)
-       (c : party C;global)->(p : party P;global): prepare;
-       ((p : party P;P)->(c : party C;P): prepared;
+       (c : party C;global)->(p : party P;global) : prepare;
+       ((p : party P;P)->(c : party C;P) : prepared;
         (c.responded : {party P};C) = union((c.responded : {party P};C), {(p : party P;C)})
         \/
-        (p : party P;P)->(c : party C;P): abort;
+        (p : party P;P)->(c : party C;P) : abort;
         (c.aborted : {party P};C) = union((c.aborted : {party P};C), {(p : party P;C)})));
     ((c.aborted : {party P};C) == {} =>
        (forall (p : party P;global) in (P : {party P};global)
-          (c : party C;global)->(p : party P;global): commit;
-          (p : party P;P)->(c : party C;P): commit_ack)
+          (c : party C;global)->(p : party P;global) : commit;
+          (p : party P;P)->(c : party C;P) : commit_ack)
      \/
      (c.aborted : {party P};C) != {} =>
        (forall (p : party P;global) in (P : {party P};global)
-          (c : party C;global)->(p : party P;global): abort;
-          (p : party P;P)->(c : party C;P): abort_ack))
+          (c : party C;global)->(p : party P;global) : abort;
+          (p : party P;P)->(c : party C;P) : abort_ack))
 
   $ protocol print 2pc.spec --parties C,P --project C
   (forall p in P
-     ->p: prepare;
-     (p->: prepared;
+     ->p : prepare;
+     (p-> : prepared;
       responded = union(responded, {p})
       \/
-      p->: abort;
+      p-> : abort;
       aborted = union(aborted, {p})));
   (aborted == {} =>
      (forall p in P
-        ->p: commit;
-        p->: commit_ack)
+        ->p : commit;
+        p-> : commit_ack)
    \/
    aborted != {} =>
      (forall p in P
-        ->p: abort;
-        p->: abort_ack))
+        ->p : abort;
+        p-> : abort_ack))
 
   $ protocol print 2pc.spec --parties C,P --project P
   forall c in C
-    c->: prepare;
-    (->c: prepared
+    c-> : prepare;
+    (->c : prepared
      \/
-     ->c: abort);
-    (c->: commit;
-     ->c: commit_ack
+     ->c : abort);
+    (c-> : commit;
+     ->c : commit_ack
      \/
-     c->: abort;
-     ->c: abort_ack)
+     c-> : abort;
+     ->c : abort_ack)
 
   $ protocol print 2pc.spec > 2pc1.spec && protocol print 2pc1.spec | protocol print > 2pc2.spec && git diff --no-index 2pc1.spec 2pc2.spec
 
@@ -94,13 +94,13 @@ The classic two-phase commit protocol.
 
   $ protocol print 2pc.spec --parties C,P --project P --actions
   digraph G {
-    1 [label="PReceivePrepare1\ntid: Pt0(c:C)\n{start}\nthis: {Pt0(c:C) = 1}\nparams: [(c:C)]\nc->: prepare"];
-    2 [label="PSendPrepared2\ntid: Pt0(c:C)\n{Pt0(c:C) = 1}\nthis: {Pt0(c:C) = 2}\nparams: [(c:C)]\n->c: prepared"];
-    3 [label="PSendAbort3\ntid: Pt0(c:C)\n{Pt0(c:C) = 1}\nthis: {Pt0(c:C) = 3}\nparams: [(c:C)]\n->c: abort"];
-    4 [label="PReceiveCommit4\ntid: Pt0(c:C)\n{Any(Pt0(c:C) = 2, Pt0(c:C) = 3)}\nthis: {Pt0(c:C) = 4}\nparams: [(c:C)]\nc->: commit"];
-    5 [label="PSendCommitAck5\ntid: Pt0(c:C)\n{Pt0(c:C) = 4}\nthis: {Pt0(c:C) = 5}\nparams: [(c:C)]\n->c: commit_ack"];
-    6 [label="PReceiveAbort6\ntid: Pt0(c:C)\n{Any(Pt0(c:C) = 2, Pt0(c:C) = 3)}\nthis: {Pt0(c:C) = 6}\nparams: [(c:C)]\nc->: abort"];
-    7 [label="PSendAbortAck7\ntid: Pt0(c:C)\n{Pt0(c:C) = 6}\nthis: {Pt0(c:C) = 7}\nparams: [(c:C)]\n->c: abort_ack"];
+    1 [label="PReceivePrepare1\ntid: Pt0(c:C)\n{start}\nthis: {Pt0(c:C) = 1}\nparams: [(c:C)]\nc-> : prepare"];
+    2 [label="PSendPrepared2\ntid: Pt0(c:C)\n{Pt0(c:C) = 1}\nthis: {Pt0(c:C) = 2}\nparams: [(c:C)]\n->c : prepared"];
+    3 [label="PSendAbort3\ntid: Pt0(c:C)\n{Pt0(c:C) = 1}\nthis: {Pt0(c:C) = 3}\nparams: [(c:C)]\n->c : abort"];
+    4 [label="PReceiveCommit4\ntid: Pt0(c:C)\n{Any(Pt0(c:C) = 2, Pt0(c:C) = 3)}\nthis: {Pt0(c:C) = 4}\nparams: [(c:C)]\nc-> : commit"];
+    5 [label="PSendCommitAck5\ntid: Pt0(c:C)\n{Pt0(c:C) = 4}\nthis: {Pt0(c:C) = 5}\nparams: [(c:C)]\n->c : commit_ack"];
+    6 [label="PReceiveAbort6\ntid: Pt0(c:C)\n{Any(Pt0(c:C) = 2, Pt0(c:C) = 3)}\nthis: {Pt0(c:C) = 6}\nparams: [(c:C)]\nc-> : abort"];
+    7 [label="PSendAbortAck7\ntid: Pt0(c:C)\n{Pt0(c:C) = 6}\nthis: {Pt0(c:C) = 7}\nparams: [(c:C)]\n->c : abort_ack"];
     6 -> 7;
     4 -> 5;
     3 -> 6;
@@ -113,13 +113,13 @@ The classic two-phase commit protocol.
 
   $ protocol print 2pc.spec --parties C,P --project C --actions
   digraph G {
-    1 [label="CSendPrepare1\ntid: Ct0(p:P)\n{start}\nthis: {Ct0(p:P) = 1}\nparams: [(p:P)]\n->p: prepare"];
-    2 [label="CReceivePrepared2\ntid: Ct0(p:P)\n{Ct0(p:P) = 1}\nthis: {Ct0(p:P) = 2}\nparams: [(p:P)]\np->: prepared;\nresponded = union(responded, {p})"];
-    3 [label="CReceiveAbort3\ntid: Ct0(p:P)\n{Ct0(p:P) = 1}\nthis: {Ct0(p:P) = 3}\nparams: [(p:P)]\np->: abort;\naborted = union(aborted, {p})"];
-    4 [label="CSendCommit4\ntid: Ct2(p:P)\n{∀ p:P. Any(Ct0(p:P) = 2, Ct0(p:P) = 3)}\nthis: {Ct2(p:P) = 4}\n{[aborted == {}]}\nparams: [(p:P)]\n->p: commit"];
-    5 [label="CReceiveCommitAck5\ntid: Ct2(p:P)\n{Ct2(p:P) = 4}\nthis: {Ct2(p:P) = 5}\nparams: [(p:P)]\np->: commit_ack"];
-    6 [label="CSendAbort6\ntid: Ct1(p:P)\n{∀ p:P. Any(Ct0(p:P) = 2, Ct0(p:P) = 3)}\nthis: {Ct1(p:P) = 6}\n{[aborted != {}]}\nparams: [(p:P)]\n->p: abort"];
-    7 [label="CReceiveAbortAck7\ntid: Ct1(p:P)\n{Ct1(p:P) = 6}\nthis: {Ct1(p:P) = 7}\nparams: [(p:P)]\np->: abort_ack"];
+    1 [label="CSendPrepare1\ntid: Ct0(p:P)\n{start}\nthis: {Ct0(p:P) = 1}\nparams: [(p:P)]\n->p : prepare"];
+    2 [label="CReceivePrepared2\ntid: Ct0(p:P)\n{Ct0(p:P) = 1}\nthis: {Ct0(p:P) = 2}\nparams: [(p:P)]\np-> : prepared;\nresponded = union(responded, {p})"];
+    3 [label="CReceiveAbort3\ntid: Ct0(p:P)\n{Ct0(p:P) = 1}\nthis: {Ct0(p:P) = 3}\nparams: [(p:P)]\np-> : abort;\naborted = union(aborted, {p})"];
+    4 [label="CSendCommit4\ntid: Ct2(p:P)\n{∀ p:P. Any(Ct0(p:P) = 2, Ct0(p:P) = 3)}\nthis: {Ct2(p:P) = 4}\n{[aborted == {}]}\nparams: [(p:P)]\n->p : commit"];
+    5 [label="CReceiveCommitAck5\ntid: Ct2(p:P)\n{Ct2(p:P) = 4}\nthis: {Ct2(p:P) = 5}\nparams: [(p:P)]\np-> : commit_ack"];
+    6 [label="CSendAbort6\ntid: Ct1(p:P)\n{∀ p:P. Any(Ct0(p:P) = 2, Ct0(p:P) = 3)}\nthis: {Ct1(p:P) = 6}\n{[aborted != {}]}\nparams: [(p:P)]\n->p : abort"];
+    7 [label="CReceiveAbortAck7\ntid: Ct1(p:P)\n{Ct1(p:P) = 6}\nthis: {Ct1(p:P) = 7}\nparams: [(p:P)]\np-> : abort_ack"];
     6 -> 7;
     4 -> 5;
     3 -> 6;

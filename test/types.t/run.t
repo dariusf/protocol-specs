@@ -32,7 +32,7 @@ Message variables are also local.
   > EOF
   forall (c : party C;global) in (C : {party C};global)
     forall (p : party P;global) in (P : {party P};global)
-      (c : party C;global)->(p : party P;global): m((a : int;P)=1);
+      (c : party C;global)->(p : party P;global) : m((a : int;P)=1);
       (p.b : int;P) = (p.a : int;P)
 
 We can't tell which party r belongs to because c is global.
@@ -56,7 +56,7 @@ Qualifying r allows us to infer the type.
   forall (c : party C;global) in (C : {party C};global)
     forall (p : party P;global) in (P : {party P};global)
       (p.r : {party C};P) = union((p.r : {party C};P), {(c : party C;global)});
-      (c : party C;global)->(p : party P;global): m
+      (c : party C;global)->(p : party P;global) : m
 
 Here it's not possible for members of party C to know which of them should send a message to P because they don't know s, which resides on p...
 
@@ -81,8 +81,8 @@ Here it's not possible for members of party C to know which of them should send 
   forall (p : party P;global) in (P : {party P};global)
     (p.s : {party C};P) = (C : {party C};global);
     (forall (x : party C;P) in (p.s : {party C};P)
-       (p : party P;global)->(x : party C;P): n;
-       (x : party C;C)->(p : party P;C): m)
+       (p : party P;global)->(x : party C;P) : n;
+       (x : party C;C)->(p : party P;C) : m)
 
 This fails because we cannot infer a type for a...
 
