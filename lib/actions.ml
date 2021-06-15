@@ -557,14 +557,14 @@ let postprocess_graph g m =
     |> List.filter (fun (_, n) ->
            match n.protocol.p with Emp -> true | _ -> false)
   in
-  let fn_node_preconditions =
-    fn_nodes
-    |> List.map (fun (id, _) ->
-           ( id,
-             AnyOf
-               (G.pred g id |> List.map (fun n1 -> (IMap.find n1 m).my_fence))
-           ))
-  in
+  (* let fn_node_preconditions =
+       fn_nodes
+       |> List.map (fun (id, _) ->
+              ( id,
+                AnyOf
+                  (G.pred g id |> List.map (fun n1 -> (IMap.find n1 m).my_fence))
+              ))
+     in *)
   (* Format.eprintf "fn nodes %s@."
      ([%derive.show: int list] (fn_nodes |> List.map fst)); *)
   let fn_node_successor_preconditions =

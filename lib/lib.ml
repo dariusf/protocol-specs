@@ -184,14 +184,12 @@ let monitor parties file =
   List.iteri
     (fun i { repr = V (_, pname) } ->
       let pr = SMap.find pname all in
-      let (action_graph, action_nodes) =
-        Actions.split_into_actions pname env pr
-      in
+      let (_, action_nodes) = Actions.split_into_actions pname env pr in
       let ltl =
         List.assoc_opt ~eq:String.equal pname ltl_fml
         |> Option.get_or ~default:[]
       in
-      Ltl_go.translate_party_ltl env i pname ltl pr action_graph action_nodes
+      Ltl_go.translate_party_ltl env i pname ltl pr action_nodes
         (List.map (fun p -> p.repr |> var_name) parties))
     parties
 

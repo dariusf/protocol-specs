@@ -560,8 +560,7 @@ let generate_ltl_monitor ltl_i env parties pname ltl =
   in
   (defs, fields, inits, steps)
 
-let translate_party_ltl env ltl_i pname ltl tprotocol action_graph action_nodes
-    parties =
+let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
   (* TODO use pname to qualify stuff *)
   let ltl_monitors =
     List.map (generate_ltl_monitor ltl_i env parties pname) ltl
@@ -690,12 +689,10 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_graph action_nodes
     ~postconditions ~ltl_monitor_defs ~ltl_monitor_fields ~ltl_monitor_init
     ~ltl_monitor_step ()
 
-let translate_party_ltl env i pname ltl tprotocol action_graph action_nodes
-    parties =
+let translate_party_ltl env i pname ltl tprotocol action_nodes parties =
   if not (IMap.is_empty action_nodes) then
     let code =
-      translate_party_ltl env i pname ltl tprotocol action_graph action_nodes
-        parties
+      translate_party_ltl env i pname ltl tprotocol action_nodes parties
       |> invoke_gofmt
     in
     write_to_file ~filename:(Format.sprintf "monitor%s.go" pname) code

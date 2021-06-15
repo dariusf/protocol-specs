@@ -398,7 +398,7 @@ let fence_to_pc tid f =
   in
   aux [] f
 
-let translate_node all_vars graph pname (id, node) =
+let translate_node all_vars pname (id, node) =
   (* not sure if we want to get this from the graph? *)
   let tid = node.protocol.pmeta.tid in
   let pc_current = fence_to_pc tid node.fence in
@@ -449,7 +449,7 @@ let rec default_value_of_type env t =
   | TyString -> Term {|""|}
   | TyFn (_, _) -> nyi "default party fn"
 
-let single_party_to_tla all_vars env graph nodes pname protocol =
+let single_party_to_tla all_vars env nodes pname protocol =
   let vars = Actions.assigned_variables protocol in
   let variables =
     match vars with
@@ -499,7 +499,7 @@ let single_party_to_tla all_vars env graph nodes pname protocol =
            Exists ([("self", Term pname)], body))
   in
   let actions =
-    IMap.bindings nodes |> List.map (translate_node all_vars graph pname)
+    IMap.bindings nodes |> List.map (translate_node all_vars pname)
   in
   (variables, init, next, actions, vars_def)
 
@@ -574,8 +574,8 @@ let to_tla env party_sizes actions =
   in
   let joint =
     actions |> SMap.bindings
-    |> List.map (fun (p, (graph, nodes, a)) ->
-           single_party_to_tla all_vars env graph nodes p a)
+    |> List.map (fun (p, (_, nodes, a)) ->
+           single_party_to_tla all_vars env nodes p a)
   in
   let variables = List.map (fun (a, _, _, _, _) -> a) joint in
   let inits = List.map (fun (_, a, _, _, _) -> a) joint in

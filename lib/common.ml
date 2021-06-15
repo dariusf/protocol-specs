@@ -61,11 +61,6 @@ let foldl1 f xs =
   | [] -> failwith "foldl1: empty"
   | x :: rest -> List.fold_left f x rest
 
-let foldr1 f xs =
-  match xs with
-  | [] -> failwith "foldr1: empty"
-  | x :: rest -> List.fold_right f rest x
-
 module UF = UF.Int
 
 module Printing = struct

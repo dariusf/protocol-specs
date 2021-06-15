@@ -33,7 +33,7 @@ let rec normalize_once p =
     | Emp | Send _ | Assign _ | Call _ -> p.p
     | Imply (_, { p = Emp; _ }) -> Emp
     | Imply (c, p) -> Imply (c, normalize_once p)
-    | BlockingImply (c, { p = Emp; _ }) -> Emp
+    | BlockingImply (_, { p = Emp; _ }) -> Emp
     | BlockingImply (c, p) -> BlockingImply (c, normalize_once p)
     | Forall (_, _, { p = Emp; _ }) -> Emp
     | Forall (v, s, p) -> Forall (v, s, normalize_once p)
