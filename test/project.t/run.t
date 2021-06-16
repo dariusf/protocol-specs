@@ -236,3 +236,30 @@ More standard variations
   forall c in (C \ {self})
     forall p in P
       p-> : m
+
+More than two self-sends
+
+  $ protocol print --parties C --project C - <<EOF
+  > forall c in C
+  >   forall d in C
+  >     forall e in C
+  >       e->d: m
+  > EOF
+  ->self : m;
+  self-> : m
+  ||
+  forall e in (C \ {self})
+    e-> : m
+  ||
+  forall d in (C \ {self})
+    ->d : m
+  ||
+  forall c in (C \ {self})
+    (->self : m;
+     self-> : m
+     ||
+     forall e in (C \ {self})
+       e-> : m
+     ||
+     forall d in (C \ {self})
+       ->d : m)
