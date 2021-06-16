@@ -108,6 +108,6 @@ Single-decree Paxos
   $ protocol print paxos.spec --parties P,A,L --project L
   forall p in P
     forall a1 in promise_responses
-      a1.ac2-> : accept
+      ac2-> : accept
 
   $ protocol print paxos.spec > paxos1.spec && protocol print paxos1.spec | protocol print > paxos2.spec && git diff --no-index paxos1.spec paxos2.spec

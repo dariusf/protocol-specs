@@ -114,7 +114,7 @@ let%trace rec project_aux : string -> env -> tprotocol -> tprotocol =
  fun party env pr ->
   match pr.p with
   | Emp -> { pr with p = Emp }
-  | Assign (v, e) ->
+  | Assign (v, _) ->
     (* we also have to look at these, as they are mandatory when dealing with self-sends *)
     let qualifier_bound =
       let (V (p, _)) = must_be_var_t v in
@@ -122,8 +122,7 @@ let%trace rec project_aux : string -> env -> tprotocol -> tprotocol =
     in
     let p =
       if owned_by env party v && qualifier_bound then
-        (* drop the party qualifiers *)
-        Assign ({ v with expr = Var (V (None, var_name (must_be_var_t v))) }, e)
+        pr.p
       else
         Emp
     in
@@ -234,88 +233,6 @@ let%trace rec project_aux : string -> env -> tprotocol -> tprotocol =
   | ReceiveOnly _ -> bug "receive only should not be used in front end language"
   | Comment _ -> bug "invalid comment"
 
-let rec project_right bound party env pr =
-  match pr.p with
-  | Emp -> { pr with p = Emp }
-  | Assign (v, _) ->
-    let p =
-      if owned_by env party v then
-        pr.p
-      else
-        Emp
-    in
-    { pr with p }
-  | Send { from; to_; msg } ->
-    let p =
-      if
-        String.equal party (must_be_party env from)
-        && String.equal party (must_be_party env to_)
-      then (* self-send *)
-        Seq
-          [
-            { pr with p = SendOnly { to_; msg } };
-            { pr with p = ReceiveOnly { from; msg = msg_destruct msg } };
-          ]
-      else if String.equal party (must_be_party env from) then
-        SendOnly { to_; msg }
-      else if String.equal party (must_be_party env to_) then
-        ReceiveOnly { from; msg = msg_destruct msg }
-      else
-        Emp
-    in
-    { pr with p }
-  | Call (f, _) ->
-    let owner = (SMap.find f env.subprotocols).initiator in
-    let p =
-      if String.equal owner party then
-        pr.p
-      else
-        Emp
-    in
-    { pr with p }
-  | Imply (c, body) ->
-    let body1 = project_right bound party env body in
-    let p =
-      if List.for_all (owned_by env party) (vars_in c) then
-        Imply (c, body1)
-      else (* note that this is the body of the conditional, not emp *)
-        body1.p
-    in
-    { pr with p }
-  | BlockingImply (c, body) ->
-    let body1 = project_right bound party env body in
-    let p =
-      if List.for_all (owned_by env party) (vars_in c) then
-        BlockingImply (c, body1)
-      else
-        body1.p
-    in
-    { pr with p }
-  | Forall (v, s, p) ->
-    let name = v |> must_be_var_t |> var_name in
-    let typ = must_be_party_set env s in
-    let p1 = project_right ((name, typ) :: bound) party env p in
-    let p =
-      (* take off the binder if 1. it's relevant, 2. a binding of this type has not been encountered *)
-      if String.equal party typ then
-        Par [p1; { pr with p = Forall (v, s, p1) }]
-      else
-        Forall (v, s, p1)
-    in
-    { pr with p }
-  | Seq ps ->
-    { pr with p = Seq (ps |> List.map (project_right bound party env)) }
-  | Par ps ->
-    { pr with p = Par (ps |> List.map (project_right bound party env)) }
-  | Disj (a, b) ->
-    let pa = project_right bound party env a in
-    let pb = project_right bound party env b in
-    { pr with p = Disj (pa, pb) }
-  | Exists _ -> nyi "project aux exists"
-  | SendOnly _ -> bug "send only should not be used in front end language"
-  | ReceiveOnly _ -> bug "receive only should not be used in front end language"
-  | Comment _ -> bug "invalid comment"
-
 let strip_qualifiers_expr (e : texpr) : texpr =
   let v =
     object
@@ -332,6 +249,8 @@ let strip_qualifiers (e : tprotocol) : tprotocol =
       inherit [_] map_protocol
 
       method! visit_'e _env m = strip_qualifiers_expr m
+
+      method! visit_'v _env m = strip_qualifiers_expr m
     end
   in
   v#visit__protocol () e
