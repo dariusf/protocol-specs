@@ -128,16 +128,18 @@ let%trace rec project_aux : string -> env -> tprotocol -> tprotocol =
     in
     { pr with p }
   | Send { from; to_; msg } ->
+    let f = from |> must_be_var_t |> var_name in
+    let t = to_ |> must_be_var_t |> var_name in
     let p =
-      if
-        let from = from |> must_be_var_t |> var_name in
-        String.equal from "self"
-      then
+      if String.equal f "self" && String.equal t "self" then
+        Seq
+          [
+            { pr with p = SendOnly { to_; msg } };
+            { pr with p = ReceiveOnly { from; msg = msg_destruct msg } };
+          ]
+      else if String.equal f "self" then
         SendOnly { to_; msg }
-      else if
-        let to_ = to_ |> must_be_var_t |> var_name in
-        String.equal to_ "self"
-      then
+      else if String.equal t "self" then
         ReceiveOnly { from; msg = msg_destruct msg }
       else
         Emp

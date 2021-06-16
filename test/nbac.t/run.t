@@ -8,9 +8,11 @@ Non-blocking atomic commitment
      f-> : ok)
   ||
   ->self : yes;
+  self-> : yes;
   voted_yes = union(voted_yes, {self})
   \/
   ->self : no;
+  self-> : no;
   no = true
   ||
   forall q in (P \ {self})

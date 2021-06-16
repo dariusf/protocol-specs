@@ -154,6 +154,7 @@ Including self-send
   >     c.b = 2
   > EOF
   ->self : m;
+  self-> : m;
   a = 1;
   b = 2
   ||
@@ -174,6 +175,7 @@ Explicit self-send
   >     c->d: m
   > EOF
   ->self : m;
+  self-> : m;
   (forall d in (C \ {self})
      ->d : m)
   ||
@@ -186,7 +188,8 @@ Literal self-send
   > forall c in C
   >   c->c: m
   > EOF
-  ->self : m
+  ->self : m;
+  self-> : m
 
 Unintuitive example. If |C| = 1, only one message is received from P (in the first thread).
 If |C| = 2, both threads receive messages.
