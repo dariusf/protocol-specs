@@ -52,8 +52,8 @@ let print project parties ast types actions file =
       Lib.print project parties ast types actions file);
   `Ok ()
 
-let tla parties file =
-  Ppx_debug.Tracing.wrap (fun () -> Lib.tla parties file);
+let tla parties spec_name file =
+  Ppx_debug.Tracing.wrap (fun () -> Lib.tla parties spec_name file);
   `Ok ()
 
 let monitor parties file =
@@ -109,13 +109,20 @@ let tla_cmd =
       & opt (some string) None
           (info ~docv:"PARTIES" ~doc:"indicate party sets" ["parties"]))
   in
+  let spec_name =
+    Arg.(
+      value
+      & opt (some string) None
+          (info ~docv:"SPEC NAME" ~doc:"the name of the output spec"
+             ["spec-name"]))
+  in
   let man =
     [
       `S Manpage.s_description; `P "Compiles a specification to TLA+.";
       `Blocks help_secs;
     ]
   in
-  ( Term.(ret (const tla $ parties $ file)),
+  ( Term.(ret (const tla $ parties $ spec_name $ file)),
     Term.info "tla" ~doc:"compiles a specification to TLA+"
       ~exits:Term.default_exits ~man )
 

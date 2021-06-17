@@ -116,8 +116,12 @@ let print project_party parties ast types actions file =
   try print project_party parties ast types actions file
   with Check_failure s -> Format.printf "%s@." s
 
-let tla parties file =
-  let spec_name = file |> Filename.remove_extension |> Filename.basename in
+let tla parties spec_name file =
+  let spec_name =
+    spec_name
+    |> Option.get_or
+         ~default:(file |> Filename.remove_extension |> Filename.basename)
+  in
   let (parties, party_sizes) = require_parties parties in
   let spec = parse file in
   let (env, tprotocol) = typecheck parties spec in
@@ -138,8 +142,9 @@ let tla parties file =
   (* if not (Sys.file_exists cfg_filename) then *)
   write_to_file ~filename:cfg_filename cfg
 
-let tla parties file =
-  try tla parties file with Check_failure s -> Format.printf "%s@." s
+let tla parties spec_name file =
+  try tla parties spec_name file
+  with Check_failure s -> Format.printf "%s@." s
 
 let monitor parties file =
   (* TODO is this needed? *)
