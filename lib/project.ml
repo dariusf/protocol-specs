@@ -235,27 +235,25 @@ let%trace rec project_aux : string -> env -> tprotocol -> tprotocol =
   | ReceiveOnly _ -> bug "receive only should not be used in front end language"
   | Comment _ -> bug "invalid comment"
 
-let strip_qualifiers_expr (e : texpr) : texpr =
-  let v =
+let strip_qualifiers (e : tprotocol) : tprotocol =
+  let ve =
     object
       inherit [_] map_expr
 
       method! visit_var _env (V (_, v)) = V (None, v)
     end
   in
-  v#visit__expr () e
-
-let strip_qualifiers (e : tprotocol) : tprotocol =
-  let v =
+  let expr e = ve#visit__expr () e in
+  let vp =
     object
       inherit [_] map_protocol
 
-      method! visit_'e _env m = strip_qualifiers_expr m
+      method! visit_'e _env m = expr m
 
-      method! visit_'v _env m = strip_qualifiers_expr m
+      method! visit_'v _env m = expr m
     end
   in
-  v#visit__protocol () e
+  vp#visit__protocol () e
 
 let project parties env p =
   parties

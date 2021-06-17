@@ -77,7 +77,10 @@ module Expr = struct
     | Var of var
     | Tuple of 'm _expr * 'm _expr
   [@@deriving
-    show { with_path = false }, eq, visitors { variety = "map"; name = "map" }]
+    show { with_path = false },
+      eq,
+      visitors { variety = "map"; name = "map" },
+      visitors { variety = "reduce"; name = "reduce" }]
 
   class ['self] map_expr =
     object (_ : 'self)
@@ -86,6 +89,15 @@ module Expr = struct
       method visit_'m _env m = m
 
       method visit_var _env v = v
+    end
+
+  class virtual ['self] reduce_expr =
+    object (self : 'self)
+      inherit [_] reduce
+
+      method visit_'m _env _ = self#zero
+
+      method visit_var _env _ = self#zero
     end
 end
 [@warning "-17"]
@@ -173,7 +185,10 @@ module Protocol = struct
     | Comment of var option * string * ('a, 'e, 'v) _protocol
   (* cst would have parens too *)
   [@@deriving
-    show { with_path = false }, eq, visitors { variety = "map"; name = "map" }]
+    show { with_path = false },
+      eq,
+      visitors { variety = "map"; name = "map" },
+      visitors { variety = "reduce"; name = "reduce" }]
 
   class ['self] map_protocol =
     object (_ : 'self)
@@ -190,6 +205,32 @@ module Protocol = struct
       method visit_msg _ _ _env m = m
 
       method visit_msg_destruct _env _ m = m
+    end
+
+  class virtual ['self] reduce_protocol =
+    object (self : 'self)
+      inherit [_] reduce
+
+      method visit_'v _env _ = self#zero
+
+      method visit_'e _env _ = self#zero
+
+      method visit_'a _env _ = self#zero
+
+      method visit_var _env _ = self#zero
+
+      method visit_msg _ _ _env _ = self#zero
+
+      method visit_msg_destruct _env _ _ = self#zero
+    end
+
+  class ['self] reduce_protocol_list =
+    object (_ : 'self)
+      inherit [_] reduce_protocol
+
+      method zero = []
+
+      method plus a b = a @ b
     end
 end
 [@warning "-17"]

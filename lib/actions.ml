@@ -75,35 +75,10 @@ let rec render_fence f =
   | Forall (s, v, b) -> Format.sprintf "∀ %s:%s. %s" s v (render_fence b)
   | Cond (tid, pc) -> Format.sprintf "%a = %d" Print.pp_tid tid pc
 
-(** the condition that the successor of this would have to wait for *)
-let compute_fence tid id (t : tprotocol) =
-  let rec aux t =
-    match t.p with
-    | Forall (v, s, b) ->
-      let (V (_, v)) = must_be_var_t v in
-      let (V (_, s)) = must_be_var_t s in
-      Forall (v, s, aux b)
-    | Par ps -> AllOf (List.map aux ps)
-    | Disj (a, b) -> AnyOf [aux a; aux b]
-    | Call _ ->
-      (* there's no successor for now, as calls transfer control entirely *)
-      AnyOf []
-    | SendOnly _ | ReceiveOnly _ | Seq _ | Assign (_, _) -> Cond (tid, id)
-    | Imply (_, b) | BlockingImply (_, b) -> aux b
-    | Exists (_, _, _) -> nyi "compute fence Exists"
-    | Comment (_, _, _) -> bug "compute fence Comment"
-    | Send _ -> bug "compute fence Send"
-    | Emp -> bug "compute fence Emp"
-  in
-  aux t
-
-type constr = Mutex of int [@@deriving show { with_path = false }]
-
 type node = {
   preconditions : texpr list;
   protocol : tprotocol;
   params : (string * string) list;
-  constraints : constr list;
   fence : fence_cond;
   my_fence : fence_cond;
 }
@@ -213,7 +188,6 @@ let%trace rec group_seq :
       in
       let node =
         {
-          constraints = [];
           params = used_params;
           preconditions;
           protocol = { p = Seq prs; pmeta = meta };
@@ -353,7 +327,6 @@ and split_actions :
          ([%derive.show: (string * string) list] used_params); *)
       let node =
         {
-          constraints = [];
           params;
           preconditions;
           protocol =
@@ -445,16 +418,7 @@ let to_graphviz env pname g m =
   let nodes =
     IMap.bindings m
     |> List.map (fun (id, node) ->
-           let {
-             preconditions;
-             params;
-             constraints = _;
-             protocol;
-             fence;
-             my_fence;
-           } =
-             node
-           in
+           let { preconditions; params; protocol; fence; my_fence } = node in
            let name = node_name pname (id, node) in
            let pre =
              match preconditions with
@@ -626,42 +590,26 @@ let collect_message_types (p : tprotocol) =
   in
   aux p |> List.uniq ~eq:String.equal
 
-let assigned_variables (t : tprotocol) =
-  let rec aux t =
-    match t.p with
-    | Assign (v, _) ->
-      let info = v.meta.info in
-      let (V (_, v)) = must_be_var_t v in
-      [(v, info)]
-    | Seq es | Par es -> List.concat_map aux es
-    | Disj (a, b) -> aux a @ aux b
-    | Imply (_, b) | BlockingImply (_, b) | Forall (_, _, b) ->
-      (* ignore the variables in forall *)
-      aux b
-    | SendOnly _ | ReceiveOnly _ ->
-      (* ignore variables *)
-      []
-    | Call _ -> []
-    | Exists (_, _, _) -> nyi "used variables exists"
-    | Send _ -> bug "used variable send"
-    | Comment (_, _, _) -> bug "used variables comment"
-    | Emp -> []
-  in
-  aux t |> List.uniq ~eq:(fun (a, _) (b, _) -> String.equal a b)
+let assigned_variables (e : tprotocol) =
+  let vp =
+    object
+      inherit [_] reduce_protocol_list
 
-let all_tids (t : tprotocol) =
-  let rec aux t =
-    let thread = t.pmeta.tid in
-    thread
-    ::
-    (match t.p with
-    | SendOnly _ | ReceiveOnly _ | Assign _ | Call _ -> []
-    | Seq es | Par es -> List.concat_map aux es
-    | Disj (a, b) -> aux a @ aux b
-    | Imply (_, b) | BlockingImply (_, b) | Forall (_, _, b) -> aux b
-    | Exists (_, _, _) -> nyi "all threads exists"
-    | Send _ -> bug "all threads send"
-    | Comment (_, _, _) -> bug "all threads comment"
-    | Emp -> bug "all threads emp")
+      method! visit_Assign _env v _e =
+        let info = v.meta.info in
+        let (V (_, v)) = must_be_var_t v in
+        [(v, info)]
+    end
   in
-  aux t |> List.uniq ~eq:equal_tid
+  vp#visit__protocol () e
+  |> List.uniq ~eq:(fun (a, _) (b, _) -> String.equal a b)
+
+let all_tids (e : tprotocol) =
+  let vp =
+    object
+      inherit [_] reduce_protocol_list
+
+      method! visit__protocol _env p = [p.pmeta.tid]
+    end
+  in
+  vp#visit__protocol () e |> List.uniq ~eq:equal_tid
