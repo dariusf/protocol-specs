@@ -18,6 +18,7 @@
   
   import (
   	"errors"
+  	"fmt"
   )
   
   type Global struct {
@@ -70,6 +71,7 @@
   		if !(m.PC[Cmain] == 0) {
   			return errors.New("control precondition violated")
   		}
+  		m.Log = append(m.Log, entry{action: "CChangeA1", params: params})
   		return nil
   	default:
   		panic("invalid action")
@@ -153,12 +155,20 @@
   	}
   }
   
+  type entry struct {
+  	action string
+  	params []string
+  }
+  
+  type Log = []entry
+  
   type Monitor struct {
   	previous Global
   	PC       map[string]int
   	//vars     map[string][]string
   	vars        map[string]map[string]bool
   	ltlMonitor0 *LTLMonitor0
+  	Log         Log
   }
   
   //func NewMonitor(vars map[string][]string) *Monitor {
@@ -167,6 +177,7 @@
   		// previous is the empty Global
   		PC:          map[string]int{},
   		vars:        vars,
+  		Log:         Log{},
   		ltlMonitor0: NewLTLMonitor0(vars),
   	}
   }
@@ -214,4 +225,10 @@
   	}
   
   	return nil
+  }
+  
+  func (m *Monitor) PrintLog() {
+  	for _, e := range m.Log {
+  		fmt.Printf("%v %v\n", e.action, e.params)
+  	}
   }

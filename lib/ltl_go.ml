@@ -84,6 +84,7 @@ package rv
 
 import (
 	"errors"
+  "fmt"
   %s
 )
 
@@ -95,7 +96,6 @@ type Action int
 const (
 %s
 )
-
 
 func all(s []string, f func(string) bool) bool {
 	b := true
@@ -148,12 +148,20 @@ func (m *Monitor) applyPostcondition(action Action, params ...string) error {
 
 %s
 
+type entry struct {
+	action string
+	params []string
+}
+
+type Log = []entry
+
 type Monitor struct {
 	previous Global
   PC map[string]int
   //vars     map[string][]string
   vars     map[string]map[string]bool
   %s
+  Log Log
 }
 
 //func NewMonitor(vars map[string][]string) *Monitor {
@@ -162,6 +170,7 @@ func NewMonitor(vars map[string]map[string]bool) *Monitor {
     // previous is the empty Global
     PC: map[string]int{},
     vars: vars,
+    Log: Log{},
     %s
   }
 }
@@ -205,6 +214,12 @@ func (m *Monitor) StepS(g Global) error {
   %s
 
   return nil
+}
+
+func (m *Monitor) PrintLog() {
+	for _, e := range m.Log {
+		fmt.Printf("%%v %%v\n", e.action, e.params)
+	}
 }
 |}
     extra_imports global_contents action_defs preconditions postconditions
@@ -639,6 +654,7 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
                         (compile parties p))
                |> String.concat "\n"
            in
+           let name = Actions.node_name pname (id, act) in
            let body =
              Format.sprintf
                {|%s
@@ -646,13 +662,13 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
                if ! (%s) {
                  return errors.New("control precondition violated")
                }
+               m.Log = append(m.Log, entry{action: "%s", params: params})
                return nil|}
                (params_check act.params) pres
                (fence_to_precondition act act.fence)
+               name
            in
-           Format.sprintf "case %s:\n%s"
-             (Actions.node_name pname (id, act))
-             body)
+           Format.sprintf "case %s:\n%s" name body)
     |> String.concat "\n"
   in
   let postconditions =

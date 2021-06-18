@@ -386,6 +386,7 @@ The classic two-phase commit protocol.
   
   import (
   	"errors"
+  	"fmt"
   	"reflect"
   )
   
@@ -448,6 +449,7 @@ The classic two-phase commit protocol.
   		if !(m.PC["Ct0_"+(params[0] /* p : P */)] == 0) {
   			return errors.New("control precondition violated")
   		}
+  		m.Log = append(m.Log, entry{action: "CSendPrepare1", params: params})
   		return nil
   	case CReceivePrepared2:
   		if len(params) != 1 {
@@ -457,6 +459,7 @@ The classic two-phase commit protocol.
   		if !(m.PC["Ct0_"+(params[0] /* p : P */)] == 1) {
   			return errors.New("control precondition violated")
   		}
+  		m.Log = append(m.Log, entry{action: "CReceivePrepared2", params: params})
   		return nil
   	case CReceiveAbort3:
   		if len(params) != 1 {
@@ -466,6 +469,7 @@ The classic two-phase commit protocol.
   		if !(m.PC["Ct0_"+(params[0] /* p : P */)] == 1) {
   			return errors.New("control precondition violated")
   		}
+  		m.Log = append(m.Log, entry{action: "CReceiveAbort3", params: params})
   		return nil
   	case CSendCommit4:
   		if len(params) != 1 {
@@ -477,6 +481,7 @@ The classic two-phase commit protocol.
   		if !(allSet(m.vars["P"], func(p string) bool { return m.PC["Ct0_"+(p)] == 2 || m.PC["Ct0_"+(p)] == 3 })) {
   			return errors.New("control precondition violated")
   		}
+  		m.Log = append(m.Log, entry{action: "CSendCommit4", params: params})
   		return nil
   	case CReceiveCommitAck5:
   		if len(params) != 1 {
@@ -486,6 +491,7 @@ The classic two-phase commit protocol.
   		if !(m.PC["Ct2_"+(params[0] /* p : P */)] == 4) {
   			return errors.New("control precondition violated")
   		}
+  		m.Log = append(m.Log, entry{action: "CReceiveCommitAck5", params: params})
   		return nil
   	case CSendAbort6:
   		if len(params) != 1 {
@@ -497,6 +503,7 @@ The classic two-phase commit protocol.
   		if !(allSet(m.vars["P"], func(p string) bool { return m.PC["Ct0_"+(p)] == 2 || m.PC["Ct0_"+(p)] == 3 })) {
   			return errors.New("control precondition violated")
   		}
+  		m.Log = append(m.Log, entry{action: "CSendAbort6", params: params})
   		return nil
   	case CReceiveAbortAck7:
   		if len(params) != 1 {
@@ -506,6 +513,7 @@ The classic two-phase commit protocol.
   		if !(m.PC["Ct1_"+(params[0] /* p : P */)] == 6) {
   			return errors.New("control precondition violated")
   		}
+  		m.Log = append(m.Log, entry{action: "CReceiveAbortAck7", params: params})
   		return nil
   	default:
   		panic("invalid action")
@@ -621,12 +629,20 @@ The classic two-phase commit protocol.
   	}
   }
   
+  type entry struct {
+  	action string
+  	params []string
+  }
+  
+  type Log = []entry
+  
   type Monitor struct {
   	previous Global
   	PC       map[string]int
   	//vars     map[string][]string
   	vars        map[string]map[string]bool
   	ltlMonitor0 *LTLMonitor0
+  	Log         Log
   }
   
   //func NewMonitor(vars map[string][]string) *Monitor {
@@ -635,6 +651,7 @@ The classic two-phase commit protocol.
   		// previous is the empty Global
   		PC:          map[string]int{},
   		vars:        vars,
+  		Log:         Log{},
   		ltlMonitor0: NewLTLMonitor0(vars),
   	}
   }
@@ -682,4 +699,10 @@ The classic two-phase commit protocol.
   	}
   
   	return nil
+  }
+  
+  func (m *Monitor) PrintLog() {
+  	for _, e := range m.Log {
+  		fmt.Printf("%v %v\n", e.action, e.params)
+  	}
   }
