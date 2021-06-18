@@ -19,6 +19,7 @@
   import (
   	"errors"
   	"fmt"
+  	"sync"
   )
   
   type Global struct {
@@ -169,6 +170,7 @@
   	vars        map[string]map[string]bool
   	ltlMonitor0 *LTLMonitor0
   	Log         Log
+  	lock        sync.Mutex
   }
   
   //func NewMonitor(vars map[string][]string) *Monitor {
@@ -183,6 +185,9 @@
   }
   
   func (m *Monitor) Step(g Global, act Action, params ...string) error {
+  	m.lock.Lock()
+  	defer m.lock.Unlock()
+  
   	if err := m.precondition(&g, act, params...); err != nil {
   		return err
   	}
@@ -203,6 +208,9 @@
   }
   
   func (m *Monitor) StepA(act Action, params ...string) error {
+  	m.lock.Lock()
+  	defer m.lock.Unlock()
+  
   	if err := m.precondition(nil, act, params...); err != nil {
   		return err
   	}
@@ -215,6 +223,8 @@
   }
   
   func (m *Monitor) StepS(g Global) error {
+  	m.lock.Lock()
+  	defer m.lock.Unlock()
   
   	m.previous = g
   
@@ -228,6 +238,9 @@
   }
   
   func (m *Monitor) PrintLog() {
+  	m.lock.Lock()
+  	defer m.lock.Unlock()
+  
   	for _, e := range m.Log {
   		fmt.Printf("%v %v\n", e.action, e.params)
   	}

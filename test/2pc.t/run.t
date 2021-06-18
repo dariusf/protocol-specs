@@ -388,6 +388,7 @@ The classic two-phase commit protocol.
   	"errors"
   	"fmt"
   	"reflect"
+  	"sync"
   )
   
   type Global struct {
@@ -643,6 +644,7 @@ The classic two-phase commit protocol.
   	vars        map[string]map[string]bool
   	ltlMonitor0 *LTLMonitor0
   	Log         Log
+  	lock        sync.Mutex
   }
   
   //func NewMonitor(vars map[string][]string) *Monitor {
@@ -657,6 +659,9 @@ The classic two-phase commit protocol.
   }
   
   func (m *Monitor) Step(g Global, act Action, params ...string) error {
+  	m.lock.Lock()
+  	defer m.lock.Unlock()
+  
   	if err := m.precondition(&g, act, params...); err != nil {
   		return err
   	}
@@ -677,6 +682,9 @@ The classic two-phase commit protocol.
   }
   
   func (m *Monitor) StepA(act Action, params ...string) error {
+  	m.lock.Lock()
+  	defer m.lock.Unlock()
+  
   	if err := m.precondition(nil, act, params...); err != nil {
   		return err
   	}
@@ -689,6 +697,8 @@ The classic two-phase commit protocol.
   }
   
   func (m *Monitor) StepS(g Global) error {
+  	m.lock.Lock()
+  	defer m.lock.Unlock()
   
   	m.previous = g
   
@@ -702,6 +712,9 @@ The classic two-phase commit protocol.
   }
   
   func (m *Monitor) PrintLog() {
+  	m.lock.Lock()
+  	defer m.lock.Unlock()
+  
   	for _, e := range m.Log {
   		fmt.Printf("%v %v\n", e.action, e.params)
   	}
