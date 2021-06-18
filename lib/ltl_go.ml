@@ -231,7 +231,7 @@ func (m *Monitor) PrintLog() {
 	defer m.lock.Unlock()
 
 	for _, e := range m.Log {
-		fmt.Printf("%%v %%v\n", e.action, e.params)
+		fmt.Printf("%%s %%v\n", e.action, e.params)
 	}
 }
 |}
@@ -654,6 +654,7 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
     in
     IMap.bindings action_nodes
     |> List.map (fun (id, act) ->
+           let name = Actions.node_name pname (id, act) in
            let pres =
              match act.preconditions with
              | [] -> "// no preconditions"
@@ -662,24 +663,23 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
                |> List.map (fun p ->
                       Format.sprintf
                         {|if g != nil && !(%s) {
-              return errors.New("logical precondition violated")
+              return fmt.Errorf("logical precondition of %%s, %%v violated", "%s", params)
             }|}
-                        (compile parties p))
+                        (compile parties p) name)
                |> String.concat "\n"
            in
-           let name = Actions.node_name pname (id, act) in
            let body =
              Format.sprintf
                {|%s
                %s
                if ! (%s) {
-                 return errors.New("control precondition violated")
+                 return fmt.Errorf("control precondition of %s %%v violated", params)
                }
                m.Log = append(m.Log, entry{action: "%s", params: params})
                return nil|}
                (params_check act.params) pres
                (fence_to_precondition act act.fence)
-               name
+               name name
            in
            Format.sprintf "case %s:\n%s" name body)
     |> String.concat "\n"

@@ -70,7 +70,7 @@
   
   		// no preconditions
   		if !(m.PC[Cmain] == 0) {
-  			return errors.New("control precondition violated")
+  			return fmt.Errorf("control precondition of CChangeA1 %v violated", params)
   		}
   		m.Log = append(m.Log, entry{action: "CChangeA1", params: params})
   		return nil
@@ -242,6 +242,6 @@
   	defer m.lock.Unlock()
   
   	for _, e := range m.Log {
-  		fmt.Printf("%v %v\n", e.action, e.params)
+  		fmt.Printf("%s %v\n", e.action, e.params)
   	}
   }

@@ -448,7 +448,7 @@ The classic two-phase commit protocol.
   		}
   		// no preconditions
   		if !(m.PC["Ct0_"+(params[0] /* p : P */)] == 0) {
-  			return errors.New("control precondition violated")
+  			return fmt.Errorf("control precondition of CSendPrepare1 %v violated", params)
   		}
   		m.Log = append(m.Log, entry{action: "CSendPrepare1", params: params})
   		return nil
@@ -458,7 +458,7 @@ The classic two-phase commit protocol.
   		}
   		// no preconditions
   		if !(m.PC["Ct0_"+(params[0] /* p : P */)] == 1) {
-  			return errors.New("control precondition violated")
+  			return fmt.Errorf("control precondition of CReceivePrepared2 %v violated", params)
   		}
   		m.Log = append(m.Log, entry{action: "CReceivePrepared2", params: params})
   		return nil
@@ -468,7 +468,7 @@ The classic two-phase commit protocol.
   		}
   		// no preconditions
   		if !(m.PC["Ct0_"+(params[0] /* p : P */)] == 1) {
-  			return errors.New("control precondition violated")
+  			return fmt.Errorf("control precondition of CReceiveAbort3 %v violated", params)
   		}
   		m.Log = append(m.Log, entry{action: "CReceiveAbort3", params: params})
   		return nil
@@ -477,10 +477,10 @@ The classic two-phase commit protocol.
   			return errors.New("expected 1 params")
   		}
   		if g != nil && !(reflect.DeepEqual(g.Aborted, map[string]bool{})) {
-  			return errors.New("logical precondition violated")
+  			return fmt.Errorf("logical precondition of %s, %v violated", "CSendCommit4", params)
   		}
   		if !(allSet(m.vars["P"], func(p string) bool { return m.PC["Ct0_"+(p)] == 2 || m.PC["Ct0_"+(p)] == 3 })) {
-  			return errors.New("control precondition violated")
+  			return fmt.Errorf("control precondition of CSendCommit4 %v violated", params)
   		}
   		m.Log = append(m.Log, entry{action: "CSendCommit4", params: params})
   		return nil
@@ -490,7 +490,7 @@ The classic two-phase commit protocol.
   		}
   		// no preconditions
   		if !(m.PC["Ct2_"+(params[0] /* p : P */)] == 4) {
-  			return errors.New("control precondition violated")
+  			return fmt.Errorf("control precondition of CReceiveCommitAck5 %v violated", params)
   		}
   		m.Log = append(m.Log, entry{action: "CReceiveCommitAck5", params: params})
   		return nil
@@ -499,10 +499,10 @@ The classic two-phase commit protocol.
   			return errors.New("expected 1 params")
   		}
   		if g != nil && !(!reflect.DeepEqual(g.Aborted, map[string]bool{})) {
-  			return errors.New("logical precondition violated")
+  			return fmt.Errorf("logical precondition of %s, %v violated", "CSendAbort6", params)
   		}
   		if !(allSet(m.vars["P"], func(p string) bool { return m.PC["Ct0_"+(p)] == 2 || m.PC["Ct0_"+(p)] == 3 })) {
-  			return errors.New("control precondition violated")
+  			return fmt.Errorf("control precondition of CSendAbort6 %v violated", params)
   		}
   		m.Log = append(m.Log, entry{action: "CSendAbort6", params: params})
   		return nil
@@ -512,7 +512,7 @@ The classic two-phase commit protocol.
   		}
   		// no preconditions
   		if !(m.PC["Ct1_"+(params[0] /* p : P */)] == 6) {
-  			return errors.New("control precondition violated")
+  			return fmt.Errorf("control precondition of CReceiveAbortAck7 %v violated", params)
   		}
   		m.Log = append(m.Log, entry{action: "CReceiveAbortAck7", params: params})
   		return nil
@@ -716,6 +716,6 @@ The classic two-phase commit protocol.
   	defer m.lock.Unlock()
   
   	for _, e := range m.Log {
-  		fmt.Printf("%v %v\n", e.action, e.params)
+  		fmt.Printf("%s %v\n", e.action, e.params)
   	}
   }
