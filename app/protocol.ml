@@ -48,16 +48,18 @@ let help_cmd =
     Term.info "help" ~doc ~exits:Term.default_exits ~man )
 
 let print project parties ast types actions file =
-  Ppx_debug.Tracing.wrap (fun () ->
-      Lib.print project parties ast types actions file);
+  (* Ppx_debug.Tracing.wrap (fun () -> *)
+  Lib.print project parties ast types actions file (* ) *);
   `Ok ()
 
 let tla parties spec_name file =
-  Ppx_debug.Tracing.wrap (fun () -> Lib.tla parties spec_name file);
+  (* Ppx_debug.Tracing.wrap (fun () -> *)
+  Lib.tla parties spec_name file (* ) *);
   `Ok ()
 
 let monitor parties file =
-  Ppx_debug.Tracing.wrap (fun () -> Lib.monitor parties file);
+  (* Ppx_debug.Tracing.wrap (fun () -> *)
+  Lib.monitor parties file (* ) *);
   `Ok ()
 
 let print_cmd =

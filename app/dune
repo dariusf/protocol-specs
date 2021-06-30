@@ -1,8 +1,9 @@
 (executable
  (name protocol)
  (public_name protocol)
- (libraries ppx_debug lib cmdliner))
+ (libraries lib cmdliner))
 
+;ppx_debug
 ;(install
 ;(section bin)
 ;(files (protocol.exe as protocol)))

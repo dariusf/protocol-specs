@@ -2,7 +2,7 @@ open Containers
 open Common
 open Ast
 open Infer.Cast
-module Tracing = Ppx_debug.Tracing
+(* module Tracing = Ppx_debug.Tracing *)
 
 module Node = struct
   type t = int
@@ -139,7 +139,7 @@ let rec used_names (t : tprotocol) =
 
     there are other longer sequences which could be actions, like a+ s, but we'll keep it simple for now.
 *)
-let%trace rec group_seq :
+let rec group_seq :
     env ->
     texpr list ->
     (string * string) list ->

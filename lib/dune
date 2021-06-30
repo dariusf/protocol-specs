@@ -2,19 +2,19 @@
  (name lib)
  (libraries
   str
-  ppx_debug
+;   ppx_debug
   pprint
   containers
   containers.unix
   menhirLib
   ocamlgraph)
  (inline_tests)
- (preprocessor_deps
-  (file ../ppx_debug.json))
+;  (preprocessor_deps
+;   (file ../ppx_debug.json))
  (preprocess
   (pps
    visitors.ppx
-   ppx_debug
+   ; ppx_debug
    ppx_expect
    ppx_deriving.show
    ppx_deriving.ord

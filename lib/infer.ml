@@ -1,7 +1,7 @@
 open Containers
 open Common
 open Ast
-module Tracing = Ppx_debug.Tracing
+(* module Tracing = Ppx_debug.Tracing *)
 
 let debug = false
 
@@ -76,7 +76,7 @@ let unify_party_variables a b env =
           (Format.sprintf "could not unify parties %a and %a" pp_var a3.repr
              pp_var b3.repr))
 
-let%trace rec unify :
+let rec unify :
     typ ->
     typ ->
     env ->
@@ -174,7 +174,7 @@ let fresh_var env v =
   ({ env with bindings }, vi)
 
 (** this isn't entirely unification determined by form because Global doesn't unify with anything *)
-let%trace unify_ownership :
+let unify_ownership :
     ownership ->
     ownership ->
     env ->
@@ -308,7 +308,7 @@ let find_party_var_by_type_of env var =
     in
     Some (Party candidate : party)
 
-let%trace unify_type_owner :
+let unify_type_owner :
     env ->
     typ ->
     ownership ->
@@ -328,7 +328,7 @@ let%trace unify_type_owner :
   | (TyVar _, Party o) -> unify t (TyParty o) env
   | (_, _) -> Error `Type_not_party
 
-let%trace rec infer_all : expr list -> env -> texpr list * ownership * env =
+let rec infer_all : expr list -> env -> texpr list * ownership * env =
  fun exprs env ->
   List.fold_right
     (fun c (tes, own, env) ->

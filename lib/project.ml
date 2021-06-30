@@ -3,7 +3,7 @@ open Common
 open Containers
 open Normalize
 open Infer.Cast
-module Tracing = Ppx_debug.Tracing
+(* module Tracing = Ppx_debug.Tracing *)
 
 let owned_by env party v =
   match v.meta.info.own with
@@ -110,7 +110,7 @@ let substitute ~v ~by p =
 (** Given the environment (which knows about all the parties),
     and a protocol to project, returns a list of protocols projected
     by each party *)
-let%trace rec project_aux : string -> env -> tprotocol -> tprotocol =
+let rec project_aux : string -> env -> tprotocol -> tprotocol =
  fun party env pr ->
   match pr.p with
   | Emp -> { pr with p = Emp }
