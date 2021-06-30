@@ -575,37 +575,6 @@ let rec infer : ?in_seq:bool -> protocol -> env -> tprotocol * env =
           ((k1, targ) :: targs, env))
         args ([], env)
     in
-
-    (* sender is now owned by recipient *)
-    let recipient =
-      match t_vi.typ with
-      | TyParty p -> Party p
-      | _ ->
-        failwith "recipient is not a party, should have been caught earlier"
-    in
-    (* but only locally *)
-    let env =
-      if in_seq then
-        {
-          env with
-          local_bindings =
-            SMap.add from { f_vi with own = recipient } env.local_bindings;
-        }
-      else
-        env
-    in
-    (* receiver is also owned by receiver *)
-    let env =
-      if in_seq then
-        {
-          env with
-          local_bindings =
-            SMap.add to_ { t_vi with own = recipient } env.local_bindings;
-        }
-      else
-        env
-    in
-
     ( {
         p =
           Send
