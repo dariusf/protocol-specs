@@ -32,11 +32,10 @@ forall p in P
   size(p.promise_responses) > p.majority =>*
     // it's sufficient to reply to the majority subset
     forall a1 in p.promise_responses
-      p->a1: propose(pn=p.proposal, pv=p.value);
-      ac2 = a1;
+      p->a1: propose(pn=p.proposal, pv=p.value, a1=a1);
       pn == a1.highest_proposal =>
         a1.accepted_proposal = pn;
         a1.accepted_value = pv;
         a1->p: accept;
         forall l in L
-          ac2->l: accept)
+          a1->l: accept)

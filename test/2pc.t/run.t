@@ -11,13 +11,13 @@ The classic two-phase commit protocol.
     (!(has_aborted) =>
        (forall p in P
           c->p : commit;
-          p->c : commit_ack;
+          p->c : commit_ack(p=p);
           committed = union(committed, {p}))
      \/
      has_aborted =>
        (forall p in P
           c->p : abort;
-          p->c : abort_ack;
+          p->c : abort_ack(p=p);
           aborted = union(aborted, {p})))
 
   $ protocol print 2pc-wait.spec
@@ -44,20 +44,20 @@ The classic two-phase commit protocol.
   forall (c : party C;global) in (C : {party C};global)
     (forall (p : party P;global) in (P : {party P};global)
        (c : party C;global)->(p : party P;global) : prepare;
-       ((p : party P;P)->(c : party C;P) : prepared
+       ((p : party P;global)->(c : party C;global) : prepared
         \/
-        (p : party P;P)->(c : party C;P) : abort;
+        (p : party P;global)->(c : party C;global) : abort;
         (c.has_aborted : bool;C) = true));
     (!((c.has_aborted : bool;C)) =>
        (forall (p : party P;global) in (P : {party P};global)
           (c : party C;global)->(p : party P;global) : commit;
-          (p : party P;P)->(c : party C;P) : commit_ack;
+          (p : party P;global)->(c : party C;global) : commit_ack((p : party P;C)=(p : party P;global));
           (c.committed : {party P};C) = union((c.committed : {party P};C), {(p : party P;C)}))
      \/
      (c.has_aborted : bool;C) =>
        (forall (p : party P;global) in (P : {party P};global)
           (c : party C;global)->(p : party P;global) : abort;
-          (p : party P;P)->(c : party C;P) : abort_ack;
+          (p : party P;global)->(c : party C;global) : abort_ack((p : party P;C)=(p : party P;global));
           (c.aborted : {party P};C) = union((c.aborted : {party P};C), {(p : party P;C)})))
 
   $ protocol print 2pc.spec --parties C,P --project C
@@ -70,13 +70,13 @@ The classic two-phase commit protocol.
   (!(has_aborted) =>
      (forall p in P
         ->p : commit;
-        p-> : commit_ack;
+        p-> : commit_ack(p);
         committed = union(committed, {p}))
    \/
    has_aborted =>
      (forall p in P
         ->p : abort;
-        p-> : abort_ack;
+        p-> : abort_ack(p);
         aborted = union(aborted, {p})))
 
   $ protocol print 2pc.spec --parties C,P --project P
@@ -86,10 +86,10 @@ The classic two-phase commit protocol.
      \/
      ->c : abort);
     (c-> : commit;
-     ->c : commit_ack
+     ->c : commit_ack(p=self)
      \/
      c-> : abort;
-     ->c : abort_ack)
+     ->c : abort_ack(p=self))
 
   $ protocol print 2pc.spec > 2pc1.spec && protocol print 2pc1.spec | protocol print > 2pc2.spec && git diff --no-index 2pc1.spec 2pc2.spec
 
@@ -101,9 +101,9 @@ The classic two-phase commit protocol.
     2 [label="PSendPrepared2\ntid: Pt0(c:C)\n{Pt0(c:C) = 1}\nthis: {Pt0(c:C) = 2}\nparams: [(c:C)]\n->c : prepared"];
     3 [label="PSendAbort3\ntid: Pt0(c:C)\n{Pt0(c:C) = 1}\nthis: {Pt0(c:C) = 3}\nparams: [(c:C)]\n->c : abort"];
     4 [label="PReceiveCommit4\ntid: Pt0(c:C)\n{Any(Pt0(c:C) = 2, Pt0(c:C) = 3)}\nthis: {Pt0(c:C) = 4}\nparams: [(c:C)]\nc-> : commit"];
-    5 [label="PSendCommitAck5\ntid: Pt0(c:C)\n{Pt0(c:C) = 4}\nthis: {Pt0(c:C) = 5}\nparams: [(c:C)]\n->c : commit_ack"];
+    5 [label="PSendCommitAck5\ntid: Pt0(c:C)\n{Pt0(c:C) = 4}\nthis: {Pt0(c:C) = 5}\nparams: [(c:C)]\n->c : commit_ack(p=self)"];
     6 [label="PReceiveAbort6\ntid: Pt0(c:C)\n{Any(Pt0(c:C) = 2, Pt0(c:C) = 3)}\nthis: {Pt0(c:C) = 6}\nparams: [(c:C)]\nc-> : abort"];
-    7 [label="PSendAbortAck7\ntid: Pt0(c:C)\n{Pt0(c:C) = 6}\nthis: {Pt0(c:C) = 7}\nparams: [(c:C)]\n->c : abort_ack"];
+    7 [label="PSendAbortAck7\ntid: Pt0(c:C)\n{Pt0(c:C) = 6}\nthis: {Pt0(c:C) = 7}\nparams: [(c:C)]\n->c : abort_ack(p=self)"];
     6 -> 7;
     4 -> 5;
     3 -> 6;
@@ -120,9 +120,9 @@ The classic two-phase commit protocol.
     2 [label="CReceivePrepared2\ntid: Ct0(p:P)\n{Ct0(p:P) = 1}\nthis: {Ct0(p:P) = 2}\nparams: [(p:P)]\np-> : prepared"];
     3 [label="CReceiveAbort3\ntid: Ct0(p:P)\n{Ct0(p:P) = 1}\nthis: {Ct0(p:P) = 3}\nparams: [(p:P)]\np-> : abort;\nhas_aborted = true"];
     4 [label="CSendCommit4\ntid: Ct2(p:P)\n{∀ p:P. Any(Ct0(p:P) = 2, Ct0(p:P) = 3)}\nthis: {Ct2(p:P) = 4}\n{[!(has_aborted)]}\nparams: [(p:P)]\n->p : commit"];
-    5 [label="CReceiveCommitAck5\ntid: Ct2(p:P)\n{Ct2(p:P) = 4}\nthis: {Ct2(p:P) = 5}\nparams: [(p:P)]\np-> : commit_ack;\ncommitted = union(committed, {p})"];
+    5 [label="CReceiveCommitAck5\ntid: Ct2(p:P)\n{Ct2(p:P) = 4}\nthis: {Ct2(p:P) = 5}\nparams: [(p:P)]\np-> : commit_ack(p);\ncommitted = union(committed, {p})"];
     6 [label="CSendAbort6\ntid: Ct1(p:P)\n{∀ p:P. Any(Ct0(p:P) = 2, Ct0(p:P) = 3)}\nthis: {Ct1(p:P) = 6}\n{[has_aborted]}\nparams: [(p:P)]\n->p : abort"];
-    7 [label="CReceiveAbortAck7\ntid: Ct1(p:P)\n{Ct1(p:P) = 6}\nthis: {Ct1(p:P) = 7}\nparams: [(p:P)]\np-> : abort_ack;\naborted = union(aborted, {p})"];
+    7 [label="CReceiveAbortAck7\ntid: Ct1(p:P)\n{Ct1(p:P) = 6}\nthis: {Ct1(p:P) = 7}\nparams: [(p:P)]\np-> : abort_ack(p);\naborted = union(aborted, {p})"];
     6 -> 7;
     4 -> 5;
     3 -> 6;
@@ -244,8 +244,12 @@ The classic two-phase commit protocol.
       /\ (messages[m] > 0)
       /\ m.mtype = commit_ack
       /\ m.mdest = self
-      /\ committed' = [committed EXCEPT ![self] = (committed[self] \union {p})]
-      /\ messages' = Receive(m, messages)
+      /\ LET 
+          p == m.p
+           IN
+      
+        /\ committed' = [committed EXCEPT ![self] = (committed[self] \union {p})]
+        /\ messages' = Receive(m, messages)
     /\ UNCHANGED <<has_aborted, aborted>>
   
   CSendAbort6(self, p) ==
@@ -266,8 +270,12 @@ The classic two-phase commit protocol.
       /\ (messages[m] > 0)
       /\ m.mtype = abort_ack
       /\ m.mdest = self
-      /\ aborted' = [aborted EXCEPT ![self] = (aborted[self] \union {p})]
-      /\ messages' = Receive(m, messages)
+      /\ LET 
+          p == m.p
+           IN
+      
+        /\ aborted' = [aborted EXCEPT ![self] = (aborted[self] \union {p})]
+        /\ messages' = Receive(m, messages)
     /\ UNCHANGED <<has_aborted, committed>>
   
   PReceivePrepare8(self, c) ==
@@ -315,7 +323,7 @@ The classic two-phase commit protocol.
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 12]]
     /\ history' = Append(<<"PSendCommitAck12", c>>, history)
     /\ 
-      /\ messages' = Send([mtype |-> commit_ack, msrc |-> self, mdest |-> c], messages)
+      /\ messages' = Send([p |-> self, mtype |-> commit_ack, msrc |-> self, mdest |-> c], messages)
     /\ UNCHANGED <<has_aborted, committed, aborted>>
   
   PReceiveAbort13(self, c) ==
@@ -336,7 +344,7 @@ The classic two-phase commit protocol.
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 14]]
     /\ history' = Append(<<"PSendAbortAck14", c>>, history)
     /\ 
-      /\ messages' = Send([mtype |-> abort_ack, msrc |-> self, mdest |-> c], messages)
+      /\ messages' = Send([p |-> self, mtype |-> abort_ack, msrc |-> self, mdest |-> c], messages)
     /\ UNCHANGED <<has_aborted, committed, aborted>>
   
   Next ==

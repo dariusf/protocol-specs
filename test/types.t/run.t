@@ -75,14 +75,14 @@ Here it's not possible for members of party C to know which of them should send 
   > forall p in P
   >   p.s = C;
   >   forall x in p.s
-  >     p->x: n;
+  >     p->x: n(x=x);
   >     x->p: m
   > EOF
   forall (p : party P;global) in (P : {party P};global)
     (p.s : {party C};P) = (C : {party C};global);
     (forall (x : party C;P) in (p.s : {party C};P)
-       (p : party P;global)->(x : party C;P) : n;
-       (x : party C;C)->(p : party P;C) : m)
+       (p : party P;global)->(x : party C;P) : n((x : party C;C)=(x : party C;P));
+       (x : party C;C)->(p : party P;global) : m)
 
 This fails because we cannot infer a type for a...
 

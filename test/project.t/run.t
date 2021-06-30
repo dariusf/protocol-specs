@@ -66,9 +66,9 @@ A chain of messages that goes through C but does not end at it.
     forall c in C
       c->p : m1;
       (forall d in D
-         p->d : m2(c=c);
-         d->c : m3(p=p);
-         c->p : m4(d=d);
+         p->d : m2;
+         d->c : m3;
+         c->p : m4;
          p->d : m5);
       c.a = 1
 
@@ -76,23 +76,23 @@ A chain of messages that goes through C but does not end at it.
   forall p in P
     ->p : m1;
     (forall d in D
-       d-> : m3(p);
-       ->p : m4(d=d));
+       d-> : m3;
+       ->p : m4);
     a = 1
 
   $ protocol print --parties P,C,D --project P three.spec
   forall c in C
     c-> : m1;
     (forall d in D
-       ->d : m2(c=c);
-       c-> : m4(d);
+       ->d : m2;
+       c-> : m4;
        ->d : m5)
 
   $ protocol print --parties P,C,D --project D three.spec
   forall p in P
     forall c in C
-      p-> : m2(c);
-      ->c : m3(p=p);
+      p-> : m2;
+      ->c : m3;
       p-> : m5
 
 A chain of messages that ends at C.

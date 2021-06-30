@@ -8,13 +8,13 @@ forall c in C
   (!has_aborted =>
     forall p in P
       c->p: commit;
-      p->c: commit_ack;
+      p->c: commit_ack(p=p);
       committed = union(committed, {p})
    \/
    has_aborted =>
     forall p in P
       c->p: abort;
-      p->c: abort_ack;
+      p->c: abort_ack(p=p);
       aborted = union(aborted, {p}))
 
 ltl ([] (size(committed) + size(aborted) == size(P) ==>
