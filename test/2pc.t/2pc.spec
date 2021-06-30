@@ -1,23 +1,21 @@
-
 forall c in C
   (forall p in P
     c->p: prepare;
-
-    // participant's internal choice, coordinator's external choice
-    (p->c: prepared;
-     responded = union(responded, {p})
+    (p->c: prepared
      \/
      p->c: abort;
-     aborted = union(aborted, {p})));
-
-  // waiting is unnecessary here because ; 'joins' all 'threads' of the coordinator
-  (aborted == {} =>
+     c.has_aborted = true));
+  (!has_aborted =>
     forall p in P
       c->p: commit;
-      p->c: commit_ack
+      p->c: commit_ack;
+      committed = union(committed, {p})
    \/
-   aborted != {} => forall p in P
-     c->p: abort;
-     p->c: abort_ack)
+   has_aborted =>
+    forall p in P
+      c->p: abort;
+      p->c: abort_ack;
+      aborted = union(aborted, {p}))
 
-ltl (<> (aborted != {} | responded == P))
+ltl ([] (size(committed) + size(aborted) == size(P) ==>
+  committed == {} | aborted == {}))
