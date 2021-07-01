@@ -3,6 +3,31 @@ open Common
 open Common.Printing
 open PPrint
 
+let latex_escape = enclose (string "/*$") (string "$*/")
+
+let arrow latex = if latex then latex_escape (string "\\send") else string "->"
+
+let disj latex =
+  if latex then
+    latex_escape (string "\\vee")
+  else
+    string "\\/"
+
+let if_ latex =
+  if latex then
+    latex_escape (string "\\pif")
+  else
+    string "=>"
+
+let when_ latex =
+  if latex then
+    latex_escape (string "\\when")
+  else
+    string "=>*"
+
+let (par, in_, forall, exists) =
+  (string "||", string "in", string "forall", string "exists")
+
 (** printing contexts *)
 type pctx = {
   (* precedence of the expression in which the current ast node appears *)
@@ -109,24 +134,24 @@ let render_own ~env own =
   | None -> separate space [string "unbound"; render_uf p]
   | Some p -> render_party p
 
-let rec render_typ ~env t =
+let rec render_typ ?(latex = false) ~env t =
   match t with
   | TyParty p -> separate space [string "party"; render_own ~env (Party p)]
-  | TySet e -> braces (render_typ ~env e)
-  | TyList e -> brackets (render_typ ~env e)
+  | TySet e -> braces (render_typ ~latex ~env e)
+  | TyList e -> brackets (render_typ ~latex ~env e)
   | TyVar v ->
     (match IMap.find_opt (UF.value v) env.types with
     | None -> separate space [string "unbound"; render_uf v]
-    | Some t -> render_typ ~env t)
+    | Some t -> render_typ ~latex ~env t)
   | TyInt -> string "int"
   | TyBool -> string "bool"
   | TyString -> string "string"
   | TyFn (args, r) ->
     separate
-      (enclose space space arrow)
+      (enclose space space (arrow latex))
       [
-        parens (separate (spaced comma) (List.map (render_typ ~env) args));
-        (render_typ ~env) r;
+        parens (separate (spaced comma) (List.map (render_typ ~latex ~env) args));
+        (render_typ ~latex ~env) r;
       ]
 
 let rec render_texpr : ?prec:int -> env:env -> texpr -> document =
@@ -170,8 +195,9 @@ let parens_multiline_if ~pctx ~n =
   else
     Fun.id
 
-let render_protocol_ : ('e -> document) -> ('a, 'e, 'v) _protocol -> document =
- fun render_expr p ->
+let render_protocol_ :
+    bool -> ('e -> document) -> ('a, 'e, 'v) _protocol -> document =
+ fun latex render_expr p ->
   let rec render_protocol ?(pctx = { prec = 0; last = false }) p =
     let n = get_protocol_prec p in
     match p.p with
@@ -190,7 +216,7 @@ let render_protocol_ : ('e -> document) -> ('a, 'e, 'v) _protocol -> document =
     | Disj (a, b) ->
       parens_multiline_if ~pctx ~n
       @@ separate
-           (nl ^^ disj ^^ nl)
+           (nl ^^ disj latex ^^ nl)
            ([a; b]
            |> map_last (fun last p ->
                   render_protocol ~pctx:{ prec = n; last } p))
@@ -203,8 +229,8 @@ let render_protocol_ : ('e -> document) -> ('a, 'e, 'v) _protocol -> document =
     | Send { from; to_; msg = Message { typ; args } } ->
       concat
         [
-          render_expr from; arrow; render_expr to_; enclose space space colon;
-          string typ;
+          render_expr from; arrow latex; render_expr to_;
+          enclose space space colon; string typ;
           (match args with
           | [] -> empty
           | _ ->
@@ -218,7 +244,7 @@ let render_protocol_ : ('e -> document) -> ('a, 'e, 'v) _protocol -> document =
     | SendOnly { to_; msg = Message { typ; args }; _ } ->
       concat
         [
-          arrow; render_expr to_; enclose space space colon; string typ;
+          arrow latex; render_expr to_; enclose space space colon; string typ;
           (match args with
           | [] -> empty
           | _ ->
@@ -232,7 +258,7 @@ let render_protocol_ : ('e -> document) -> ('a, 'e, 'v) _protocol -> document =
     | ReceiveOnly { from; msg = MessageD { typ; args }; _ } ->
       concat
         [
-          render_expr from; arrow; enclose space space colon; string typ;
+          render_expr from; arrow latex; enclose space space colon; string typ;
           (match args with
           | [] -> empty
           | _ -> parens (separate (spaced comma) (List.map render_expr args)));
@@ -243,7 +269,7 @@ let render_protocol_ : ('e -> document) -> ('a, 'e, 'v) _protocol -> document =
       @@ nest 2
            (concat
               [
-                render_expr b; space; if_; nl;
+                render_expr b; space; if_ latex; nl;
                 render_protocol ~pctx:{ pctx with prec = n } p;
               ])
     | BlockingImply (b, p) ->
@@ -251,7 +277,7 @@ let render_protocol_ : ('e -> document) -> ('a, 'e, 'v) _protocol -> document =
       @@ nest 2
            (concat
               [
-                render_expr b; space; when_; nl;
+                render_expr b; space; when_ latex; nl;
                 render_protocol ~pctx:{ pctx with prec = n } p;
               ])
     | Forall (v, s, p) ->
@@ -277,12 +303,13 @@ let render_protocol_ : ('e -> document) -> ('a, 'e, 'v) _protocol -> document =
   in
   render_protocol p
 
-let render_protocol p = render_protocol_ render_expr p
+let render_protocol ?(latex = false) p = render_protocol_ latex render_expr p
 
-let render_tprotocol ~env p = render_protocol_ (render_texpr ~env) p
+let render_tprotocol ?(latex = false) ~env p =
+  render_protocol_ latex (render_texpr ~env) p
 
-let render_tprotocol_untyped ~env p =
-  render_protocol_ (render_texpr_as_expr ~env) p
+let render_tprotocol_untyped ?(latex = false) ~env p =
+  render_protocol_ latex (render_texpr_as_expr ~env) p
 
 module PP = struct
   open PPrintEngine

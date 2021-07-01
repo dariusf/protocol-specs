@@ -77,14 +77,15 @@ let project parties env tprotocol =
   List.map2 (fun party pr -> (party.repr |> var_name, pr)) parties projected
   |> SMap.of_list
 
-let print project_party parties ast types actions file =
+let print project_party parties ast types actions latex file =
   let spec = parse file in
   match parties with
   | None ->
     if ast then (* protocol |> show_protocol |> print_endline *)
       spec |> show_spec |> print_endline
     else
-      spec.protocol |> Print.render_protocol
+      spec.protocol
+      |> Print.render_protocol ~latex
       |> PPrint.ToChannel.pretty 0.8 120 stdout
   | _ ->
     let (parties, _) = require_parties parties in
@@ -106,14 +107,14 @@ let print project_party parties ast types actions file =
     else (
       tprotocol
       |> (if types then
-            Print.render_tprotocol ~env
+            Print.render_tprotocol ~latex ~env
          else
-           Print.render_tprotocol_untyped ~env)
+           Print.render_tprotocol_untyped ~latex ~env)
       |> PPrint.ToChannel.pretty 0.8 120 stdout;
       print_endline "")
 
-let print project_party parties ast types actions file =
-  try print project_party parties ast types actions file
+let print project_party parties ast types actions latex file =
+  try print project_party parties ast types actions latex file
   with Check_failure s -> Format.printf "%s@." s
 
 let tla parties spec_name file =

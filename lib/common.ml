@@ -66,16 +66,6 @@ module UF = UF.Int
 module Printing = struct
   open PPrint
 
-  let (arrow, disj, par, if_, when_, in_, forall, exists) =
-    ( string "->",
-      string "\\/",
-      string "||",
-      string "=>",
-      string "=>*",
-      string "in",
-      string "forall",
-      string "exists" )
-
   let spaced d = terminate space d
 
   let nl = break 1

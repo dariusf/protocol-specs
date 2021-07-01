@@ -47,9 +47,9 @@ let help_cmd =
   ( Term.(ret (const help $ Arg.man_format $ Term.choice_names $ topic)),
     Term.info "help" ~doc ~exits:Term.default_exits ~man )
 
-let print project parties ast types actions file =
+let print project parties ast types actions latex file =
   (* Ppx_debug.Tracing.wrap (fun () -> *)
-  Lib.print project parties ast types actions file (* ) *);
+  Lib.print project parties ast types actions latex file (* ) *);
   `Ok ()
 
 let tla parties spec_name file =
@@ -91,13 +91,16 @@ let print_cmd =
   let actions =
     Arg.(value & flag (info ~docv:"ACTIONS" ~doc:"print actions" ["actions"]))
   in
+  let latex = Arg.(value & flag (info ~docv:"LATEX" ~doc:"latex" ["latex"])) in
   let man =
     [
       `S Manpage.s_description; `P "Renders a specification in various forms.";
       `Blocks help_secs;
     ]
   in
-  ( Term.(ret (const print $ project $ parties $ ast $ types $ actions $ file)),
+  ( Term.(
+      ret
+        (const print $ project $ parties $ ast $ types $ actions $ latex $ file)),
     Term.info "print" ~doc:"renders a specification" ~exits:Term.default_exits
       ~man )
 
