@@ -395,7 +395,7 @@ The classic two-phase commit protocol.
   monitorP.go
 
   $ cat monitorC.go
-  package rv
+  package rvc
   
   import (
   	"errors"

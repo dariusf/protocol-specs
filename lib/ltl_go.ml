@@ -75,12 +75,12 @@ func (l *LTLMonitor%d) StepLTL%d(g Global) error {
 |}
     i prop_fns i states i i i i i initial_state i i prop_vars transitions
 
-let template_monitor ~extra_imports ~global_contents ~action_defs ~preconditions
-    ~postconditions ~ltl_monitor_defs ~ltl_monitor_fields ~ltl_monitor_init
-    ~ltl_monitor_step () =
+let template_monitor ~pname ~extra_imports ~global_contents ~action_defs
+    ~preconditions ~postconditions ~ltl_monitor_defs ~ltl_monitor_fields
+    ~ltl_monitor_init ~ltl_monitor_step () =
   Format.sprintf
     {|
-package rv
+package rv%s
 
 import (
 	"errors"
@@ -235,7 +235,7 @@ func (m *Monitor) PrintLog() {
 	}
 }
 |}
-    extra_imports global_contents action_defs preconditions postconditions
+    pname extra_imports global_contents action_defs preconditions postconditions
     ltl_monitor_defs ltl_monitor_fields ltl_monitor_init ltl_monitor_step
     ltl_monitor_step
 
@@ -714,9 +714,10 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
     |> String.concat "\n"
   in
   let extra_imports = if !uses_reflect then "\"reflect\"" else "" in
-  template_monitor ~extra_imports ~global_contents ~action_defs ~preconditions
-    ~postconditions ~ltl_monitor_defs ~ltl_monitor_fields ~ltl_monitor_init
-    ~ltl_monitor_step ()
+  template_monitor
+    ~pname:(String.lowercase_ascii pname)
+    ~extra_imports ~global_contents ~action_defs ~preconditions ~postconditions
+    ~ltl_monitor_defs ~ltl_monitor_fields ~ltl_monitor_init ~ltl_monitor_step ()
 
 let translate_party_ltl env i pname ltl tprotocol action_nodes parties =
   if not (IMap.is_empty action_nodes) then

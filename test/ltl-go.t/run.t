@@ -14,7 +14,7 @@
   run.t
 
   $ cat monitorC.go
-  package rv
+  package rvc
   
   import (
   	"errors"
