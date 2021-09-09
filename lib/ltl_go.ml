@@ -77,7 +77,7 @@ func (l *LTLMonitor%d) StepLTL%d(g Global) error {
 
 let template_monitor ~pname ~extra_imports ~global_contents ~action_defs
     ~preconditions ~postconditions ~ltl_monitor_defs ~ltl_monitor_fields
-    ~ltl_monitor_init ~ltl_monitor_step () =
+    ~ltl_monitor_assignments ~ltl_monitor_init ~ltl_monitor_step () =
   Format.sprintf
     {|
 package rv%s
@@ -172,11 +172,28 @@ type Monitor struct {
 func NewMonitor(vars map[string]map[string]bool) *Monitor {
 	return &Monitor{
     // previous is the empty Global
-    PC: map[string]int{},
+    PC: map[string]int{}, // not the smae as a nil map
     vars: vars,
-    Log: Log{},
     %s
+    // Everything else uses mzero
   }
+}
+
+func (m *Monitor) Reset() {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	defer m.trackTime(time.Now())
+
+	m.previous = Global{}
+	m.PC = map[string]int{}
+	// vars ok
+  %s
+	m.Log = Log{}
+
+	// This is deliberately not reset, to track the total time the monitor has been used
+	// m.ExecutionTimeNs = 0
+
+	// lock ok
 }
 
 func (m *Monitor) Step(g Global, act Action, params ...string) error {
@@ -248,8 +265,8 @@ func (m *Monitor) trackTime(start time.Time) {
 }
 |}
     pname extra_imports global_contents action_defs preconditions postconditions
-    ltl_monitor_defs ltl_monitor_fields ltl_monitor_init ltl_monitor_step
-    ltl_monitor_step
+    ltl_monitor_defs ltl_monitor_fields ltl_monitor_init ltl_monitor_assignments
+    ltl_monitor_step ltl_monitor_step
 
 let fresh =
   let n = ref 0 in
@@ -585,6 +602,9 @@ let generate_ltl_monitor ltl_i env parties pname ltl =
   let type_name = Format.sprintf "LTLMonitor%d" ltl_i in
   let field_name = Format.sprintf "ltlMonitor%d" ltl_i in
   let fields = Format.sprintf "%s *%s" field_name type_name in
+  let assignments =
+    Format.sprintf "m.%s = NewLTLMonitor%d(m.vars)" field_name ltl_i
+  in
   let inits = Format.sprintf "%s: NewLTLMonitor%d(vars)," field_name ltl_i in
   let steps =
     Format.sprintf
@@ -593,12 +613,11 @@ let generate_ltl_monitor ltl_i env parties pname ltl =
   }|}
       field_name ltl_i
   in
-
   let defs =
     template_ltl ~i:ltl_i ~prop_fns ~states ~initial_state ~prop_vars
       ~transitions ()
   in
-  (defs, fields, inits, steps)
+  (defs, fields, assignments, inits, steps)
 
 let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
   (* TODO use pname to qualify stuff *)
@@ -606,16 +625,19 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
     List.map (generate_ltl_monitor ltl_i env parties pname) ltl
   in
   let ltl_monitor_defs =
-    ltl_monitors |> List.map (fun (d, _, _, _) -> d) |> String.concat "\n\n"
+    ltl_monitors |> List.map (fun (d, _, _, _, _) -> d) |> String.concat "\n\n"
   in
   let ltl_monitor_fields =
-    ltl_monitors |> List.map (fun (_, f, _, _) -> f) |> String.concat "\n"
+    ltl_monitors |> List.map (fun (_, f, _, _, _) -> f) |> String.concat "\n"
+  in
+  let ltl_monitor_assignments =
+    ltl_monitors |> List.map (fun (_, _, a, _, _) -> a) |> String.concat "\n"
   in
   let ltl_monitor_init =
-    ltl_monitors |> List.map (fun (_, _, i, _) -> i) |> String.concat "\n"
+    ltl_monitors |> List.map (fun (_, _, _, i, _) -> i) |> String.concat "\n"
   in
   let ltl_monitor_step =
-    ltl_monitors |> List.map (fun (_, _, _, s) -> s) |> String.concat "\n"
+    ltl_monitors |> List.map (fun (_, _, _, _, s) -> s) |> String.concat "\n"
   in
   let assigned = Actions.assigned_variables tprotocol in
 
@@ -729,7 +751,8 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
   template_monitor
     ~pname:(String.lowercase_ascii pname)
     ~extra_imports ~global_contents ~action_defs ~preconditions ~postconditions
-    ~ltl_monitor_defs ~ltl_monitor_fields ~ltl_monitor_init ~ltl_monitor_step ()
+    ~ltl_monitor_defs ~ltl_monitor_fields ~ltl_monitor_assignments
+    ~ltl_monitor_init ~ltl_monitor_step ()
 
 let translate_party_ltl env i pname ltl tprotocol action_nodes parties =
   if not (IMap.is_empty action_nodes) then
