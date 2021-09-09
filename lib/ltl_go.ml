@@ -26,35 +26,36 @@ end
 
 let template_ltl ~i ~prop_fns ~states ~initial_state ~prop_vars ~transitions ()
     =
-  Format.sprintf
+  let i = string_of_int i in
+  [%string
     {|
-// LTL property %d
+// LTL property %{i}
 
 // Propositions
-%s
+%{prop_fns}
 
-type State%d int
+type State%{i} int
 const (
-%s
+%{states}
 )
 
-type LTLMonitor%d struct {
-  state     State%d
+type LTLMonitor%{i} struct {
+	state     State%{i}
 	succeeded bool
 	failed    bool
-  vars      map[string]map[string]bool
+	vars      map[string]map[string]bool
 }
 
-func NewLTLMonitor%d(vars map[string]map[string]bool) *LTLMonitor%d {
-  return &LTLMonitor%d{
-    vars: vars,
-    state: %s,
-    succeeded: false,
-    failed: false,
-  }
+func NewLTLMonitor%{i}(vars map[string]map[string]bool) *LTLMonitor%{i} {
+	return &LTLMonitor%{i}{
+		vars: vars,
+		state: %{initial_state},
+		succeeded: false,
+		failed: false,
+	}
 }
 
-func (l *LTLMonitor%d) StepLTL%d(g Global) error {
+func (l *LTLMonitor%{i}) StepLTL%{i}(g Global) error {
 	if l.succeeded {
 		return nil
 	} else if l.failed {
@@ -63,40 +64,38 @@ func (l *LTLMonitor%d) StepLTL%d(g Global) error {
 
 
 	// evaluate all the props
-	%s
+	%{prop_vars}
 
 	// note the true ones, take that transition
 	switch l.state {
-	%s
+	%{transitions}
 	default:
 		panic("invalid state")
 	}
 }
-|}
-    i prop_fns i states i i i i i initial_state i i prop_vars transitions
+|}]
 
 let template_monitor ~pname ~extra_imports ~global_contents ~action_defs
     ~preconditions ~postconditions ~ltl_monitor_defs ~ltl_monitor_fields
     ~ltl_monitor_assignments ~ltl_monitor_init ~ltl_monitor_step () =
-  Format.sprintf
-    {|
-package rv%s
+  [%string
+    {|package rv%{pname}
 
 import (
 	"errors"
-  "fmt"
-  "sync"
-  "time"
-  %s
+	"fmt"
+	"sync"
+	"time"
+	%{extra_imports}
 )
 
 type Global struct {
-%s
+%{global_contents}
 }
 
 type Action int
 const (
-%s
+%{action_defs}
 )
 
 func all(s []string, f func(string) bool) bool {
@@ -133,22 +132,22 @@ func anySet(s map[string]bool, f func(string) bool) bool {
 
 func (m *Monitor) precondition(g *Global, action Action, params ...string) error {
 	switch action {
-    %s
-    default:
-   		panic("invalid action")
+		%{preconditions}
+		default:
+			panic("invalid action")
 	}
 }
 
 func (m *Monitor) applyPostcondition(action Action, params ...string) error {
 	switch action {
-    %s
-    default:
-   		panic("invalid action")
+		%{postconditions}
+		default:
+			panic("invalid action")
 	}
-  return nil
+	return nil
 }
 
-%s
+%{ltl_monitor_defs}
 
 type entry struct {
 	action string
@@ -159,12 +158,12 @@ type Log = []entry
 
 type Monitor struct {
 	previous Global
-  PC map[string]int
-  //vars     map[string][]string
-  vars     map[string]map[string]bool
-  %s
-  Log Log
-  ExecutionTimeNs int64
+	PC map[string]int
+	//vars     map[string][]string
+	vars     map[string]map[string]bool
+	%{ltl_monitor_fields}
+	Log Log
+	ExecutionTimeNs int64
 	lock        sync.Mutex
 }
 
@@ -174,7 +173,7 @@ func NewMonitor(vars map[string]map[string]bool) *Monitor {
     // previous is the empty Global
     PC: map[string]int{}, // not the smae as a nil map
     vars: vars,
-    %s
+		%{ltl_monitor_init}
     // Everything else uses mzero
   }
 }
@@ -187,7 +186,7 @@ func (m *Monitor) Reset() {
 	m.previous = Global{}
 	m.PC = map[string]int{}
 	// vars ok
-  %s
+  %{ltl_monitor_assignments}
 	m.Log = Log{}
 
 	// This is deliberately not reset, to track the total time the monitor has been used
@@ -199,53 +198,53 @@ func (m *Monitor) Reset() {
 func (m *Monitor) Step(g Global, act Action, params ...string) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-  defer m.trackTime(time.Now())
+	defer m.trackTime(time.Now())
 
 	if err := m.precondition(&g, act, params...); err != nil {
-    return err
+		return err
 	}
 
 	m.previous = g
 
 	if err := m.applyPostcondition(act, params...); err != nil {
-    return err
-  }
+		return err
+	}
 
-  // LTL monitors
+	// LTL monitors
 
-  %s
+	%{ltl_monitor_step}
 
-  return nil
+	return nil
 }
 
 func (m *Monitor) StepA(act Action, params ...string) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-  defer m.trackTime(time.Now())
+	defer m.trackTime(time.Now())
 
-  if err := m.precondition(nil, act, params...); err != nil {
-    return err
-  }
+	if err := m.precondition(nil, act, params...); err != nil {
+		return err
+	}
 
-  if err := m.applyPostcondition(act, params...); err != nil {
-    return err
-  }
+	if err := m.applyPostcondition(act, params...); err != nil {
+		return err
+	}
 
-  return nil
+	return nil
 }
 
 func (m *Monitor) StepS(g Global) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-  defer m.trackTime(time.Now())
+	defer m.trackTime(time.Now())
 
-  m.previous = g
+	m.previous = g
 
-  // LTL monitors
+	// LTL monitors
 
-  %s
+	%{ltl_monitor_step}
 
-  return nil
+	return nil
 }
 
 func (m *Monitor) PrintLog() {
@@ -253,20 +252,17 @@ func (m *Monitor) PrintLog() {
 	defer m.lock.Unlock()
 
 	for _, e := range m.Log {
-		fmt.Printf("%%s %%v\n", e.action, e.params)
+		fmt.Printf("%s %v\n", e.action, e.params)
 	}
-	// fmt.Printf("Monitor time taken: %%v\n", time.Duration(m.ExecutionTimeNs))
-	fmt.Printf("Monitor time taken: %%d\n", m.ExecutionTimeNs)
+	// fmt.Printf("Monitor time taken: %v\n", time.Duration(m.ExecutionTimeNs))
+	fmt.Printf("Monitor time taken: %d\n", m.ExecutionTimeNs)
 }
 
 func (m *Monitor) trackTime(start time.Time) {
-    elapsed := time.Since(start)
-    m.ExecutionTimeNs += elapsed.Nanoseconds()
+	elapsed := time.Since(start)
+	m.ExecutionTimeNs += elapsed.Nanoseconds()
 }
-|}
-    pname extra_imports global_contents action_defs preconditions postconditions
-    ltl_monitor_defs ltl_monitor_fields ltl_monitor_init ltl_monitor_assignments
-    ltl_monitor_step ltl_monitor_step
+|}]
 
 let fresh =
   let n = ref 0 in
