@@ -86,6 +86,7 @@ import (
 	"errors"
   "fmt"
   "sync"
+  "time"
   %s
 )
 
@@ -163,6 +164,7 @@ type Monitor struct {
   vars     map[string]map[string]bool
   %s
   Log Log
+  ExecutionTimeNs int64
 	lock        sync.Mutex
 }
 
@@ -180,6 +182,7 @@ func NewMonitor(vars map[string]map[string]bool) *Monitor {
 func (m *Monitor) Step(g Global, act Action, params ...string) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
+  defer m.trackTime(time.Now())
 
 	if err := m.precondition(&g, act, params...); err != nil {
     return err
@@ -201,6 +204,7 @@ func (m *Monitor) Step(g Global, act Action, params ...string) error {
 func (m *Monitor) StepA(act Action, params ...string) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
+  defer m.trackTime(time.Now())
 
   if err := m.precondition(nil, act, params...); err != nil {
     return err
@@ -216,6 +220,7 @@ func (m *Monitor) StepA(act Action, params ...string) error {
 func (m *Monitor) StepS(g Global) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
+  defer m.trackTime(time.Now())
 
   m.previous = g
 
@@ -233,6 +238,13 @@ func (m *Monitor) PrintLog() {
 	for _, e := range m.Log {
 		fmt.Printf("%%s %%v\n", e.action, e.params)
 	}
+	// fmt.Printf("Monitor time taken: %%v\n", time.Duration(m.ExecutionTimeNs))
+	fmt.Printf("Monitor time taken: %%d\n", m.ExecutionTimeNs)
+}
+
+func (m *Monitor) trackTime(start time.Time) {
+    elapsed := time.Since(start)
+    m.ExecutionTimeNs += elapsed.Nanoseconds()
 }
 |}
     pname extra_imports global_contents action_defs preconditions postconditions
