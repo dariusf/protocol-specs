@@ -5,7 +5,7 @@ export OCAMLRUNPARAM=b
 
 all:
 	dune test
-	dune exec ./app/protocol.exe
+	dune build @install
 
 2pc:
 	dune build @install
@@ -45,3 +45,6 @@ debug-parser:
 
 end-debug-parser:
 	 rm lib/parser.{ml,mli,automaton,conflicts}
+
+image:
+	docker build -t dariusf/protocol-specs .
