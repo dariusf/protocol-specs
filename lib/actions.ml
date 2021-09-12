@@ -429,9 +429,7 @@ let to_graphviz env pname g m =
                  preconditions
            in
            let fence = Format.sprintf "{%s}\\n" (render_fence fence) in
-           let my_fence =
-             Format.sprintf "this: {%s}\\n" (render_fence my_fence)
-           in
+           let my_fence = Format.sprintf "{%s}\\n" (render_fence my_fence) in
            let params =
              match params with
              | [] -> ""
@@ -442,11 +440,24 @@ let to_graphviz env pname g m =
                        Format.pp_print_string))
                  params
            in
-           Format.sprintf "%d [label=\"%s\\ntid: %a\\n%s%s%s%s%a\"];" id name
-             Print.pp_tid protocol.pmeta.tid fence my_fence pre params
-             (Print.pp_tprotocol_untyped ~env)
-             protocol
-           |> strip_whitespace |> ( ^ ) maybe_indent)
+           let succinct = true in
+           let module Protocol = struct
+             let to_string =
+               Format.asprintf "%a" (Print.pp_tprotocol_untyped ~env)
+           end in
+           begin
+             (if succinct then
+                [%string
+                  {|%{id#Int} [label="%{name}\n%{fence}%{protocol#Protocol}\n%{my_fence}"];|}]
+             else
+               let module Tid = struct
+                 let to_string = Format.asprintf "%a" Print.pp_tid
+               end in
+               [%string
+                 {|%{id#Int} [label="%{name}\ntid: %{protocol.pmeta.tid#Tid}\n%{fence}%{my_fence}%{pre}%{params}%{protocol#Protocol}"];|}])
+             |> String.replace ~sub:"->" ~by:"→"
+             |> strip_whitespace |> ( ^ ) maybe_indent
+           end)
   in
   let edges =
     G.all_edges g

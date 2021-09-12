@@ -97,13 +97,13 @@ The classic two-phase commit protocol.
 
   $ protocol print 2pc.spec --parties C,P --project P --actions
   digraph G {
-    1 [label="PReceivePrepare1\ntid: Pt0(c:C)\n{start}\nthis: {Pt0(c:C) = 1}\nparams: [(c:C)]\nc-> : prepare"];
-    2 [label="PSendPrepared2\ntid: Pt0(c:C)\n{Pt0(c:C) = 1}\nthis: {Pt0(c:C) = 2}\nparams: [(c:C)]\n->c : prepared"];
-    3 [label="PSendAbort3\ntid: Pt0(c:C)\n{Pt0(c:C) = 1}\nthis: {Pt0(c:C) = 3}\nparams: [(c:C)]\n->c : abort"];
-    4 [label="PReceiveCommit4\ntid: Pt0(c:C)\n{Any(Pt0(c:C) = 2, Pt0(c:C) = 3)}\nthis: {Pt0(c:C) = 4}\nparams: [(c:C)]\nc-> : commit"];
-    5 [label="PSendCommitAck5\ntid: Pt0(c:C)\n{Pt0(c:C) = 4}\nthis: {Pt0(c:C) = 5}\nparams: [(c:C)]\n->c : commit_ack(p=self)"];
-    6 [label="PReceiveAbort6\ntid: Pt0(c:C)\n{Any(Pt0(c:C) = 2, Pt0(c:C) = 3)}\nthis: {Pt0(c:C) = 6}\nparams: [(c:C)]\nc-> : abort"];
-    7 [label="PSendAbortAck7\ntid: Pt0(c:C)\n{Pt0(c:C) = 6}\nthis: {Pt0(c:C) = 7}\nparams: [(c:C)]\n->c : abort_ack(p=self)"];
+    1 [label="PReceivePrepare1\n{start}\nc→ : prepare\n{Pt0(c:C) = 1}\n"];
+    2 [label="PSendPrepared2\n{Pt0(c:C) = 1}\n→c : prepared\n{Pt0(c:C) = 2}\n"];
+    3 [label="PSendAbort3\n{Pt0(c:C) = 1}\n→c : abort\n{Pt0(c:C) = 3}\n"];
+    4 [label="PReceiveCommit4\n{Any(Pt0(c:C) = 2, Pt0(c:C) = 3)}\nc→ : commit\n{Pt0(c:C) = 4}\n"];
+    5 [label="PSendCommitAck5\n{Pt0(c:C) = 4}\n→c : commit_ack(p=self)\n{Pt0(c:C) = 5}\n"];
+    6 [label="PReceiveAbort6\n{Any(Pt0(c:C) = 2, Pt0(c:C) = 3)}\nc→ : abort\n{Pt0(c:C) = 6}\n"];
+    7 [label="PSendAbortAck7\n{Pt0(c:C) = 6}\n→c : abort_ack(p=self)\n{Pt0(c:C) = 7}\n"];
     6 -> 7;
     4 -> 5;
     3 -> 6;
@@ -116,13 +116,13 @@ The classic two-phase commit protocol.
 
   $ protocol print 2pc.spec --parties C,P --project C --actions
   digraph G {
-    1 [label="CSendPrepare1\ntid: Ct0(p:P)\n{start}\nthis: {Ct0(p:P) = 1}\nparams: [(p:P)]\n->p : prepare"];
-    2 [label="CReceivePrepared2\ntid: Ct0(p:P)\n{Ct0(p:P) = 1}\nthis: {Ct0(p:P) = 2}\nparams: [(p:P)]\np-> : prepared"];
-    3 [label="CReceiveAbort3\ntid: Ct0(p:P)\n{Ct0(p:P) = 1}\nthis: {Ct0(p:P) = 3}\nparams: [(p:P)]\np-> : abort;\nhas_aborted = true"];
-    4 [label="CSendCommit4\ntid: Ct2(p:P)\n{∀ p:P. Any(Ct0(p:P) = 2, Ct0(p:P) = 3)}\nthis: {Ct2(p:P) = 4}\n{[!(has_aborted)]}\nparams: [(p:P)]\n->p : commit"];
-    5 [label="CReceiveCommitAck5\ntid: Ct2(p:P)\n{Ct2(p:P) = 4}\nthis: {Ct2(p:P) = 5}\nparams: [(p:P)]\np-> : commit_ack(p);\ncommitted = union(committed, {p})"];
-    6 [label="CSendAbort6\ntid: Ct1(p:P)\n{∀ p:P. Any(Ct0(p:P) = 2, Ct0(p:P) = 3)}\nthis: {Ct1(p:P) = 6}\n{[has_aborted]}\nparams: [(p:P)]\n->p : abort"];
-    7 [label="CReceiveAbortAck7\ntid: Ct1(p:P)\n{Ct1(p:P) = 6}\nthis: {Ct1(p:P) = 7}\nparams: [(p:P)]\np-> : abort_ack(p);\naborted = union(aborted, {p})"];
+    1 [label="CSendPrepare1\n{start}\n→p : prepare\n{Ct0(p:P) = 1}\n"];
+    2 [label="CReceivePrepared2\n{Ct0(p:P) = 1}\np→ : prepared\n{Ct0(p:P) = 2}\n"];
+    3 [label="CReceiveAbort3\n{Ct0(p:P) = 1}\np→ : abort;\nhas_aborted = true\n{Ct0(p:P) = 3}\n"];
+    4 [label="CSendCommit4\n{∀ p:P. Any(Ct0(p:P) = 2, Ct0(p:P) = 3)}\n→p : commit\n{Ct2(p:P) = 4}\n"];
+    5 [label="CReceiveCommitAck5\n{Ct2(p:P) = 4}\np→ : commit_ack(p);\ncommitted = union(committed, {p})\n{Ct2(p:P) = 5}\n"];
+    6 [label="CSendAbort6\n{∀ p:P. Any(Ct0(p:P) = 2, Ct0(p:P) = 3)}\n→p : abort\n{Ct1(p:P) = 6}\n"];
+    7 [label="CReceiveAbortAck7\n{Ct1(p:P) = 6}\np→ : abort_ack(p);\naborted = union(aborted, {p})\n{Ct1(p:P) = 7}\n"];
     6 -> 7;
     4 -> 5;
     3 -> 6;
