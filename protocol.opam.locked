@@ -1,0 +1,82 @@
+opam-version: "2.0"
+name: "protocol"
+version: "~dev"
+synopsis: "A protocol specification language"
+description: "A protocol specification language"
+maintainer: "darius.foo.tw@gmail.com"
+authors: "Darius Foo"
+homepage: "https://github.com/dariusf/protocol-specs"
+bug-reports: "https://github.com/dariusf/protocol-specs/issues"
+depends: [
+  "astring" {= "0.8.5" & with-doc}
+  "base" {= "v0.14.1"}
+  "base-bigarray" {= "base"}
+  "base-threads" {= "base"}
+  "base-unix" {= "base"}
+  "cmdliner" {= "1.0.4"}
+  "containers" {= "3.4"}
+  "cppo" {= "1.6.7"}
+  "csexp" {= "1.5.1"}
+  "dune" {= "2.9.1"}
+  "dune-configurator" {= "2.8.5"}
+  "fpath" {= "0.7.3" & with-doc}
+  "jane-street-headers" {= "v0.14.0" & with-test}
+  "jst-config" {= "v0.14.0" & with-test}
+  "menhir" {= "20210419"}
+  "menhirLib" {= "20210419"}
+  "menhirSdk" {= "20210419"}
+  "ocaml" {= "4.12.0"}
+  "ocaml-base-compiler" {= "4.12.0"}
+  "ocaml-compiler-libs" {= "v0.12.3"}
+  "ocaml-config" {= "2"}
+  "ocaml-options-vanilla" {= "1"}
+  "ocamlbuild" {= "0.14.0" & with-doc}
+  "ocamlfind" {= "1.9.1"}
+  "ocamlgraph" {= "2.0.0"}
+  "octavius" {= "1.2.2"}
+  "odoc" {= "1.5.2" & with-doc}
+  "pprint" {= "20200410"}
+  "ppx_assert" {= "v0.14.0" & with-test}
+  "ppx_base" {= "v0.14.0"}
+  "ppx_cold" {= "v0.14.0"}
+  "ppx_compare" {= "v0.14.0"}
+  "ppx_derivers" {= "1.2.1"}
+  "ppx_deriving" {= "5.2.1"}
+  "ppx_enumerate" {= "v0.14.0"}
+  "ppx_expect" {= "v0.14.1" & with-test}
+  "ppx_hash" {= "v0.14.0"}
+  "ppx_here" {= "v0.14.0" & with-test}
+  "ppx_inline_test" {= "v0.14.1" & with-test}
+  "ppx_js_style" {= "v0.14.0"}
+  "ppx_optcomp" {= "v0.14.3" & with-test}
+  "ppx_sexp_conv" {= "v0.14.3"}
+  "ppx_string" {= "v0.14.1"}
+  "ppxlib" {= "0.23.0"}
+  "re" {= "1.9.0" & with-test}
+  "result" {= "1.5"}
+  "seq" {= "base"}
+  "sexplib0" {= "v0.14.0"}
+  "stdio" {= "v0.14.0"}
+  "stdlib-shims" {= "0.3.0"}
+  "time_now" {= "v0.14.0" & with-test}
+  "topkg" {= "1.0.3" & with-doc}
+  "tyxml" {= "4.5.0" & with-doc}
+  "uchar" {= "0.0.2" & with-doc}
+  "uutf" {= "1.0.2" & with-doc}
+  "visitors" {= "20210608"}
+]
+build: [
+  ["dune" "subst"] {dev}
+  [
+    "dune"
+    "build"
+    "-p"
+    name
+    "-j"
+    jobs
+    "@install"
+    "@runtest" {with-test}
+    "@doc" {with-doc}
+  ]
+]
+dev-repo: "git+https://github.com/dariusf/protocol-specs.git"
