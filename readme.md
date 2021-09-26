@@ -7,7 +7,14 @@ Downstream tools not required for the evaluation, such as Graphviz and TLA+, are
 
 ## Running the tool
 
-`~/protocol-specs` contains the source code of our tool. Typing `make` in here will compile it and run tests. The (working) name of the executable is `protocol`.
+`~/protocol-specs` contains the source code of our tool. Typing `make` in here will compile it and run tests. The shell commands executed should appear, and there should be nothing else printed if everything was successful.
+
+```sh
+dune test
+dune build @install
+```
+
+The (working) name of the executable is `protocol`.
 
 The `test` directory contains many examples of using the tool. Of note are the three directories `2pc.t`, `paxos.t`, and `nbac.t`, which contain the protocols we specify in Tab. 1 in the paper. The inputs _and_ outputs of each command are given in the `run.t` file, which uses the cram test format.
 
@@ -25,7 +32,12 @@ All of the claims in the paper can be replicated.
 
 ### Expressiveness
 
-The DistAlgo and TLA+ specifications mentioned in Tab. 1 may be found in `~/protocol-specs/case-studies`. There is also a script in that directory which outputs line counts, minus comments.
+The DistAlgo and TLA+ specifications mentioned in Tab. 1 may be found in `~/protocol-specs/case-studies`. There is also a script `count.sh` in that directory which counts lines as we did, minus comments.
+
+```sh
+cd case-studies
+./count.sh
+```
 
 There was a minor revision to our version of Paxos which isn't reflected in the paper, so its line count is 30 instead of 31.
 
