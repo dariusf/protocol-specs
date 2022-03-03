@@ -1,6 +1,5 @@
 
   $ ls
-  run.t
 
   $ protocol monitor --parties C,P <<EOF
   > forall c in C
@@ -11,7 +10,6 @@
 
   $ ls
   monitorC.go
-  run.t
 
   $ cat monitorC.go
   package rvc
