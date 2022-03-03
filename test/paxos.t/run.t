@@ -109,4 +109,4 @@ Single-decree Paxos
     forall a1 in promise_responses
       a1-> : accept
 
-  $ protocol print paxos.spec > paxos1.spec && protocol print paxos1.spec | protocol print > paxos2.spec && git diff --no-index paxos1.spec paxos2.spec
+  $ protocol print paxos.spec > paxos1.spec && protocol print paxos1.spec | protocol print > paxos2.spec && diff -uw paxos1.spec paxos2.spec

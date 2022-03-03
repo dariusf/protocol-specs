@@ -39,4 +39,4 @@ Non-blocking atomic commitment
      \/
      ->p : ok)
 
-  $ protocol print nbac.spec > nbac1.spec && protocol print nbac1.spec | protocol print > nbac2.spec && git diff --no-index nbac1.spec nbac2.spec
+  $ protocol print nbac.spec > nbac1.spec && protocol print nbac1.spec | protocol print > nbac2.spec && diff -uw nbac1.spec nbac2.spec

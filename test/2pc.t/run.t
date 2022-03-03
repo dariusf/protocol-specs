@@ -91,9 +91,9 @@ The classic two-phase commit protocol.
      c-> : abort;
      ->c : abort_ack(p=self))
 
-  $ protocol print 2pc.spec > 2pc1.spec && protocol print 2pc1.spec | protocol print > 2pc2.spec && git diff --no-index 2pc1.spec 2pc2.spec
+  $ protocol print 2pc.spec > 2pc1.spec && protocol print 2pc1.spec | protocol print > 2pc2.spec && diff -uw 2pc1.spec 2pc2.spec
 
-  $ protocol print 2pc-wait.spec > 2pc1-wait.spec && protocol print 2pc1-wait.spec | protocol print > 2pc2-wait.spec && git diff --no-index 2pc1-wait.spec 2pc2-wait.spec
+  $ protocol print 2pc-wait.spec > 2pc1-wait.spec && protocol print 2pc1-wait.spec | protocol print > 2pc2-wait.spec && diff -uw 2pc1-wait.spec 2pc2-wait.spec
 
   $ protocol print 2pc.spec --parties C,P --project P --actions
   digraph G {

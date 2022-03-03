@@ -722,4 +722,4 @@ Note that the parens are only added when necessary.
       }
     }
 
-  $ protocol print parse.spec > parse1.spec && protocol print parse1.spec | protocol print > parse2.spec && git diff --no-index parse1.spec parse2.spec
+  $ protocol print parse.spec > parse1.spec && protocol print parse1.spec | protocol print > parse2.spec && diff -uw parse1.spec parse2.spec
