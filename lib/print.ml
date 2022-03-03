@@ -4,7 +4,6 @@ open Common.Printing
 open PPrint
 
 let latex_escape = enclose (string "/*$") (string "$*/")
-
 let arrow latex = if latex then latex_escape (string "\\send") else string "->"
 
 let disj latex =
@@ -56,9 +55,7 @@ let get_expr_prec op =
   | _ -> 0
 
 let fact f n = match n with 0 -> 1 | _ -> n * f (n - 1)
-
 let rec fact1 n = fact fact1 n
-
 let get_expr_assoc _ = `Left
 
 (** prec is the precedence of the context, so we make sure to
@@ -123,7 +120,6 @@ let rec strip_type : texpr -> expr =
   { meta = e.meta.loc; expr = e1 }
 
 let render_party party = render_var party.repr
-
 let render_uf u = string ("$" ^ string_of_int (UF.value u))
 
 let render_own ~env own =
@@ -311,89 +307,19 @@ let render_tprotocol ?(latex = false) ~env p =
 let render_tprotocol_untyped ?(latex = false) ~env p =
   render_protocol_ latex (render_texpr_as_expr ~env) p
 
-module PP = struct
-  open PPrintEngine
+let pretty fmt d = PPrint.ToFormatter.pretty 0.8 120 fmt d
 
-  let initial rfrac width =
-    {
-      width;
-      ribbon = max 0 (min width (truncate (float_of_int width *. rfrac)));
-      last_indent = 0;
-      line = 0;
-      column = 0;
-    }
+let to_pp ?(one_line = true) render fmt a =
+  Format.fprintf fmt
+    (if one_line then "@[<h>%a@]@?" else "%a")
+    pretty (render a)
 
-  module MakeRenderer (X : sig
-    type channel
-
-    val output : channel -> output
-  end) =
-  struct
-    type channel = X.channel
-
-    type dummy = document
-
-    type document = dummy
-
-    let pretty rfrac width channel doc =
-      pretty (X.output channel) (initial rfrac width) 0 false doc
-
-    let compact channel doc = compact (X.output channel) doc
-  end
-
-  class formatter_output fmt =
-    object
-      method char c =
-        (* Don't replace spaces with Format's break hints *)
-        Format.pp_print_char fmt c
-
-      method substring str ofs len =
-        Format.pp_print_text fmt
-          (if ofs = 0 && len = String.length str then
-             str
-          else
-            String.sub str ofs len)
-    end
-
-  module ToFormatter = MakeRenderer (struct
-    type channel = Format.formatter
-
-    let output = new formatter_output
-  end)
-end
-
-(* let pretty fmt d = PPrint.ToFormatter.pretty 0.8 120 fmt d *)
-let pretty fmt d = PP.ToFormatter.pretty 0.8 120 fmt d
-
-(* let one_line fmt pp t = Format.fprintf fmt "box(@[<h>(%a)@])" pp t *)
-
-(* inexplicably, a newline sometimes appears due to the opening of the box *)
-
-let one_line fmt pp t = Format.fprintf fmt "%a" pp t
-
-let pp_tprotocol_untyped ~env fmt t =
-  let pp fmt t = render_tprotocol_untyped ~env t |> pretty fmt in
-  one_line fmt pp t
-
-let pp_expr fmt t =
-  let pp fmt t = render_expr t |> pretty fmt in
-  one_line fmt pp t
-
-let pp_texpr ~env fmt t =
-  let pp fmt t = render_texpr ~env t |> pretty fmt in
-  one_line fmt pp t
-
-let pp_texpr_untyped ~env fmt t =
-  let pp fmt t = render_texpr_as_expr ~env t |> pretty fmt in
-  one_line fmt pp t
-
-let pp_typ ~env fmt t =
-  let pp fmt t = render_typ ~env t |> pretty fmt in
-  one_line fmt pp t
-
-let pp_ownership ~env fmt t =
-  let pp fmt t = render_own ~env t |> pretty fmt in
-  one_line fmt pp t
+let pp_tprotocol_untyped ~env = to_pp (render_tprotocol_untyped ~env)
+let pp_expr = to_pp (fun t -> render_expr t)
+let pp_texpr ~env = to_pp (fun t -> render_texpr ~env t)
+let pp_texpr_untyped ~env = to_pp (fun t -> render_texpr_as_expr ~env t)
+let pp_typ ~env = to_pp (fun t -> render_typ ~env t)
+let pp_ownership ~env = to_pp (fun t -> render_own ~env t)
 
 let pp_tid fmt t =
   Format.fprintf fmt "%s%s" t.name

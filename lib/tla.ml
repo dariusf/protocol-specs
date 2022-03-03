@@ -78,9 +78,7 @@ Spec == Init /\ [][Next]_<<vars, history>>
 
 ===============================================================================
 |}
-    name
-    (Print.PP.ToFormatter.pretty 0.8 120)
-    spec
+    name Print.pretty spec
 
 (* |> ignore; *)
 (* Format.sprintf "@[<h>%a@]" (PPrint.ToFormatter.pretty 0.8 120) spec *)
