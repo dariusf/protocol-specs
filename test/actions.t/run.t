@@ -87,11 +87,11 @@ Actions
   
   CONSTANTS C, P
   
-  CONSTANTS 
+  CONSTANTS
   
   CONSTANTS Ct0, Ct1
   
-  CONSTANTS 
+  CONSTANTS
   
   Symmetry == (Permutations(C) \union Permutations(P))
   
@@ -122,7 +122,7 @@ Actions
     /\ pc[self][<<Ct0, p>>] = 0
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct0, p>>] = 1]]
     /\ history' = Append(<<"CChangeA1">>, history)
-    /\ 
+    /\
       /\ a' = [a EXCEPT ![self] = 1]
       /\ x' = [x EXCEPT ![self] = 2]
     /\ UNCHANGED <<messages>>
@@ -131,7 +131,7 @@ Actions
     /\ \A pi \in P : pc[self][<<Ct0, pi>>] = 1
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct1, p>>] = 2]]
     /\ history' = Append(<<"CChangeA2">>, history)
-    /\ 
+    /\
       /\ a' = [a EXCEPT ![self] = 3]
       /\ x' = [x EXCEPT ![self] = 4]
     /\ UNCHANGED <<messages>>
@@ -209,7 +209,7 @@ Actions
     /\ pc[self][<<Ct0, p>>] = 0
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct0, p>>] = 1]]
     /\ history' = Append(<<"CSendPrepare1", p>>, history)
-    /\ 
+    /\
       /\ messages' = Send([mtype |-> prepare, msrc |-> self, mdest |-> p], messages)
     /\ UNCHANGED <<a, b>>
   
@@ -217,7 +217,7 @@ Actions
     /\ pc[self][<<Ct0, p>>] = 1
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct0, p>>] = 2]]
     /\ history' = Append(<<"CReceivePrepared2", p>>, history)
-    /\ \E m \in DOMAIN messages : 
+    /\ \E m \in DOMAIN messages :
       /\ (messages[m] > 0)
       /\ m.mtype = prepared
       /\ m.mdest = self
@@ -229,7 +229,7 @@ Actions
     /\ pc[self][<<Ct0, p>>] = 1
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct0, p>>] = 3]]
     /\ history' = Append(<<"CReceiveAbort3", p>>, history)
-    /\ \E m \in DOMAIN messages : 
+    /\ \E m \in DOMAIN messages :
       /\ (messages[m] > 0)
       /\ m.mtype = abort
       /\ m.mdest = self
@@ -238,12 +238,12 @@ Actions
     /\ UNCHANGED <<b>>
   
   CChangeB4(self) ==
-    /\ \A pi \in P : 
+    /\ \A pi \in P :
       \/ pc[self][<<Ct0, pi>>] = 2
       \/ pc[self][<<Ct0, pi>>] = 3
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![Cmain] = 4]]
     /\ history' = Append(<<"CChangeB4">>, history)
-    /\ 
+    /\
       /\ b' = [b EXCEPT ![self] = 3]
     /\ UNCHANGED <<a, messages>>
   
@@ -251,7 +251,7 @@ Actions
     /\ pc[self][<<Pt0, c>>] = 0
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 5]]
     /\ history' = Append(<<"PReceivePrepare5", c>>, history)
-    /\ \E m \in DOMAIN messages : 
+    /\ \E m \in DOMAIN messages :
       /\ (messages[m] > 0)
       /\ m.mtype = prepare
       /\ m.mdest = self
@@ -262,7 +262,7 @@ Actions
     /\ pc[self][<<Pt0, c>>] = 5
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 6]]
     /\ history' = Append(<<"PSendPrepared6", c>>, history)
-    /\ 
+    /\
       /\ messages' = Send([mtype |-> prepared, msrc |-> self, mdest |-> c], messages)
     /\ UNCHANGED <<a, b>>
   
@@ -270,7 +270,7 @@ Actions
     /\ pc[self][<<Pt0, c>>] = 5
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 7]]
     /\ history' = Append(<<"PSendAbort7", c>>, history)
-    /\ 
+    /\
       /\ messages' = Send([mtype |-> abort, msrc |-> self, mdest |-> c], messages)
     /\ UNCHANGED <<a, b>>
   

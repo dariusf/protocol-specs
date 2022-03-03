@@ -199,7 +199,7 @@ The classic two-phase commit protocol.
     /\ pc[self][<<Ct0, p>>] = 0
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct0, p>>] = 1]]
     /\ history' = Append(<<"CSendPrepare1", p>>, history)
-    /\ 
+    /\
       /\ messages' = Send([mtype |-> prepare, msrc |-> self, mdest |-> p], messages)
     /\ UNCHANGED <<has_aborted, committed, aborted>>
   
@@ -207,7 +207,7 @@ The classic two-phase commit protocol.
     /\ pc[self][<<Ct0, p>>] = 1
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct0, p>>] = 2]]
     /\ history' = Append(<<"CReceivePrepared2", p>>, history)
-    /\ \E m \in DOMAIN messages : 
+    /\ \E m \in DOMAIN messages :
       /\ (messages[m] > 0)
       /\ m.mtype = prepared
       /\ m.mdest = self
@@ -218,7 +218,7 @@ The classic two-phase commit protocol.
     /\ pc[self][<<Ct0, p>>] = 1
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct0, p>>] = 3]]
     /\ history' = Append(<<"CReceiveAbort3", p>>, history)
-    /\ \E m \in DOMAIN messages : 
+    /\ \E m \in DOMAIN messages :
       /\ (messages[m] > 0)
       /\ m.mtype = abort
       /\ m.mdest = self
@@ -227,12 +227,12 @@ The classic two-phase commit protocol.
     /\ UNCHANGED <<committed, aborted>>
   
   CSendCommit4(self, p) ==
-    /\ \A pi \in P : 
+    /\ \A pi \in P :
       \/ pc[self][<<Ct0, pi>>] = 2
       \/ pc[self][<<Ct0, pi>>] = 3
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct2, p>>] = 4]]
     /\ history' = Append(<<"CSendCommit4", p>>, history)
-    /\ 
+    /\
       /\ messages' = Send([mtype |-> commit, msrc |-> self, mdest |-> p], messages)
     /\ UNCHANGED <<has_aborted, committed, aborted>>
   
@@ -240,25 +240,25 @@ The classic two-phase commit protocol.
     /\ pc[self][<<Ct2, p>>] = 4
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct2, p>>] = 5]]
     /\ history' = Append(<<"CReceiveCommitAck5", p>>, history)
-    /\ \E m \in DOMAIN messages : 
+    /\ \E m \in DOMAIN messages :
       /\ (messages[m] > 0)
       /\ m.mtype = commit_ack
       /\ m.mdest = self
-      /\ LET 
+      /\ LET
           p == m.p
            IN
-      
+  
         /\ committed' = [committed EXCEPT ![self] = (committed[self] \union {p})]
         /\ messages' = Receive(m, messages)
     /\ UNCHANGED <<has_aborted, aborted>>
   
   CSendAbort6(self, p) ==
-    /\ \A pi \in P : 
+    /\ \A pi \in P :
       \/ pc[self][<<Ct0, pi>>] = 2
       \/ pc[self][<<Ct0, pi>>] = 3
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct1, p>>] = 6]]
     /\ history' = Append(<<"CSendAbort6", p>>, history)
-    /\ 
+    /\
       /\ messages' = Send([mtype |-> abort, msrc |-> self, mdest |-> p], messages)
     /\ UNCHANGED <<has_aborted, committed, aborted>>
   
@@ -266,14 +266,14 @@ The classic two-phase commit protocol.
     /\ pc[self][<<Ct1, p>>] = 6
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct1, p>>] = 7]]
     /\ history' = Append(<<"CReceiveAbortAck7", p>>, history)
-    /\ \E m \in DOMAIN messages : 
+    /\ \E m \in DOMAIN messages :
       /\ (messages[m] > 0)
       /\ m.mtype = abort_ack
       /\ m.mdest = self
-      /\ LET 
+      /\ LET
           p == m.p
            IN
-      
+  
         /\ aborted' = [aborted EXCEPT ![self] = (aborted[self] \union {p})]
         /\ messages' = Receive(m, messages)
     /\ UNCHANGED <<has_aborted, committed>>
@@ -282,7 +282,7 @@ The classic two-phase commit protocol.
     /\ pc[self][<<Pt0, c>>] = 0
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 8]]
     /\ history' = Append(<<"PReceivePrepare8", c>>, history)
-    /\ \E m \in DOMAIN messages : 
+    /\ \E m \in DOMAIN messages :
       /\ (messages[m] > 0)
       /\ m.mtype = prepare
       /\ m.mdest = self
@@ -293,7 +293,7 @@ The classic two-phase commit protocol.
     /\ pc[self][<<Pt0, c>>] = 8
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 9]]
     /\ history' = Append(<<"PSendPrepared9", c>>, history)
-    /\ 
+    /\
       /\ messages' = Send([mtype |-> prepared, msrc |-> self, mdest |-> c], messages)
     /\ UNCHANGED <<has_aborted, committed, aborted>>
   
@@ -301,17 +301,17 @@ The classic two-phase commit protocol.
     /\ pc[self][<<Pt0, c>>] = 8
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 10]]
     /\ history' = Append(<<"PSendAbort10", c>>, history)
-    /\ 
+    /\
       /\ messages' = Send([mtype |-> abort, msrc |-> self, mdest |-> c], messages)
     /\ UNCHANGED <<has_aborted, committed, aborted>>
   
   PReceiveCommit11(self, c) ==
-    /\ 
+    /\
       \/ pc[self][<<Pt0, c>>] = 9
       \/ pc[self][<<Pt0, c>>] = 10
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 11]]
     /\ history' = Append(<<"PReceiveCommit11", c>>, history)
-    /\ \E m \in DOMAIN messages : 
+    /\ \E m \in DOMAIN messages :
       /\ (messages[m] > 0)
       /\ m.mtype = commit
       /\ m.mdest = self
@@ -322,17 +322,17 @@ The classic two-phase commit protocol.
     /\ pc[self][<<Pt0, c>>] = 11
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 12]]
     /\ history' = Append(<<"PSendCommitAck12", c>>, history)
-    /\ 
+    /\
       /\ messages' = Send([p |-> self, mtype |-> commit_ack, msrc |-> self, mdest |-> c], messages)
     /\ UNCHANGED <<has_aborted, committed, aborted>>
   
   PReceiveAbort13(self, c) ==
-    /\ 
+    /\
       \/ pc[self][<<Pt0, c>>] = 9
       \/ pc[self][<<Pt0, c>>] = 10
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 13]]
     /\ history' = Append(<<"PReceiveAbort13", c>>, history)
-    /\ \E m \in DOMAIN messages : 
+    /\ \E m \in DOMAIN messages :
       /\ (messages[m] > 0)
       /\ m.mtype = abort
       /\ m.mdest = self
@@ -343,7 +343,7 @@ The classic two-phase commit protocol.
     /\ pc[self][<<Pt0, c>>] = 13
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 14]]
     /\ history' = Append(<<"PSendAbortAck14", c>>, history)
-    /\ 
+    /\
       /\ messages' = Send([p |-> self, mtype |-> abort_ack, msrc |-> self, mdest |-> c], messages)
     /\ UNCHANGED <<has_aborted, committed, aborted>>
   
