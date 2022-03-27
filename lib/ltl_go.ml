@@ -7,9 +7,7 @@ module G = struct
     type t = string
 
     let compare = String.compare
-
     let hash = Hashtbl.hash
-
     let equal = String.equal
   end)
 
@@ -615,10 +613,15 @@ let generate_ltl_monitor ltl_i env parties pname ltl =
   in
   (defs, fields, assignments, inits, steps)
 
+let should_generate_ltl_monitor = false
+
 let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
   (* TODO use pname to qualify stuff *)
   let ltl_monitors =
-    List.map (generate_ltl_monitor ltl_i env parties pname) ltl
+    if should_generate_ltl_monitor then
+      List.map (generate_ltl_monitor ltl_i env parties pname) ltl
+    else
+      []
   in
   let ltl_monitor_defs =
     ltl_monitors |> List.map (fun (d, _, _, _, _) -> d) |> String.concat "\n\n"

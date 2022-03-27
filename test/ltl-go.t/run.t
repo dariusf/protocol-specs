@@ -89,72 +89,6 @@
   	return nil
   }
   
-  // LTL property 0
-  
-  // Propositions
-  func (l *LTLMonitor0) t0(g Global) bool {
-  	return (g.A > 0)
-  }
-  
-  type State0 int
-  
-  const (
-  	S_0_R State0 = iota
-  	S_1_Y
-  )
-  
-  type LTLMonitor0 struct {
-  	state     State0
-  	succeeded bool
-  	failed    bool
-  	vars      map[string]map[string]bool
-  }
-  
-  func NewLTLMonitor0(vars map[string]map[string]bool) *LTLMonitor0 {
-  	return &LTLMonitor0{
-  		vars:      vars,
-  		state:     S_1_Y,
-  		succeeded: false,
-  		failed:    false,
-  	}
-  }
-  
-  func (l *LTLMonitor0) StepLTL0(g Global) error {
-  	if l.succeeded {
-  		return nil
-  	} else if l.failed {
-  		return errors.New("property falsified")
-  	}
-  
-  	// evaluate all the props
-  	t0 := l.t0(g)
-  
-  	// note the true ones, take that transition
-  	switch l.state {
-  	case S_0_R:
-  		if t0 {
-  			l.state = S_0_R
-  			l.failed = true
-  			return errors.New("property falsified")
-  		} else {
-  			l.state = S_0_R
-  			l.failed = true
-  			return errors.New("property falsified")
-  		}
-  	case S_1_Y:
-  		if t0 {
-  			l.state = S_1_Y
-  			return nil
-  		} else {
-  			l.state = S_0_R
-  			l.failed = true
-  			return errors.New("property falsified")
-  		}
-  	default:
-  		panic("invalid state")
-  	}
-  }
-  
   type entry struct {
   	action string
   	params []string
@@ -166,8 +100,8 @@
   	previous Global
   	PC       map[string]int
   	//vars     map[string][]string
-  	vars            map[string]map[string]bool
-  	ltlMonitor0     *LTLMonitor0
+  	vars map[string]map[string]bool
+  
   	Log             Log
   	ExecutionTimeNs int64
   	lock            sync.Mutex
@@ -177,9 +111,9 @@
   func NewMonitor(vars map[string]map[string]bool) *Monitor {
   	return &Monitor{
   		// previous is the empty Global
-  		PC:          map[string]int{}, // not the smae as a nil map
-  		vars:        vars,
-  		ltlMonitor0: NewLTLMonitor0(vars),
+  		PC:   map[string]int{}, // not the smae as a nil map
+  		vars: vars,
+  
   		// Everything else uses mzero
   	}
   }
@@ -192,7 +126,7 @@
   	m.previous = Global{}
   	m.PC = map[string]int{}
   	// vars ok
-  	m.ltlMonitor0 = NewLTLMonitor0(m.vars)
+  
   	m.Log = Log{}
   
   	// This is deliberately not reset, to track the total time the monitor has been used
@@ -217,10 +151,6 @@
   	}
   
   	// LTL monitors
-  
-  	if err := m.ltlMonitor0.StepLTL0(g); err != nil {
-  		return err
-  	}
   
   	return nil
   }
@@ -249,10 +179,6 @@
   	m.previous = g
   
   	// LTL monitors
-  
-  	if err := m.ltlMonitor0.StepLTL0(g); err != nil {
-  		return err
-  	}
   
   	return nil
   }
