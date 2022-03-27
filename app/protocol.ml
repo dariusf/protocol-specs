@@ -44,8 +44,9 @@ let help_cmd =
       `P "Prints help about wiki commands and other topics."; `Blocks help_secs;
     ]
   in
-  ( Term.(ret (const help $ Arg.man_format $ Term.choice_names $ topic)),
-    Term.info "help" ~doc ~exits:Term.default_exits ~man )
+  Cmd.v
+    (Cmd.info "help" ~doc ~man)
+    Term.(ret (const help $ Arg.man_format $ Term.choice_names $ topic))
 
 let print project parties ast types actions latex file =
   (* Ppx_debug.Tracing.wrap (fun () -> *)
@@ -98,11 +99,11 @@ let print_cmd =
       `Blocks help_secs;
     ]
   in
-  ( Term.(
+  Cmd.v
+    (Cmd.info "print" ~doc:"renders a specification" ~man)
+    Term.(
       ret
-        (const print $ project $ parties $ ast $ types $ actions $ latex $ file)),
-    Term.info "print" ~doc:"renders a specification" ~exits:Term.default_exits
-      ~man )
+        (const print $ project $ parties $ ast $ types $ actions $ latex $ file))
 
 let tla_cmd =
   let file =
@@ -127,9 +128,9 @@ let tla_cmd =
       `Blocks help_secs;
     ]
   in
-  ( Term.(ret (const tla $ parties $ spec_name $ file)),
-    Term.info "tla" ~doc:"compiles a specification to TLA+"
-      ~exits:Term.default_exits ~man )
+  Cmd.v
+    (Cmd.info "tla" ~doc:"compiles a specification to TLA+" ~man)
+    Term.(ret (const tla $ parties $ spec_name $ file))
 
 let monitor_cmd =
   let file =
@@ -147,18 +148,18 @@ let monitor_cmd =
       `P "generates a monitor for runtime verification"; `Blocks help_secs;
     ]
   in
-  ( Term.(ret (const monitor $ parties $ file)),
-    Term.info "monitor" ~doc:"generates a monitor for runtime verification"
-      ~exits:Term.default_exits ~man )
+  Cmd.v
+    (Cmd.info "monitor" ~doc:"generates a monitor for runtime verification" ~man)
+    Term.(ret (const monitor $ parties $ file))
 
 let cmds = [print_cmd; tla_cmd; monitor_cmd; help_cmd]
 
-let default_cmd =
+let default_group =
   let doc = "Protocol specifications" in
   let sdocs = Manpage.s_common_options in
-  let exits = Term.default_exits in
   let man = help_secs in
-  ( Term.(ret (const (`Ok ()))),
-    Term.info "protocol" ~version:"v0.1" ~doc ~sdocs ~exits ~man )
+  let default = Term.(ret (const (`Ok ()))) in
+  let info = Cmd.info "protocol" ~version:"v0.1" ~doc ~sdocs ~man in
+  Cmd.group ~default info cmds
 
-let () = Term.(eval_choice default_cmd cmds |> exit)
+let () = Cmd.(eval default_group |> exit)
