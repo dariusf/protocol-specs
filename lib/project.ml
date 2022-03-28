@@ -105,6 +105,7 @@ let substitute ~v ~by p =
             {
               f;
               args = List.map (substitute_expr ~v ~by) args;
+              (* toggles this flag if we're substituting with self *)
               is_self = String.equal by "self";
             };
       }
@@ -148,7 +149,7 @@ let rec project_protocol : string -> env -> tprotocol -> tprotocol =
     in
     { pr with p }
   | Call { is_self; _ } ->
-    (* TODO get rid of initiator *)
+    (* the sole purpose of this field *)
     let p = if is_self then pr.p else Emp in
     { pr with p }
   | Imply (c, body) ->

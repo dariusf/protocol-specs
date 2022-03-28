@@ -730,47 +730,6 @@ let rec infer : ?in_seq:bool -> protocol -> env -> tprotocol * env =
   | SendOnly _ -> bug "infer_parties doesn't expect send only"
   | ReceiveOnly _ -> bug "infer_parties doesn't expect receive only"
 
-let initiator env p =
-  let rec aux p =
-    match p.p with
-    | Seq (s :: _) -> aux s
-    | Seq _ -> bug "empty seq"
-    | Par [] -> bug "empty par"
-    | Par ps ->
-      let it = List.map aux ps in
-      foldr1
-        (fun (c, p) (t, _) ->
-          if equal_party_info c t then (c, p)
-          else fail ~loc:p.pmeta.ploc "different initiator in par")
-        (List.combine it ps)
-      |> ignore;
-      List.hd it
-    | Disj (a, b) ->
-      let ia = aux a in
-      let ib = aux b in
-      if equal_party_info ia ib then ia
-      else
-        fail ~loc:p.pmeta.ploc "different initiator in disjunction" List.for_all
-          aux [a; b]
-    | Send { from; _ } ->
-      (match from.meta.info.typ with
-      | TyParty p -> IMap.find (UF.value p) env.parties
-      | _ -> fail ~loc:from.meta.loc "no initiator")
-    | Call { f; _ } ->
-      (match SMap.find_opt f env.subprotocols with
-      | None -> fail ~loc:p.pmeta.ploc "undefined function %s" f
-      | Some { initiator; _ } -> { repr = var initiator })
-    | Assign (e, _) | BlockingImply (e, _) | Imply (e, _) ->
-      (match e.meta.info.own with
-      | Party p -> IMap.find (UF.value p) env.parties
-      | _ -> fail ~loc:e.meta.loc "no initiator")
-    | Forall (_, _, p) | Exists (_, _, p) -> aux p
-    | ReceiveOnly _ | SendOnly _ -> bug "initiator: multiparty spec only"
-    | Comment _ -> bug "initiator comment"
-    | Emp -> bug "initiator empty"
-  in
-  aux p
-
 let parse_spec file =
   (* let p = Parsing.parse_inc file in *)
   match

@@ -58,15 +58,7 @@ let typecheck parties spec =
         let tp, env = Infer.check p env in
         {
           env with
-          subprotocols =
-            SMap.add fname
-              {
-                fname;
-                fparams;
-                tp;
-                initiator = (Infer.initiator env tp).repr |> var_name;
-              }
-              env.subprotocols;
+          subprotocols = SMap.add fname { fname; fparams; tp } env.subprotocols;
         })
       env fns
   in

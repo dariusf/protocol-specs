@@ -254,7 +254,6 @@ and subprotocol = {
   fname : string;
   fparams : string list;
   tp : tprotocol;
-  initiator : string;
 }
 
 and env = {
