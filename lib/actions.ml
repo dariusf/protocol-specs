@@ -154,14 +154,14 @@ let rec group_seq :
       |> List.filter (function [] -> false | _ -> true)
       |> List.map List.rev |> List.rev
     | t :: ts1 ->
-    match t.p with
-    | ReceiveOnly _ ->
-      (* also terminate current sequence *)
-      loop [t] (curr :: acc) ts1
-    | Assign (_, _) -> loop (t :: curr) acc ts1
-    | SendOnly _ | _ ->
-      (* always terminate the current sequence, and don't even start a new one *)
-      loop [] ([t] :: curr :: acc) ts1
+      (match t.p with
+      | ReceiveOnly _ ->
+        (* also terminate current sequence *)
+        loop [t] (curr :: acc) ts1
+      | Assign (_, _) -> loop (t :: curr) acc ts1
+      | SendOnly _ | _ ->
+        (* always terminate the current sequence, and don't even start a new one *)
+        loop [] ([t] :: curr :: acc) ts1)
   in
   let label_action prs =
     match prs with
@@ -213,7 +213,7 @@ and split_actions :
   | Forall (v, s, p) ->
     let (V (_, v1)) = must_be_var_t v in
     let (V (_, s1)) = must_be_var_t s in
-    let (starting, ending, g, n, f) =
+    let starting, ending, g, n, f =
       split_actions env preconditions ((v1, s1) :: params) proc_actions p
     in
     (starting, ending, g, n, Forall (v1, s1, f))
@@ -227,15 +227,14 @@ and split_actions :
         (fun i ((s, e, g, n, f) as p) ->
           if i = 0 then
             (s, e, g, n |> IMap.map (fun v -> { v with preconditions }), f)
-          else
-            p)
+          else p)
         ps1
     in
 
     (* the fence cond is what the SUCCESSOR of a node has to wait for *)
     let nodes = ps1 in
 
-    let (s, e, g, m, f) =
+    let s, e, g, m, f =
       foldl1
         (fun (st, et, gt, mt, ft) (sc, ec, gc, mc, fc) ->
           let g1 = G.concat_graphs_with ~ending:et ~starting:sc gt gc in
@@ -262,10 +261,8 @@ and split_actions :
                      | _ -> n
                      ) *)
               |> IMap.mapi (fun id n ->
-                     if List.mem ~eq:Int.equal id sc then
-                       { n with fence = ft }
-                     else
-                       n)),
+                     if List.mem ~eq:Int.equal id sc then { n with fence = ft }
+                     else n)),
             (* move to the next one *)
             fc ))
         nodes
@@ -278,7 +275,7 @@ and split_actions :
     let nodes =
       List.map (split_actions env preconditions params proc_actions) ps
     in
-    let (s, e, g, n, f) =
+    let s, e, g, n, f =
       List.fold_right
         (fun (sc, ec, gc, mc, fc) (st, et, gt, mt, ft) ->
           (* take disjoint union of the two graphs *)
@@ -293,10 +290,10 @@ and split_actions :
     (s, e, g, n, AllOf f)
   | Disj (a, b) ->
     (* TODO mutually exclusive constraints *)
-    let (as_, ae, ag, am, af) =
+    let as_, ae, ag, am, af =
       split_actions env preconditions params proc_actions a
     in
-    let (bs, be, bg, bm, bf) =
+    let bs, be, bg, bm, bf =
       split_actions env preconditions params proc_actions b
     in
     ( as_ @ bs,
@@ -344,7 +341,7 @@ and split_actions :
       let e = [id] in
 
       (* the fence for that node is the current call site's *)
-      let (s1, e1, g1, m1, f) =
+      let s1, e1, g1, m1, f =
         split_actions env preconditions params
           ((name, (s, e, g, m, my_fence)) :: proc_actions)
           body.tp
@@ -443,8 +440,8 @@ let to_graphviz env pname g m =
            end in
            begin
              (if succinct then
-                [%string
-                  {|%{id#Int} [label="%{name}\n%{fence}%{protocol#Protocol}\n%{my_fence}"];|}]
+              [%string
+                {|%{id#Int} [label="%{name}\n%{fence}%{protocol#Protocol}\n%{my_fence}"];|}]
              else
                let module Tid = struct
                  let to_string = Format.asprintf "%a" Print.pp_tid
@@ -572,9 +569,9 @@ let split_into_actions : string -> env -> tprotocol -> G.t * node IMap.t =
                { sp with tp = sp.tp |> label_threads env party });
     }
   in
-  let (_s, _e, g, m, _f) = split_actions env [] [] [] t in
+  let _s, _e, g, m, _f = split_actions env [] [] [] t in
   (* this is necessary because cyclic structures can't be dealt with using recursion *)
-  let (g, m) = postprocess_graph g m in
+  let g, m = postprocess_graph g m in
   (g, m)
 
 let collect_message_types (p : tprotocol) =

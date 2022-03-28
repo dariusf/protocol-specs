@@ -51,11 +51,11 @@ let typecheck parties spec =
         let env =
           List.fold_right
             (fun c env ->
-              let (env, v) = Infer.fresh_var env c in
+              let env, v = Infer.fresh_var env c in
               { env with bindings = SMap.add c v env.bindings })
             fparams env
         in
-        let (tp, env) = Infer.check p env in
+        let tp, env = Infer.check p env in
         {
           env with
           subprotocols =
@@ -70,7 +70,7 @@ let typecheck parties spec =
         })
       env fns
   in
-  let (tp, env) = Infer.check spec.protocol env in
+  let tp, env = Infer.check spec.protocol env in
   (* type-checked functions are returned in the env, no longer in spec *)
   (env, tp)
 
@@ -85,7 +85,8 @@ let print project_party parties ast types actions latex file =
   | None ->
     (* no parties given, so we can't infer types and can only show an untyped version *)
     (* TODO functions are not printed here *)
-    if ast then (* protocol |> show_protocol |> print_endline *)
+    if ast then
+      (* protocol |> show_protocol |> print_endline *)
       spec |> show_spec |> print_endline
     else
       spec.protocol
@@ -93,10 +94,10 @@ let print project_party parties ast types actions latex file =
       |> PPrint.ToChannel.pretty 0.8 120 stdout
   | _ ->
     (* print typed version *)
-    let (parties, _) = require_parties parties in
-    let (env, tprotocol) = typecheck parties spec in
+    let parties, _ = require_parties parties in
+    let env, tprotocol = typecheck parties spec in
     (* if there is a party to project on, operate on its protocol from here on. also project the protocols in the environment *)
-    let (env, tprotocol) =
+    let env, tprotocol =
       match project_party with
       | None -> (env, tprotocol)
       | _ ->
@@ -117,19 +118,16 @@ let print project_party parties ast types actions latex file =
         in
         (env, tp)
     in
-    if ast then
-      tprotocol |> show_tprotocol |> print_endline
+    if ast then tprotocol |> show_tprotocol |> print_endline
     else if actions then
       let project_party = require_project_party project_party in
-      let (g, nodes) = Actions.split_into_actions project_party env tprotocol in
+      let g, nodes = Actions.split_into_actions project_party env tprotocol in
       print_endline (Actions.to_graphviz env project_party g nodes)
     else (
       Print.render_functions env |> PPrint.ToChannel.pretty 0.8 120 stdout;
       tprotocol
-      |> (if types then
-            Print.render_tprotocol ~latex ~env
-         else
-           Print.render_tprotocol_untyped ~latex ~env)
+      |> (if types then Print.render_tprotocol ~latex ~env
+         else Print.render_tprotocol_untyped ~latex ~env)
       |> PPrint.ToChannel.pretty 0.8 120 stdout;
       print_endline "")
 
@@ -143,19 +141,19 @@ let tla parties spec_name file =
     |> Option.get_or
          ~default:(file |> Filename.remove_extension |> Filename.basename)
   in
-  let (parties, party_sizes) = require_parties parties in
+  let parties, party_sizes = require_parties parties in
   let spec = parse file in
-  let (env, tprotocol) = typecheck parties spec in
+  let env, tprotocol = typecheck parties spec in
   let all = project parties env tprotocol in
 
   let actions =
     all
     |> SMap.mapi (fun party p ->
-           let (graph, nodes) = Actions.split_into_actions party env p in
+           let graph, nodes = Actions.split_into_actions party env p in
            (graph, nodes, p))
   in
 
-  let (tla, cfg) = Tla.to_tla env party_sizes actions in
+  let tla, cfg = Tla.to_tla env party_sizes actions in
   let tla = Tla.Render.render_tla tla in
   let tla_s = Tla.with_preamble spec_name tla in
   write_to_file ~filename:(Format.sprintf "%s.tla" spec_name) tla_s;
@@ -172,10 +170,10 @@ let monitor parties file =
   let _spec_name = Filename.remove_extension file in
   let spec = parse file in
 
-  let (parties, _) = require_parties parties in
+  let parties, _ = require_parties parties in
 
   (* infer type for protocol *)
-  let (env, tprotocol) = typecheck parties spec in
+  let env, tprotocol = typecheck parties spec in
 
   (* project *)
   let all = project parties env tprotocol in
@@ -186,10 +184,10 @@ let monitor parties file =
     spec.decls |> List.filter_map (function Ltl e -> Some e | _ -> None)
   in
 
-  let (ltl_fml, env) =
+  let ltl_fml, env =
     List.fold_right
       (fun e (ts, env) ->
-        let (te, env) = Infer.check_expr e env in
+        let te, env = Infer.check_expr e env in
         (te :: ts, env))
       ltl_fml ([], env)
   in
@@ -210,7 +208,7 @@ let monitor parties file =
   List.iteri
     (fun i { repr = V (_, pname) } ->
       let pr = SMap.find pname all in
-      let (_, action_nodes) = Actions.split_into_actions pname env pr in
+      let _, action_nodes = Actions.split_into_actions pname env pr in
       let ltl =
         List.assoc_opt ~eq:String.equal pname ltl_fml
         |> Option.get_or ~default:[]

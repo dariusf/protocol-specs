@@ -13,8 +13,7 @@ let fresh =
     r
 
 let rec subst ~from ~to_ in_ =
-  if equal_typ from in_ then
-    to_
+  if equal_typ from in_ then to_
   else
     match in_ with
     | TyParty _ | TyVar _ | TyInt | TyBool | TyString -> in_
@@ -38,38 +37,41 @@ let explain_env env =
     "---- parties";
     env.parties |> party_list
     |> List.map (fun p -> Format.sprintf "%a" pp_party_info p)
-    |> String.concat "\n"; "---- types";
+    |> String.concat "\n";
+    "---- types";
     env.types |> IMap.bindings
     |> List.map (fun (k, v) -> Format.sprintf "%d: %a" k pp_typ v)
-    |> String.concat "\n"; "---- vars";
+    |> String.concat "\n";
+    "---- vars";
     env.bindings |> SMap.bindings
     (* |> List.map (fun (v, t) -> Format.asprintf "%s : %a" v pp_var_info t) *)
     |> List.map (fun (v, t) -> Format.asprintf "%s : %a" v ppi t)
-    |> String.concat "\n"; "---- local vars";
+    |> String.concat "\n";
+    "---- local vars";
     env.local_bindings |> SMap.bindings
     (* |> List.map (fun (v, t) -> Format.asprintf "%s : %a" v pp_var_info t) *)
     |> List.map (fun (v, t) -> Format.asprintf "%s : %a" v ppi t)
-    |> String.concat "\n"; "----------------";
+    |> String.concat "\n";
+    "----------------";
   ]
   |> String.concat "\n\n"
 
 let unify_party_variables a b env =
-  let (a2, b2) = (UF.value a, UF.value b) in
+  let a2, b2 = (UF.value a, UF.value b) in
   match (IMap.find_opt a2 env.parties, IMap.find_opt b2 env.parties) with
-  | (None, None) ->
+  | None, None ->
     UF.union a b;
     Ok env
-  | (Some a3, None) ->
+  | Some a3, None ->
     UF.union a b;
     let parties = IMap.add b2 a3 env.parties in
     Ok { env with parties }
-  | (None, Some b3) ->
+  | None, Some b3 ->
     UF.union a b;
     let parties = IMap.add b2 b3 env.parties in
     Ok { env with parties }
-  | (Some a3, Some b3) ->
-    if equal_party_info a3 b3 then
-      Ok env
+  | Some a3, Some b3 ->
+    if equal_party_info a3 b3 then Ok env
     else
       Error
         (`Does_not_unify
@@ -87,37 +89,36 @@ let rec unify :
     result =
  fun a b env ->
   let open Result.Infix in
-  if debug then
-    Format.printf "unify: %a and %a @." pp_typ a pp_typ b;
+  if debug then Format.printf "unify: %a and %a @." pp_typ a pp_typ b;
   match (a, b) with
-  | (TyInt, TyInt) | (TyBool, TyBool) | (TyString, TyString) -> Ok env
-  | (TyParty a1, TyParty b1) -> unify_party_variables a1 b1 env
-  | (TyVar a, TyVar b) ->
+  | TyInt, TyInt | TyBool, TyBool | TyString, TyString -> Ok env
+  | TyParty a1, TyParty b1 -> unify_party_variables a1 b1 env
+  | TyVar a, TyVar b ->
     let unify_type_variables a b env =
-      let (a1, b1) = (UF.value a, UF.value b) in
+      let a1, b1 = (UF.value a, UF.value b) in
       match (IMap.find_opt a1 env.types, IMap.find_opt b1 env.types) with
-      | (Some a2, Some b2) ->
+      | Some a2, Some b2 ->
         (* this recursive call is the reason this is separate from unify_party_variables *)
         unify a2 b2 env
-      | (Some t, None) ->
+      | Some t, None ->
         let types = env.types in
         (* let types = IMap.remove a2 env.types in *)
         UF.union a b;
         let types = IMap.add (UF.value a) t types in
         Ok { env with types }
-      | (None, Some t) ->
+      | None, Some t ->
         let types = env.types in
         (* let types = IMap.remove b2 env.types in *)
         UF.union a b;
         let types = IMap.add (UF.value a) t types in
         Ok { env with types }
-      | (None, None) ->
+      | None, None ->
         UF.union a b;
         Ok env
     in
     unify_type_variables a b env
-  | (TySet sa, TySet sb) -> unify sa sb env
-  | (TyFn (a1, r1), TyFn (a2, r2)) ->
+  | TySet sa, TySet sb -> unify sa sb env
+  | TyFn (a1, r1), TyFn (a2, r2) ->
     if List.length a1 = List.length a2 then
       List.fold_right2
         (fun a b t ->
@@ -126,16 +127,15 @@ let rec unify :
         (a1 @ [r1])
         (a2 @ [r2])
         (Ok env)
-    else
-      Error (`Does_not_unify "argument lists have different lengths")
-  | (TyVar a1, b1) | (b1, TyVar a1) ->
+    else Error (`Does_not_unify "argument lists have different lengths")
+  | TyVar a1, b1 | b1, TyVar a1 ->
     (* if one is a variable, look it up and bind it or unify what is already there *)
     let a2 = UF.value a1 in
     (match IMap.find_opt a2 env.types with
     | None -> Ok { env with types = IMap.add a2 b1 env.types }
     | Some t -> unify t b1 env)
     (* env *)
-  | (_, _) ->
+  | _, _ ->
     Error
       (`Does_not_unify
         (Format.sprintf "%a and %a do not unify" (Print.pp_typ ~env) a
@@ -182,8 +182,8 @@ let unify_ownership :
   if debug then
     Format.printf "unify_ownership: %a and %a @." pp_ownership a pp_ownership b;
   match (a, b) with
-  | (Global, o1) | (o1, Global) -> Ok (o1, env)
-  | (Party p, Party q) ->
+  | Global, o1 | o1, Global -> Ok (o1, env)
+  | Party p, Party q ->
     let open Result.Infix in
     let* env = unify_party_variables p q env in
     Ok (a, env)
@@ -196,9 +196,9 @@ let rec concretize env t =
   | TyList l -> TyList (concretize env l)
   | TyFn (args, ret) -> TyFn (List.map (concretize env) args, concretize env ret)
   | TyVar v ->
-  match IMap.find_opt (UF.value v) env.types with
-  | None -> t
-  | Some t1 -> concretize env t1
+    (match IMap.find_opt (UF.value v) env.types with
+    | None -> t
+    | Some t1 -> concretize env t1)
 
 module Cast = struct
   let must_be_var (e : expr) =
@@ -268,7 +268,7 @@ let find_party_var_by_type_of env var =
     e |> SMap.bindings
     |> List.filter (fun (v, info) ->
            (match (concretize env info.typ, own) with
-           | (TyParty p1, Party p2) -> UF.equal p1 p2
+           | TyParty p1, Party p2 -> UF.equal p1 p2
            | _ -> false)
            && not (String.equal v name))
   in
@@ -322,16 +322,16 @@ let unify_type_owner :
   if debug then
     Format.printf "unify_type_owner: %a and %a @." pp_typ t pp_ownership o;
   match (t, o) with
-  | (TyParty _, Global) -> Ok env
-  | (TyParty t, Party o) -> unify_party_variables t o env
-  | (TyVar _, Party o) -> unify t (TyParty o) env
-  | (_, _) -> Error `Type_not_party
+  | TyParty _, Global -> Ok env
+  | TyParty t, Party o -> unify_party_variables t o env
+  | TyVar _, Party o -> unify t (TyParty o) env
+  | _, _ -> Error `Type_not_party
 
 let rec infer_all : expr list -> env -> texpr list * ownership * env =
  fun exprs env ->
   List.fold_right
     (fun c (tes, own, env) ->
-      let (te, env) = infer_expr c env in
+      let te, env = infer_expr c env in
       match unify_ownership own te.meta.info.own env with
       | Ok (own1, env) -> (te :: tes, own1, env)
       | Error (`Does_not_unify s) -> fail ~loc:te.meta.loc "%s" s)
@@ -382,39 +382,39 @@ and infer_expr : expr -> env -> texpr * env =
     (match lookup_fn env fn with
     | None -> fail ~loc:expr.meta "function %s not bound" fn
     | Some f ->
-    match instantiate f with
-    | TyFn (targs, ret) ->
-      let (tes, own, env) = infer_all args env in
+      (match instantiate f with
+      | TyFn (targs, ret) ->
+        let tes, own, env = infer_all args env in
 
-      let env =
-        List.fold_right2
-          (fun a b t ->
-            match unify a b.meta.info.typ t with
-            | Ok env -> env
-            | Error (`Does_not_unify s)
-            | Error (`Parties_instantiated_but_different s) ->
-              (* Format.printf "a %a@." pp_typ a;
-                 Format.printf "b %a@." pp_typ b.meta.info.typ;
-                 dump_env env; *)
-              fail ~loc:b.meta.loc "could not unify arg %a of function %s: %s"
-                (Print.pp_texpr ~env) b fn s)
-          targs tes env
-      in
+        let env =
+          List.fold_right2
+            (fun a b t ->
+              match unify a b.meta.info.typ t with
+              | Ok env -> env
+              | Error (`Does_not_unify s)
+              | Error (`Parties_instantiated_but_different s) ->
+                (* Format.printf "a %a@." pp_typ a;
+                   Format.printf "b %a@." pp_typ b.meta.info.typ;
+                   dump_env env; *)
+                fail ~loc:b.meta.loc "could not unify arg %a of function %s: %s"
+                  (Print.pp_texpr ~env) b fn s)
+            targs tes env
+        in
 
-      let rtyp = fresh_type () in
-      let env =
-        match unify rtyp ret env with
-        | Ok env -> env
-        | Error (`Does_not_unify s)
-        | Error (`Parties_instantiated_but_different s) ->
-          fail ~loc:expr.meta "could not unify result type: %s" s
-      in
-      ( {
-          meta = { loc = expr.meta; info = { own; typ = rtyp }; env };
-          expr = App (fn, tes);
-        },
-        env )
-    | _ -> fail ~loc:expr.meta "%s is not a function" fn)
+        let rtyp = fresh_type () in
+        let env =
+          match unify rtyp ret env with
+          | Ok env -> env
+          | Error (`Does_not_unify s)
+          | Error (`Parties_instantiated_but_different s) ->
+            fail ~loc:expr.meta "could not unify result type: %s" s
+        in
+        ( {
+            meta = { loc = expr.meta; info = { own; typ = rtyp }; env };
+            expr = App (fn, tes);
+          },
+          env )
+      | _ -> fail ~loc:expr.meta "%s is not a function" fn))
   | Set s | List s ->
     begin
       match s with
@@ -442,18 +442,18 @@ and infer_expr : expr -> env -> texpr * env =
           },
           env )
       | _ ->
-        let (tes, own, env) = infer_all s env in
-        let (typ, env) =
+        let tes, own, env = infer_all s env in
+        let typ, env =
           List.fold_right
             (fun c (t, env) ->
               match t with
               | None -> (Some c, env)
               | Some t ->
-              match unify c t env with
-              | Ok env -> (Some c, env)
-              | Error (`Does_not_unify s)
-              | Error (`Parties_instantiated_but_different s) ->
-                fail ~loc:expr.meta "%s" s)
+                (match unify c t env with
+                | Ok env -> (Some c, env)
+                | Error (`Does_not_unify s)
+                | Error (`Parties_instantiated_but_different s) ->
+                  fail ~loc:expr.meta "%s" s))
             (List.map (fun (te : texpr) -> te.meta.info.typ) tes)
             (None, env)
         in
@@ -490,17 +490,17 @@ let rec infer : ?in_seq:bool -> protocol -> env -> tprotocol * env =
   | Emp -> ({ p = Emp; pmeta = pmeta ~loc ~env () }, env)
   | Call { f; args; is_self } ->
     (* TODO lookup the function environment *)
-    let (args, env) =
+    let args, env =
       List.fold_left
         (fun (ts, env) c ->
-          let (te, env) = infer_expr c env in
+          let te, env = infer_expr c env in
           (te :: ts, env))
         ([], env) args
     in
     let args = List.rev args in
     ({ p = Call { f; args; is_self }; pmeta = pmeta ~loc ~env () }, env)
   | Send { from; to_; msg = Message { args; typ = mtype } } ->
-    let (fm, tm) = (from.meta, to_.meta) in
+    let fm, tm = (from.meta, to_.meta) in
     let (V (fp, from)) = must_be_var from in
     let (V (tp, to_)) = must_be_var to_ in
 
@@ -532,10 +532,10 @@ let rec infer : ?in_seq:bool -> protocol -> env -> tprotocol * env =
     in
 
     (* expressions must be owned by sender *)
-    let (targs, env) =
+    let targs, env =
       List.fold_right
         (fun (k, arg) (targs, env) ->
-          let (targ, env) = infer_expr arg env in
+          let targ, env = infer_expr arg env in
 
           let env =
             match unify_type_owner env f_vi.typ targ.meta.info.own with
@@ -564,8 +564,7 @@ let rec infer : ?in_seq:bool -> protocol -> env -> tprotocol * env =
             if in_seq then
               let local_bindings = SMap.add v vi env.local_bindings in
               { env with local_bindings }
-            else
-              env
+            else env
           in
           let k1 =
             { expr = Var (V (pv, v)); meta = { loc = k.meta; info = vi; env } }
@@ -599,11 +598,11 @@ let rec infer : ?in_seq:bool -> protocol -> env -> tprotocol * env =
     let vm = v.meta in
     let (V (vp, v)) = must_be_var v in
 
-    let (env, { own = olhs; typ = tlhs }) =
+    let env, { own = olhs; typ = tlhs } =
       (* whether or not to look up existing variables controls if the a subsequent assignment to a variable can fill in a previously-abstract type *)
       match lookup env v with None -> fresh_var env v | Some vi -> (env, vi)
     in
-    let (trhs, env) = infer_expr e env in
+    let trhs, env = infer_expr e env in
     let env =
       match unify tlhs trhs.meta.info.typ env with
       | Ok env -> env
@@ -636,8 +635,8 @@ let rec infer : ?in_seq:bool -> protocol -> env -> tprotocol * env =
       in
       ({ p = Assign (tlhs, trhs); pmeta = pmeta ~loc ~env () }, env))
   | Imply (c, p) ->
-    let (tc, env) = infer_expr c env in
-    let (tp, env) = infer p env in
+    let tc, env = infer_expr c env in
+    let tp, env = infer p env in
 
     (match unify tc.meta.info.typ TyBool env with
     | Ok _ -> ()
@@ -647,8 +646,8 @@ let rec infer : ?in_seq:bool -> protocol -> env -> tprotocol * env =
 
     ({ p = Imply (tc, tp); pmeta = pmeta ~loc ~env () }, env)
   | BlockingImply (c, p) ->
-    let (tc, env) = infer_expr c env in
-    let (tp, env) = infer p env in
+    let tc, env = infer_expr c env in
+    let tp, env = infer p env in
     (match unify tc.meta.info.typ TyBool env with
     | Ok _ -> ()
     | Error (`Does_not_unify s) -> fail ~loc:tc.meta.loc "%s" s
@@ -659,10 +658,10 @@ let rec infer : ?in_seq:bool -> protocol -> env -> tprotocol * env =
   | Seq s ->
     (* List.fold_right infer_parties s env *)
     let local_bindings = env.local_bindings in
-    let (ts, env) =
+    let ts, env =
       List.fold_left
         (fun (ts, env) c ->
-          let (te, env) = infer ~in_seq:true c env in
+          let te, env = infer ~in_seq:true c env in
           (te :: ts, env))
         ([], env) s
     in
@@ -673,26 +672,26 @@ let rec infer : ?in_seq:bool -> protocol -> env -> tprotocol * env =
 
     ({ p = Seq ts; pmeta = pmeta ~loc ~env () }, env)
   | Par ps ->
-    let (ts, env) =
+    let ts, env =
       List.fold_left
         (fun (ts, env) p ->
-          let (tp, env) = infer p env in
+          let tp, env = infer p env in
           (tp :: ts, env))
         ([], env) ps
     in
     let ts = List.rev ts in
     ({ p = Par ts; pmeta = pmeta ~loc ~env () }, env)
   | Disj (a, b) ->
-    let (ta, env) = infer a env in
-    let (tb, env) = infer b env in
+    let ta, env = infer a env in
+    let tb, env = infer b env in
     ({ p = Disj (ta, tb); pmeta = pmeta ~loc ~env () }, env)
   | Forall (e, s, pb) ->
     let em = e.meta in
     let (V (pe, e)) = must_be_var e in
-    let (s, env) = infer_expr s env in
+    let s, env = infer_expr s env in
 
     (* this binds only one new name, e. s is already defined *)
-    let (env, party, own) =
+    let env, party, own =
       let pl = p.pmeta in
       match s.meta.info with
       | { typ = TySet (TyParty _ as p); own } -> (env, p, own)
@@ -713,7 +712,7 @@ let rec infer : ?in_seq:bool -> protocol -> env -> tprotocol * env =
       { env with bindings = SMap.add e { typ = party; own } env.bindings }
     in
 
-    let (tp1, env) = infer pb env in
+    let tp1, env = infer pb env in
 
     (* unbind the bound variable *)
     let env = { env with bindings = SMap.remove e env.bindings } in
@@ -741,18 +740,15 @@ let initiator env p =
       let it = List.map aux ps in
       foldr1
         (fun (c, p) (t, _) ->
-          if equal_party_info c t then
-            (c, p)
-          else
-            fail ~loc:p.pmeta.ploc "different initiator in par")
+          if equal_party_info c t then (c, p)
+          else fail ~loc:p.pmeta.ploc "different initiator in par")
         (List.combine it ps)
       |> ignore;
       List.hd it
     | Disj (a, b) ->
       let ia = aux a in
       let ib = aux b in
-      if equal_party_info ia ib then
-        ia
+      if equal_party_info ia ib then ia
       else
         fail ~loc:p.pmeta.ploc "different initiator in disjunction" List.for_all
           aux [a; b]
@@ -778,16 +774,14 @@ let initiator env p =
 let parse_spec file =
   (* let p = Parsing.parse_inc file in *)
   match
-    if String.equal file "-" then
-      Parsing.parse_mono_ic file stdin
-    else
-      Parsing.parse_mono file
+    if String.equal file "-" then Parsing.parse_mono_ic file stdin
+    else Parsing.parse_mono file
   with
   | Ok p -> p
   | Error s -> failwith s
 
 let initial_env parties =
-  let (parties, var_info) =
+  let parties, var_info =
     parties
     |> List.map (fun p ->
            let i = fresh () in
@@ -974,14 +968,14 @@ let rec qualify_vars env p =
   | Comment (_, _, _) -> bug "comment should not appear"
 
 let check_expr env e =
-  let (te, env) = infer_expr env e in
+  let te, env = infer_expr env e in
   check_instantiated_expr env te;
   (* don't insert qualifier. may not be possible for an expression checked in insolation, such as an LTL property. also unnecessary as such expressions are not projected and must reside entirely on one side *)
   (* let te = qualify_vars_expr env te in *)
   (te, env)
 
 let check env p =
-  let (tp, env) = infer env p in
+  let tp, env = infer env p in
   check_instantiated env tp;
   let tp = qualify_vars env tp in
   (tp, env)

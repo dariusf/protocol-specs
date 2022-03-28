@@ -114,7 +114,7 @@ let rec parse lexbuf (checkpoint : Ast.spec I.checkpoint) =
     let checkpoint = I.resume checkpoint in
     parse lexbuf checkpoint
   | I.HandlingError _env ->
-    let (line, pos) = get_lexing_position lexbuf in
+    let line, pos = get_lexing_position lexbuf in
     let err = get_parse_error _env in
     raise (Syntax_error (Some (line, pos), err))
   | I.Accepted v -> v

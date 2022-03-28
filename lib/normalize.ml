@@ -24,10 +24,10 @@ let rec normalize_once p =
     | Disj (a, b) ->
       begin
         match (a, b) with
-        | (a, _) when not (useful a) ->
+        | a, _ when not (useful a) ->
           (* stuff like this changes whether the metadata of an expression or a subexpression is used *)
           (normalize_once b).p
-        | (_, b) when not (useful b) -> (normalize_once a).p
+        | _, b when not (useful b) -> (normalize_once a).p
         | _ -> Disj (normalize_once a, normalize_once b)
       end
     | Emp | Send _ | Assign _ | Call _ -> p.p
@@ -46,14 +46,8 @@ let rec normalize_once p =
 
 let rec normalize p =
   let p1 = normalize_once p in
-  if equal_protocol p p1 then
-    p1
-  else
-    normalize p1
+  if equal_protocol p p1 then p1 else normalize p1
 
 let rec normalize_t p =
   let p1 = normalize_once p in
-  if equal_tprotocol p p1 then
-    p1
-  else
-    normalize_t p1
+  if equal_tprotocol p p1 then p1 else normalize_t p1

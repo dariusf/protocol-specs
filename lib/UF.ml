@@ -5,25 +5,17 @@ module Make (E : sig
   type t
 
   val eq : t -> t -> bool
-
   val f : t -> t -> t
-
   val pp : Format.formatter -> t -> unit
 end) : sig
   type t
 
   val elt : E.t -> t
-
   val find : t -> t
-
   val value : t -> E.t
-
   val pp : Format.formatter -> t -> unit
-
   val show : (Format.formatter -> 'a -> unit) -> 'a -> string
-
   val equal : t -> t -> bool
-
   val union : t -> t -> unit
 end = struct
   type node =
@@ -43,8 +35,7 @@ end = struct
     | Node p ->
       (* path compression *)
       let r = find p in
-      if Stdlib.(r != p) then
-        p := Node r;
+      if Stdlib.(r != p) then p := Node r;
       r
 
   let value n =
@@ -53,7 +44,6 @@ end = struct
     | _ -> failwith "must be a root"
 
   let pp fmt t = Format.fprintf fmt "%a" E.pp (value t)
-
   let show pp x = Format.asprintf "%a" pp x
 
   (* TODO should this call E.eq and not just check the physical equality of the ref? *)
@@ -61,15 +51,12 @@ end = struct
 
   let rec union n1 n2 =
     match (!n1, !n2) with
-    | (Root { value = v1; rank = r1 }, Root { value = v2; rank = r2 }) ->
+    | Root { value = v1; rank = r1 }, Root { value = v2; rank = r2 } ->
       let v3 = E.f v1 v2 in
       let v3 =
-        if E.eq v3 v1 then
-          v1
-        else if E.eq v3 v2 then
-          v2
-        else
-          failwith "f should return one of its arguments"
+        if E.eq v3 v1 then v1
+        else if E.eq v3 v2 then v2
+        else failwith "f should return one of its arguments"
       in
       (* linking by rank: the shorter subtree becomes the child *)
       (match () with
@@ -78,16 +65,14 @@ end = struct
       | _ ->
         n1 := Node n2;
         n2 := Root { value = v3; rank = r2 + 1 } (* ; n2 *))
-    | (_, _) -> union (find n1) (find n2)
+    | _, _ -> union (find n1) (find n2)
 end
 
 module Int = Make (struct
   type t = int
 
   let f = min
-
   let eq = Int.equal
-
   let pp = Int.pp
 end)
 

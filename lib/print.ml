@@ -5,26 +5,11 @@ open PPrint
 
 let latex_escape = enclose (string "/*$") (string "$*/")
 let arrow latex = if latex then latex_escape (string "\\send") else string "->"
+let disj latex = if latex then latex_escape (string "\\vee") else string "\\/"
+let if_ latex = if latex then latex_escape (string "\\pif") else string "=>"
+let when_ latex = if latex then latex_escape (string "\\when") else string "=>*"
 
-let disj latex =
-  if latex then
-    latex_escape (string "\\vee")
-  else
-    string "\\/"
-
-let if_ latex =
-  if latex then
-    latex_escape (string "\\pif")
-  else
-    string "=>"
-
-let when_ latex =
-  if latex then
-    latex_escape (string "\\when")
-  else
-    string "=>*"
-
-let (par, in_, forall, exists) =
+let par, in_, forall, exists =
   (string "||", string "in", string "forall", string "exists")
 
 (** printing contexts *)
@@ -80,15 +65,10 @@ let render_expr_ :
     if List.length args = 2 && not (is_alpha fn.[0]) then
       let n = get_expr_prec fn in
       let[@warning "-8"] [left; right] = args in
-      let (leftp, rightp) =
+      let leftp, rightp =
         match get_expr_assoc fn with `Left -> (n, n + 1) | `Right -> (n + 1, n)
       in
-      let parens =
-        if prec > n then
-          parens
-        else
-          Fun.id
-      in
+      let parens = if prec > n then parens else Fun.id in
       parens
         (separate
            (enclose space space (string fn))
@@ -126,9 +106,9 @@ let render_own ~env own =
   match own with
   | Global -> string "global"
   | Party p ->
-  match IMap.find_opt (UF.value p) env.parties with
-  | None -> separate space [string "unbound"; render_uf p]
-  | Some p -> render_party p
+    (match IMap.find_opt (UF.value p) env.parties with
+    | None -> separate space [string "unbound"; render_uf p]
+    | Some p -> render_party p)
 
 let rec render_typ ?(latex = false) ~env t =
   match t with
@@ -186,10 +166,8 @@ let parens_multiline_if ~pctx ~n =
     pctx.prec > n
     (* not sure if this is correct *)
     (* && not pctx.last *)
-  then
-    parens_multiline
-  else
-    Fun.id
+  then parens_multiline
+  else Fun.id
 
 let render_protocol_ :
     bool -> ('e -> document) -> ('a, 'e, 'v) _protocol -> document =
@@ -219,14 +197,18 @@ let render_protocol_ :
     | Call { f; args; _ } ->
       concat
         [
-          string "$"; string f;
+          string "$";
+          string f;
           parens (separate (spaced comma) (List.map render_expr args));
         ]
     | Send { from; to_; msg = Message { typ; args } } ->
       concat
         [
-          render_expr from; arrow latex; render_expr to_;
-          enclose space space colon; string typ;
+          render_expr from;
+          arrow latex;
+          render_expr to_;
+          enclose space space colon;
+          string typ;
           (match args with
           | [] -> empty
           | _ ->
@@ -240,7 +222,10 @@ let render_protocol_ :
     | SendOnly { to_; msg = Message { typ; args }; _ } ->
       concat
         [
-          arrow latex; render_expr to_; enclose space space colon; string typ;
+          arrow latex;
+          render_expr to_;
+          enclose space space colon;
+          string typ;
           (match args with
           | [] -> empty
           | _ ->
@@ -254,7 +239,10 @@ let render_protocol_ :
     | ReceiveOnly { from; msg = MessageD { typ; args }; _ } ->
       concat
         [
-          render_expr from; arrow latex; enclose space space colon; string typ;
+          render_expr from;
+          arrow latex;
+          enclose space space colon;
+          string typ;
           (match args with
           | [] -> empty
           | _ -> parens (separate (spaced comma) (List.map render_expr args)));
@@ -265,7 +253,10 @@ let render_protocol_ :
       @@ nest 2
            (concat
               [
-                render_expr b; space; if_ latex; nl;
+                render_expr b;
+                space;
+                if_ latex;
+                nl;
                 render_protocol ~pctx:{ pctx with prec = n } p;
               ])
     | BlockingImply (b, p) ->
@@ -273,7 +264,10 @@ let render_protocol_ :
       @@ nest 2
            (concat
               [
-                render_expr b; space; when_ latex; nl;
+                render_expr b;
+                space;
+                when_ latex;
+                nl;
                 render_protocol ~pctx:{ pctx with prec = n } p;
               ])
     | Forall (v, s, p) ->
@@ -281,10 +275,16 @@ let render_protocol_ :
       @@ nest 2
            (concat
               [
-                forall; space; render_expr v; space; in_; space;
+                forall;
+                space;
+                render_expr v;
+                space;
+                in_;
+                space;
                 (match s.expr with
                 | Var _ -> render_expr s
-                | _ -> parens (render_expr s)); nl;
+                | _ -> parens (render_expr s));
+                nl;
                 render_protocol ~pctx:{ pctx with prec = n } p;
               ])
     | Exists (v, s, p) ->
@@ -292,7 +292,13 @@ let render_protocol_ :
       @@ nest 2
            (concat
               [
-                exists; space; render_expr v; space; in_; render_expr s; nl;
+                exists;
+                space;
+                render_expr v;
+                space;
+                in_;
+                render_expr s;
+                nl;
                 render_protocol ~pctx:{ pctx with prec = n } p;
               ])
     | Comment (_, _, _) -> failwith "comment"
@@ -312,7 +318,8 @@ let render_functions env =
   |> List.map (fun (name, f) ->
          separate space
            [
-             string "protocol"; string name ^^ parens empty;
+             string "protocol";
+             string name ^^ parens empty;
              parens (nest 2 (nl ^^ render_tprotocol_untyped ~env f.tp) ^^ nl);
              nl;
            ])

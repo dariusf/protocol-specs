@@ -5,13 +5,16 @@ open Cmdliner
 
 let help_secs =
   [
-    `S Manpage.s_common_options; `P "These options are common to all commands.";
+    `S Manpage.s_common_options;
+    `P "These options are common to all commands.";
     `S "MORE HELP";
     `P "Use `$(mname) $(i,COMMAND) --help' for help on a single command.";
-    `Noblank; `P "Use `$(mname) help patterns' for help on patch matching.";
+    `Noblank;
+    `P "Use `$(mname) help patterns' for help on patch matching.";
     `Noblank;
     `P "Use `$(mname) help environment' for help on environment variables.";
-    `S Manpage.s_bugs; `P "Check bug reports at http://bugs.example.org.";
+    `S Manpage.s_bugs;
+    `P "Check bug reports at http://bugs.example.org.";
   ]
 
 (* Commands *)
@@ -21,7 +24,7 @@ let help man_format cmds topic =
   | None -> `Help (`Pager, None) (* help about the program. *)
   | Some topic ->
     let topics = "topics" :: "patterns" :: "environment" :: cmds in
-    let (conv, _) = Cmdliner.Arg.enum (List.rev_map (fun s -> (s, s)) topics) in
+    let conv, _ = Cmdliner.Arg.enum (List.rev_map (fun s -> (s, s)) topics) in
     (match conv topic with
     | `Error e -> `Error (false, e)
     | `Ok t when String.equal t "topics" ->
@@ -41,7 +44,8 @@ let help_cmd =
   let man =
     [
       `S Manpage.s_description;
-      `P "Prints help about wiki commands and other topics."; `Blocks help_secs;
+      `P "Prints help about wiki commands and other topics.";
+      `Blocks help_secs;
     ]
   in
   Cmd.v
@@ -95,7 +99,8 @@ let print_cmd =
   let latex = Arg.(value & flag (info ~docv:"LATEX" ~doc:"latex" ["latex"])) in
   let man =
     [
-      `S Manpage.s_description; `P "Renders a specification in various forms.";
+      `S Manpage.s_description;
+      `P "Renders a specification in various forms.";
       `Blocks help_secs;
     ]
   in
@@ -124,7 +129,8 @@ let tla_cmd =
   in
   let man =
     [
-      `S Manpage.s_description; `P "Compiles a specification to TLA+.";
+      `S Manpage.s_description;
+      `P "Compiles a specification to TLA+.";
       `Blocks help_secs;
     ]
   in
@@ -145,7 +151,8 @@ let monitor_cmd =
   let man =
     [
       `S Manpage.s_description;
-      `P "generates a monitor for runtime verification"; `Blocks help_secs;
+      `P "generates a monitor for runtime verification";
+      `Blocks help_secs;
     ]
   in
   Cmd.v

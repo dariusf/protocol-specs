@@ -326,8 +326,7 @@ let fml_ownership env (t : texpr) =
 
 let invoke_ltl2mon s =
   let res = CCUnix.call_full "ltl2mon '%s'" s in
-  if res#errcode <> 0 then
-    bad_input "unable to invoke ltl2mon"
+  if res#errcode <> 0 then bad_input "unable to invoke ltl2mon"
   else
     (* Format.printf "error code %d@." res#errcode; *)
     (* Format.printf "stderr %s@." res#stderr; *)
@@ -338,8 +337,7 @@ let debug = false
 let invoke_gofmt s =
   (* TODO check if gofmt is present, and distinguish that from the case where we produce syntactically invalid Go code *)
   let res = CCUnix.call_full ~stdin:(`Str s) "gofmt" in
-  if res#errcode = 0 then
-    res#stdout
+  if res#errcode = 0 then res#stdout
   else (
     if debug then print_endline res#stderr;
     s)
@@ -421,7 +419,7 @@ digraph G {
 }
 |}
   in
-  let (node_colors, edges, graph) = parse_graphviz_output output in
+  let node_colors, edges, graph = parse_graphviz_output output in
   Format.printf "%s@.%s@.%s@."
     ([%derive.show: string SMap.t] node_colors)
     ([%derive.show: (string * string * SSet.t) list] edges)
@@ -496,16 +494,16 @@ let check_monitorability env ltl node_colors =
   if
     SMap.bindings node_colors
     |> List.for_all (fun (_, c) -> String.equal "yellow" c)
-  then
-    bad_input "%a is not monitorable" (Print.pp_texpr ~env) ltl
+  then bad_input "%a is not monitorable" (Print.pp_texpr ~env) ltl
 
 let generate_ltl_monitor ltl_i env parties pname ltl =
-  let (ltl1, bindings) = extract_subexprs env ltl in
+  let ltl1, bindings = extract_subexprs env ltl in
   let fml = ltl1 |> fml_to_ltl3tools in
   let output = fml |> invoke_ltl2mon in
-  if debug then (* TODO re-print the graphviz file with updated names? *)
+  if debug then
+    (* TODO re-print the graphviz file with updated names? *)
     write_to_file ~filename:(Format.sprintf "ltl-%s-%d.dot" pname ltl_i) output;
-  let (node_colors, edges, graph) = output |> parse_graphviz_output in
+  let node_colors, edges, graph = output |> parse_graphviz_output in
   check_monitorability env ltl node_colors;
   let initial_state =
     G.find_vertices
@@ -531,8 +529,7 @@ let generate_ltl_monitor ltl_i env parties pname ltl =
     |> List.map (fun (v, _) ->
            if debug then
              Format.sprintf "%s := l.%s(g)\nprintln(\"%s\", %s)" v v v v
-           else
-             Format.sprintf "%s := l.%s(g)" v v)
+           else Format.sprintf "%s := l.%s(g)" v v)
     |> String.concat "\n"
   in
   let prop_fns =
@@ -620,8 +617,7 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
   let ltl_monitors =
     if should_generate_ltl_monitor then
       List.map (generate_ltl_monitor ltl_i env parties pname) ltl
-    else
-      []
+    else []
   in
   let ltl_monitor_defs =
     ltl_monitors |> List.map (fun (d, _, _, _, _) -> d) |> String.concat "\n\n"
@@ -651,8 +647,7 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
            (fun i (v, s) ->
              if List.mem_assoc ~eq:String.equal v bound then
                Format.sprintf "%s" v
-             else
-               Format.sprintf "params[%d] /* %s : %s */" i v s)
+             else Format.sprintf "params[%d] /* %s : %s */" i v s)
            t.params
         |> String.concat "+")
   in

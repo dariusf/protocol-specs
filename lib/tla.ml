@@ -144,12 +144,16 @@ module Render = struct
     let quantifier which vars x =
       concat
         [
-          string which; space;
+          string which;
+          space;
           separate space
             (vars
             |> List.concat_map (fun (v, s) ->
-                   [string v; string "\\in"; render_fml s])); space; colon;
-          (* nest 2 (nl ^^ render_fml x); nl; *) space ^^ render_fml x;
+                   [string v; string "\\in"; render_fml s]));
+          space;
+          colon;
+          (* nest 2 (nl ^^ render_fml x); nl; *)
+          space ^^ render_fml x;
         ]
     in
     match f with
@@ -163,8 +167,12 @@ module Render = struct
       parens
         (separate space
            [
-             string "IF"; render_fml p; string "THEN"; render_fml c;
-             string "ELSE"; render_fml a;
+             string "IF";
+             render_fml p;
+             string "THEN";
+             render_fml c;
+             string "ELSE";
+             render_fml a;
            ])
     | Apply (f, args) ->
       concat
@@ -185,12 +193,15 @@ module Render = struct
     | AssignLocal (v, e) ->
       separate space
         [
-          string (v ^ "'"); equals;
+          string (v ^ "'");
+          equals;
           brackets
             (separate space
                [
-                 string v; string "EXCEPT";
-                 string "!" ^^ brackets (string "self"); equals;
+                 string v;
+                 string "EXCEPT";
+                 string "!" ^^ brackets (string "self");
+                 equals;
                  render_fml (subst_fml ~sub:v ~replacement:(v ^ "[self]") e);
                ]);
         ]
@@ -200,8 +211,11 @@ module Render = struct
           brackets
             (separate space
                [
-                 string a; string "EXCEPT"; string "!" ^^ brackets (string k);
-                 equals; render_fml v;
+                 string a;
+                 string "EXCEPT";
+                 string "!" ^^ brackets (string k);
+                 equals;
+                 render_fml v;
                ]);
         ]
     | Set es -> braces (separate (spaced comma) (List.map render_fml es))
@@ -235,7 +249,8 @@ module Render = struct
                       (fun (k, v) ->
                         separate space [string k; string "=="; render_fml v])
                       bs)
-              ^^ nl); string "IN";
+              ^^ nl);
+            string "IN";
           ]
         ^^ nl ^^ render_fml x)
     | Exists (vars, x) -> quantifier "\\E" vars x
@@ -304,7 +319,8 @@ let rec translate_protocol (p : tprotocol) =
   | Seq ({ p = ReceiveOnly { msg = MessageD { typ; args }; _ }; _ } :: rest) ->
     let pre =
       [
-        Op (">", [Term "messages[m]"; Term "0"]); Equals ("m.mtype", Term typ);
+        Op (">", [Term "messages[m]"; Term "0"]);
+        Equals ("m.mtype", Term typ);
         Equals ("m.mdest", Term "self");
       ]
     in
@@ -343,9 +359,11 @@ let rec translate_protocol (p : tprotocol) =
               Map
                 (bound
                 @ [
-                    ("mtype", Term typ); ("msrc", Term "self");
+                    ("mtype", Term typ);
+                    ("msrc", Term "self");
                     ("mdest", Term to_);
-                  ]); Term "messages";
+                  ]);
+              Term "messages";
             ] ) )
   | Imply (c, body) ->
     If (translate_expr c, translate_protocol body, Term "TRUE")
@@ -530,9 +548,9 @@ let to_tla env party_sizes actions =
   let party_sets =
     SMap.mapi
       (fun k v ->
-        if v < 1 then
-          []
-        else (* this works for both increasing and decreasng ranges! *)
+        if v < 1 then []
+        else
+          (* this works for both increasing and decreasng ranges! *)
           List.range 1 v
           |> List.map (fun n ->
                  Format.sprintf "%s%d" (String.lowercase_ascii k) n))
@@ -602,7 +620,7 @@ let to_tla env party_sizes actions =
   in
   let thread_constants = Constants all_threads in
   let party_constants = Constants (actions |> SMap.bindings |> List.map fst) in
-  let (symmetry_def, symmetry_cfg) =
+  let symmetry_def, symmetry_cfg =
     let def = "Symmetry" in
     let cfg = Format.sprintf "SYMMETRY %s" def in
     ( Def
@@ -645,11 +663,18 @@ let to_tla env party_sizes actions =
     List.concat
       [
         [
-          party_constants; party_member_constants; thread_constants;
-          msg_type_constants; symmetry_def;
-        ]; List.concat variables; var_defs;
+          party_constants;
+          party_member_constants;
+          thread_constants;
+          msg_type_constants;
+          symmetry_def;
+        ];
+        List.concat variables;
+        var_defs;
         [all_vars_def; threads_def; participants_def; participant_threads_def];
-        [init]; List.concat actions1; [next];
+        [init];
+        List.concat actions1;
+        [next];
       ]
   in
   let cfg =

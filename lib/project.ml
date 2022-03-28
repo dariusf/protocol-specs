@@ -129,12 +129,7 @@ let rec project_protocol : string -> env -> tprotocol -> tprotocol =
       let (V (p, _)) = must_be_var_t v in
       match p with None | Some (Party "self") -> true | _ -> false
     in
-    let p =
-      if owned_by env party v && qualifier_bound then
-        pr.p
-      else
-        Emp
-    in
+    let p = if owned_by env party v && qualifier_bound then pr.p else Emp in
     { pr with p }
   | Send { from; to_; msg } ->
     let f = from |> must_be_var_t |> var_name in
@@ -146,28 +141,20 @@ let rec project_protocol : string -> env -> tprotocol -> tprotocol =
             { pr with p = SendOnly { to_; msg } };
             { pr with p = ReceiveOnly { from; msg = msg_destruct msg } };
           ]
-      else if String.equal f "self" then
-        SendOnly { to_; msg }
+      else if String.equal f "self" then SendOnly { to_; msg }
       else if String.equal t "self" then
         ReceiveOnly { from; msg = msg_destruct msg }
-      else
-        Emp
+      else Emp
     in
     { pr with p }
   | Call { is_self; _ } ->
     (* TODO get rid of initiator *)
-    let p =
-      if is_self then
-        pr.p
-      else
-        Emp
-    in
+    let p = if is_self then pr.p else Emp in
     { pr with p }
   | Imply (c, body) ->
     let body1 = project_protocol party env body in
     let p =
-      if List.for_all (owned_by env party) (vars_in c) then
-        Imply (c, body1)
+      if List.for_all (owned_by env party) (vars_in c) then Imply (c, body1)
       else (* note that this is the body of the conditional, not emp *)
         body1.p
     in
@@ -177,15 +164,15 @@ let rec project_protocol : string -> env -> tprotocol -> tprotocol =
     let p =
       if List.for_all (owned_by env party) (vars_in c) then
         BlockingImply (c, body1)
-      else
-        body1.p
+      else body1.p
     in
     { pr with p }
   | Forall (v, s, body) ->
     let name = v |> must_be_var_t |> var_name in
-    let (typ, sname, less) = as_party_set_or_less env s in
+    let typ, sname, less = as_party_set_or_less env s in
     let p =
-      if String.equal party typ then (* related. there are now two cases *)
+      if String.equal party typ then
+        (* related. there are now two cases *)
         let c =
           let is_related = not (List.mem ~eq:String.equal "self" less) in
           if is_related then
@@ -221,8 +208,7 @@ let rec project_protocol : string -> env -> tprotocol -> tprotocol =
                 ]
             in
             self_send
-          else
-            Forall (v, s, project_protocol party env body)
+          else Forall (v, s, project_protocol party env body)
         in
         c
       else
