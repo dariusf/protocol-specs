@@ -8,9 +8,7 @@ module Node = struct
   type t = int
 
   let compare = Int.compare
-
   let hash = Hashtbl.hash
-
   let equal = ( = )
 end
 
@@ -114,7 +112,7 @@ let rec used_names (t : tprotocol) =
   | ReceiveOnly { from; msg = MessageD { args; _ } } ->
     List.concat_map used_names_expr ([from] @ args)
   | Exists (_, _, _) -> nyi "used names exists"
-  | Call (_, args) ->
+  | Call { args; _ } ->
     (* not higher-order *)
     List.concat_map used_names_expr args
   | Send _ -> bug "used names send"
@@ -308,7 +306,7 @@ and split_actions :
       AnyOf [af; bf] )
   | Imply (c, p) | BlockingImply (c, p) ->
     split_actions env (c :: preconditions) params proc_actions p
-  | Call (name, _) ->
+  | Call { f = name; _ } ->
     (* possibly cyclic graph *)
     (match List.assoc_opt ~eq:String.equal name proc_actions with
     | None ->
@@ -388,9 +386,7 @@ and split_actions :
   | Send _ -> bug "find actions send"
 
 let compact = false
-
 let maybe_nl = if compact then "" else "\n"
-
 let maybe_indent = if compact then "" else "  "
 
 let node_name party (id, node) =
@@ -619,7 +615,6 @@ let all_tids (e : tprotocol) =
   let vp =
     object
       inherit [_] reduce_protocol_list
-
       method! visit__protocol _env p = [p.pmeta.tid]
     end
   in

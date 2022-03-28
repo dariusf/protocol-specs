@@ -216,7 +216,7 @@ let render_protocol_ :
            ([a; b]
            |> map_last (fun last p ->
                   render_protocol ~pctx:{ prec = n; last } p))
-    | Call (f, args) ->
+    | Call { f; args; _ } ->
       concat
         [
           string "$"; string f;
@@ -325,6 +325,7 @@ let to_pp ?(one_line = true) render fmt a =
     (if one_line then "@[<h>%a@]@?" else "%a")
     pretty (render a)
 
+let pp_tprotocol ~env = to_pp (render_tprotocol ~env)
 let pp_tprotocol_untyped ~env = to_pp (render_tprotocol_untyped ~env)
 let pp_expr = to_pp (fun t -> render_expr t)
 let pp_texpr ~env = to_pp (fun t -> render_texpr ~env t)

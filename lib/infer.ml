@@ -142,7 +142,6 @@ let rec unify :
            (Print.pp_typ ~env) b))
 
 let dump_env env = Format.printf "%s@." (explain_env env)
-
 let lookup_fn env f = SMap.find_opt f env.polymorphic
 
 let lookup env v =
@@ -489,7 +488,7 @@ let rec infer : ?in_seq:bool -> protocol -> env -> tprotocol * env =
   let loc = p.pmeta in
   match p.p with
   | Emp -> ({ p = Emp; pmeta = pmeta ~loc ~env () }, env)
-  | Call (f, args) ->
+  | Call { f; args; is_self } ->
     (* TODO lookup the function environment *)
     let (args, env) =
       List.fold_left
@@ -499,7 +498,7 @@ let rec infer : ?in_seq:bool -> protocol -> env -> tprotocol * env =
         ([], env) args
     in
     let args = List.rev args in
-    ({ p = Call (f, args); pmeta = pmeta ~loc ~env () }, env)
+    ({ p = Call { f; args; is_self }; pmeta = pmeta ~loc ~env () }, env)
   | Send { from; to_; msg = Message { args; typ = mtype } } ->
     let (fm, tm) = (from.meta, to_.meta) in
     let (V (fp, from)) = must_be_var from in
@@ -761,7 +760,7 @@ let initiator env p =
       (match from.meta.info.typ with
       | TyParty p -> IMap.find (UF.value p) env.parties
       | _ -> fail ~loc:from.meta.loc "no initiator")
-    | Call (f, _) ->
+    | Call { f; _ } ->
       (match SMap.find_opt f env.subprotocols with
       | None -> fail ~loc:p.pmeta.ploc "undefined function %s" f
       | Some { initiator; _ } -> { repr = var initiator })
@@ -886,7 +885,7 @@ let rec check_instantiated env p =
     check_instantiated_expr env from;
     check_instantiated_expr env to_;
     List.iter (fun (_, e) -> check_instantiated_expr env e) args
-  | Call (_, args) -> List.iter (check_instantiated_expr env) args
+  | Call { args; _ } -> List.iter (check_instantiated_expr env) args
   | Assign (v, e) ->
     check_instantiated_expr env v;
     check_instantiated_expr env e
@@ -950,8 +949,11 @@ let rec qualify_vars env p =
                 };
           };
     }
-  | Call (f, args) ->
-    { p with p = Call (f, List.map (qualify_vars_expr env) args) }
+  | Call { f; args; is_self } ->
+    {
+      p with
+      p = Call { f; args = List.map (qualify_vars_expr env) args; is_self };
+    }
   | Assign (v, e) ->
     { p with p = Assign (qualify_vars_expr env v, qualify_vars_expr env e) }
   | Imply (c, b) ->

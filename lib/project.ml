@@ -97,8 +97,17 @@ let substitute ~v ~by p =
         p with
         p = Assign (substitute_expr ~v ~by va, substitute_expr ~v ~by e);
       }
-    | Call (f, args) ->
-      { p with p = Call (f, List.map (substitute_expr ~v ~by) args) }
+    | Call { f; args; _ } ->
+      {
+        p with
+        p =
+          Call
+            {
+              f;
+              args = List.map (substitute_expr ~v ~by) args;
+              is_self = String.equal by "self";
+            };
+      }
     | Imply (e, b) -> { p with p = Imply (substitute_expr ~v ~by e, aux b) }
     | BlockingImply (e, b) ->
       { p with p = BlockingImply (substitute_expr ~v ~by e, aux b) }
@@ -145,10 +154,10 @@ let rec project_protocol : string -> env -> tprotocol -> tprotocol =
         Emp
     in
     { pr with p }
-  | Call (f, _) ->
-    let owner = (SMap.find f env.subprotocols).initiator in
+  | Call { is_self; _ } ->
+    (* TODO get rid of initiator *)
     let p =
-      if String.equal owner party then
+      if is_self then
         pr.p
       else
         Emp
@@ -172,56 +181,53 @@ let rec project_protocol : string -> env -> tprotocol -> tprotocol =
         body1.p
     in
     { pr with p }
-  | Forall (v, s, p) ->
+  | Forall (v, s, body) ->
     let name = v |> must_be_var_t |> var_name in
     let (typ, sname, less) = as_party_set_or_less env s in
-
     let p =
       if String.equal party typ then (* related. there are now two cases *)
         let c =
           let is_related = not (List.mem ~eq:String.equal "self" less) in
           if is_related then
             let left =
-              project_protocol party env (substitute ~v:name ~by:"self" p)
+              project_protocol party env (substitute ~v:name ~by:"self" body)
             in
-            let right = project_protocol party env p in
-            Par
-              [
-                left;
-                {
-                  pr with
-                  p =
-                    Forall
-                      ( v,
-                        {
-                          s with
-                          expr =
-                            App
-                              ( "\\",
-                                (* this changes metadata but shouldn't matter *)
-                                [
-                                  { s with expr = Var (var sname) };
-                                  {
-                                    s with
-                                    expr =
-                                      Set
-                                        (List.map
-                                           (fun v ->
-                                             { s with expr = Var (V (None, v)) })
-                                           ("self" :: less));
-                                  };
-                                ] );
-                        },
-                        right );
-                };
-              ]
+            let right = project_protocol party env body in
+            let set_minus_self =
+              App
+                ( "\\",
+                  (* this changes metadata but shouldn't matter *)
+                  [
+                    { s with expr = Var (var sname) };
+                    {
+                      s with
+                      expr =
+                        Set
+                          (List.map
+                             (fun v -> { s with expr = Var (V (None, v)) })
+                             ("self" :: less));
+                    };
+                  ] )
+            in
+            (* this always generates two branches, but the operations across self and others in the set are disjoint if they only occur on one side (assignment, call). normalization then removes one of the branches *)
+            let self_send =
+              Par
+                [
+                  left;
+                  {
+                    pr with
+                    p = Forall (v, { s with expr = set_minus_self }, right);
+                  };
+                ]
+            in
+            self_send
           else
-            Forall (v, s, project_protocol party env p)
+            Forall (v, s, project_protocol party env body)
         in
         c
       else
         (* unrelated. just go deeper and don't bind, or "act homomorphically through quantification on different role" *)
-        Forall (v, s, project_protocol party env p)
+        Forall (v, s, project_protocol party env body)
     in
     { pr with p }
   | Seq ps -> { pr with p = Seq (ps |> List.map (project_protocol party env)) }

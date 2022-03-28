@@ -17,13 +17,9 @@ Projection for functions has to be solved before --actions will work
   protocol f() (
     a = 1;
     $f()
-    ||
-    forall p in (P \ {self})
-      $f()
   )
-  (forall c in C
-     c-> : m);
-  $f()
+  forall c in C
+    c-> : m
 
   $ protocol print fns.spec --parties P,C --project C
   protocol f() (

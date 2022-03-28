@@ -8,7 +8,6 @@ let pp_party fmt (Party p) = Format.fprintf fmt "%s" p
 type var = V of party option * string [@@deriving ord, eq]
 
 let var_name (V (_, v)) = v
-
 let var_names vars = List.map var_name vars
 
 let pp_var fmt (V (p, var)) =
@@ -85,22 +84,17 @@ module Expr = struct
   class ['self] map_expr =
     object (_ : 'self)
       inherit [_] map
-
       method visit_'m _env m = m
-
       method visit_var _env v = v
     end
 
   class virtual ['self] reduce_expr =
     object (self : 'self)
       inherit [_] reduce
-
       method visit_'m _env _ = self#zero
-
       method visit_var _env _ = self#zero
     end
-end
-[@warning "-17"]
+end [@warning "-17"]
 
 include Expr
 
@@ -119,15 +113,10 @@ let with_pos start stop expr =
     }
 
 let plus a b = App ("+", [a; b])
-
 let eq a b = App ("==", [a; b])
-
 let geq a b = App (">=", [a; b])
-
 let gt a b = App (">", [a; b])
-
 let and_ a b = App ("&", [a; b])
-
 let or_ a b = App ("|", [a; b])
 
 type ('e, 'v) msg =
@@ -160,7 +149,12 @@ module Protocol = struct
     | Seq of ('a, 'e, 'v) _protocol list
     | Par of ('a, 'e, 'v) _protocol list
     | Disj of ('a, 'e, 'v) _protocol * ('a, 'e, 'v) _protocol
-    | Call of string * 'e list
+    | Call of {
+        (* is_self plays a similar role as the qualifier in self-send projection *)
+        is_self : bool;
+        f : string;
+        args : 'e list;
+      }
     | Send of {
         from : 'v;
         to_ : 'v;
@@ -193,47 +187,32 @@ module Protocol = struct
   class ['self] map_protocol =
     object (_ : 'self)
       inherit [_] map
-
       method visit_'v _env m = m
-
       method visit_'e _env m = m
-
       method visit_'a _env m = m
-
       method visit_var _env m = m
-
       method visit_msg _ _ _env m = m
-
       method visit_msg_destruct _env _ m = m
     end
 
   class virtual ['self] reduce_protocol =
     object (self : 'self)
       inherit [_] reduce
-
       method visit_'v _env _ = self#zero
-
       method visit_'e _env _ = self#zero
-
       method visit_'a _env _ = self#zero
-
       method visit_var _env _ = self#zero
-
       method visit_msg _ _ _env _ = self#zero
-
       method visit_msg_destruct _env _ _ = self#zero
     end
 
   class ['self] reduce_protocol_list =
     object (_ : 'self)
       inherit [_] reduce_protocol
-
       method zero = []
-
       method plus a b = a @ b
     end
-end
-[@warning "-17"]
+end [@warning "-17"]
 
 include Protocol
 

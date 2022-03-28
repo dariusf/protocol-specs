@@ -1,6 +1,18 @@
 Simplest multiparty examples
 
   $ protocol print --parties C,P --project C <<EOF
+  > forall p in P
+  >   p.a = 1
+  > EOF
+  skip
+
+  $ protocol print --parties C,P --project P <<EOF
+  > forall p in P
+  >   p.a = 1
+  > EOF
+  a = 1
+
+  $ protocol print --parties C,P --project C <<EOF
   > forall c in C
   >   forall p in P
   >     c->p: m;
