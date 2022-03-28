@@ -11,14 +11,17 @@ let owned_by env party v =
   | Party w ->
     String.equal party ((IMap.find (UF.value w) env.parties).repr |> var_name)
 
-let rec vars_in e =
-  match e.expr with
-  | Int _ | Bool _ | String _ -> []
-  | Var _ -> [e]
-  | App (_, s) | Set s | List s -> List.concat_map vars_in s
-  | Map s -> List.concat_map vars_in (List.map snd s)
-  | Tuple (a, b) -> List.concat_map vars_in [a; b]
-  | Else | Timeout -> nyi "else/timeout"
+let vars_in e =
+  let ve =
+    object
+      inherit [_] reduce_expr_list as super
+
+      (* we want a list of expressions, not vars. that also necessitates manually invoking the superclass method *)
+      method! visit__expr env e =
+        match e.expr with Var _ -> [e] | _ -> super#visit__expr env e
+    end
+  in
+  ve#visit__expr () e
 
 let substitute ~v ~by (p : tprotocol) : tprotocol =
   let vp =

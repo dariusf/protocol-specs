@@ -94,6 +94,13 @@ module Expr = struct
       method visit_'m _env _ = self#zero
       method visit_var _env _ = self#zero
     end
+
+  class ['self] reduce_expr_list =
+    object (_ : 'self)
+      inherit [_] reduce_expr
+      method zero = []
+      method plus a b = a @ b
+    end
 end [@warning "-17"]
 
 include Expr
@@ -221,10 +228,12 @@ module Protocol = struct
   class virtual ['self] reduce_protocol =
     object (self : 'self)
       inherit [_] reduce
+      inherit! [_] reduce_expr
       method visit_'a _env _ = self#zero
-      method visit_'e _env _ = self#zero
-      method visit_'v _env _ = self#zero
-      method visit_var _env _ = self#zero
+      method visit_'e env e = self#visit__expr env e
+      method visit_'v env v = self#visit__expr env v
+
+      (* this won't recurse inside messages. currently not needed *)
       method visit_msg _ _ _env _ = self#zero
       method visit_msg_destruct _env _ _ = self#zero
     end
