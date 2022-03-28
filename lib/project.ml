@@ -110,7 +110,7 @@ let substitute ~v ~by p =
 (** Given the environment (which knows about all the parties),
     and a protocol to project, returns a list of protocols projected
     by each party *)
-let rec project_aux : string -> env -> tprotocol -> tprotocol =
+let rec project_protocol : string -> env -> tprotocol -> tprotocol =
  fun party env pr ->
   match pr.p with
   | Emp -> { pr with p = Emp }
@@ -155,7 +155,7 @@ let rec project_aux : string -> env -> tprotocol -> tprotocol =
     in
     { pr with p }
   | Imply (c, body) ->
-    let body1 = project_aux party env body in
+    let body1 = project_protocol party env body in
     let p =
       if List.for_all (owned_by env party) (vars_in c) then
         Imply (c, body1)
@@ -164,7 +164,7 @@ let rec project_aux : string -> env -> tprotocol -> tprotocol =
     in
     { pr with p }
   | BlockingImply (c, body) ->
-    let body1 = project_aux party env body in
+    let body1 = project_protocol party env body in
     let p =
       if List.for_all (owned_by env party) (vars_in c) then
         BlockingImply (c, body1)
@@ -182,9 +182,9 @@ let rec project_aux : string -> env -> tprotocol -> tprotocol =
           let is_related = not (List.mem ~eq:String.equal "self" less) in
           if is_related then
             let left =
-              project_aux party env (substitute ~v:name ~by:"self" p)
+              project_protocol party env (substitute ~v:name ~by:"self" p)
             in
-            let right = project_aux party env p in
+            let right = project_protocol party env p in
             Par
               [
                 left;
@@ -216,19 +216,19 @@ let rec project_aux : string -> env -> tprotocol -> tprotocol =
                 };
               ]
           else
-            Forall (v, s, project_aux party env p)
+            Forall (v, s, project_protocol party env p)
         in
         c
       else
         (* unrelated. just go deeper and don't bind, or "act homomorphically through quantification on different role" *)
-        Forall (v, s, project_aux party env p)
+        Forall (v, s, project_protocol party env p)
     in
     { pr with p }
-  | Seq ps -> { pr with p = Seq (ps |> List.map (project_aux party env)) }
-  | Par ps -> { pr with p = Par (ps |> List.map (project_aux party env)) }
+  | Seq ps -> { pr with p = Seq (ps |> List.map (project_protocol party env)) }
+  | Par ps -> { pr with p = Par (ps |> List.map (project_protocol party env)) }
   | Disj (a, b) ->
-    let pa = project_aux party env a in
-    let pb = project_aux party env b in
+    let pa = project_protocol party env a in
+    let pb = project_protocol party env b in
     { pr with p = Disj (pa, pb) }
   | Exists _ -> nyi "project aux exists"
   | SendOnly _ -> bug "send only should not be used in front end language"
@@ -239,7 +239,6 @@ let strip_qualifiers (e : tprotocol) : tprotocol =
   let ve =
     object
       inherit [_] map_expr
-
       method! visit_var _env (V (_, v)) = V (None, v)
     end
   in
@@ -247,9 +246,7 @@ let strip_qualifiers (e : tprotocol) : tprotocol =
   let vp =
     object
       inherit [_] map_protocol
-
       method! visit_'e _env m = expr m
-
       method! visit_'v _env m = expr m
     end
   in
@@ -258,5 +255,5 @@ let strip_qualifiers (e : tprotocol) : tprotocol =
 let project parties env p =
   parties
   |> List.map (fun party ->
-         project_aux (party.repr |> var_name) env p
+         project_protocol (party.repr |> var_name) env p
          |> strip_qualifiers |> normalize_t)

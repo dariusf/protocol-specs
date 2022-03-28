@@ -307,6 +307,17 @@ let render_tprotocol ?(latex = false) ~env p =
 let render_tprotocol_untyped ?(latex = false) ~env p =
   render_protocol_ latex (render_texpr_as_expr ~env) p
 
+let render_functions env =
+  env.subprotocols |> SMap.bindings
+  |> List.map (fun (name, f) ->
+         separate space
+           [
+             string "protocol"; string name ^^ parens empty;
+             parens (nest 2 (nl ^^ render_tprotocol_untyped ~env f.tp) ^^ nl);
+             nl;
+           ])
+  |> concat
+
 let pretty fmt d = PPrint.ToFormatter.pretty 0.8 120 fmt d
 
 let to_pp ?(one_line = true) render fmt a =

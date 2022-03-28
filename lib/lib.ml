@@ -33,8 +33,8 @@ let require_parties p =
   | None | Some ([], _) -> bad_input "--parties must be given to infer types"
   | Some ps -> ps
 
-let require_project_party =
-  Option.get_exn_or "a party must be chosen using --project"
+let require_project_party p =
+  Option.get_exn_or "a party must be chosen using --project" p
 
 let typecheck parties spec =
   let env = Infer.initial_env parties in
@@ -44,6 +44,7 @@ let typecheck parties spec =
          | Function (f, args, p) -> Some (f, args, p)
          | _ -> None)
   in
+  (* check all the functions *)
   let env =
     List.fold_left
       (fun env (fname, fparams, p) ->
@@ -70,6 +71,7 @@ let typecheck parties spec =
       env fns
   in
   let (tp, env) = Infer.check spec.protocol env in
+  (* type-checked functions are returned in the env, no longer in spec *)
   (env, tp)
 
 let project parties env tprotocol =
@@ -81,6 +83,8 @@ let print project_party parties ast types actions latex file =
   let spec = parse file in
   match parties with
   | None ->
+    (* no parties given, so we can't infer types and can only show an untyped version *)
+    (* TODO functions are not printed here *)
     if ast then (* protocol |> show_protocol |> print_endline *)
       spec |> show_spec |> print_endline
     else
@@ -88,15 +92,30 @@ let print project_party parties ast types actions latex file =
       |> Print.render_protocol ~latex
       |> PPrint.ToChannel.pretty 0.8 120 stdout
   | _ ->
+    (* print typed version *)
     let (parties, _) = require_parties parties in
     let (env, tprotocol) = typecheck parties spec in
-    let tprotocol =
+    (* if there is a party to project on, operate on its protocol from here on. also project the protocols in the environment *)
+    let (env, tprotocol) =
       match project_party with
-      | None -> tprotocol
+      | None -> (env, tprotocol)
       | _ ->
         let project_party = require_project_party project_party in
-        let all = project parties env tprotocol in
-        SMap.find project_party all
+        let tp = project parties env tprotocol |> SMap.find project_party in
+        let env =
+          {
+            env with
+            subprotocols =
+              env.subprotocols
+              |> SMap.map (fun sub ->
+                     {
+                       sub with
+                       tp =
+                         project parties env sub.tp |> SMap.find project_party;
+                     });
+          }
+        in
+        (env, tp)
     in
     if ast then
       tprotocol |> show_tprotocol |> print_endline
@@ -105,6 +124,7 @@ let print project_party parties ast types actions latex file =
       let (g, nodes) = Actions.split_into_actions project_party env tprotocol in
       print_endline (Actions.to_graphviz env project_party g nodes)
     else (
+      Print.render_functions env |> PPrint.ToChannel.pretty 0.8 120 stdout;
       tprotocol
       |> (if types then
             Print.render_tprotocol ~latex ~env
