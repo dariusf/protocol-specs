@@ -122,6 +122,10 @@ module IMap = struct
       (M.pp ~pp_sep:(pp_const ";") ~pp_start:(pp_const "{")
          ~pp_stop:(pp_const "}") Int.pp e)
       map
+
+  (** aka merge_unsafe *)
+  let disjoint_union m1 m2 =
+    union (fun _ _ _ -> bug "maps are not disjoint") m1 m2
 end
 
 module SSet = struct
@@ -140,3 +144,14 @@ let snake_to_camel s =
   |> Str.global_substitute (Str.regexp {|_\([a-z]\)|}) (fun s ->
          Str.matched_group 1 s |> String.lowercase_ascii
          |> String.capitalize_ascii)
+
+(* quite terrible, but cannot return unit *)
+let assert_ cond fmt =
+  if not cond then Format.kasprintf failwith fmt
+  else Format.kasprintf (fun _ -> ()) fmt
+
+type grain =
+  | Standard
+  | Communication
+  | Statement
+[@@deriving show { with_path = false }]

@@ -1,5 +1,101 @@
 Actions
 
+  $ protocol print --parties P --project P --actions <<EOF
+  > forall p in P
+  >     p.a = 1
+  > EOF
+  digraph G {
+    1 [label="PChangeA1\n{start}\na = 1\n{Pmain = 1}\n"];
+  }
+
+Default grain
+
+  $ protocol print --parties P --project P --actions <<EOF
+  > forall p in P
+  >     p.a = 1;
+  >     p.b = 2
+  > EOF
+  digraph G {
+    1 [label="PChangeA1\n{start}\na = 1;\nb = 2\n{Pmain = 2}\n"];
+  }
+
+Fuse tail
+
+  $ protocol print --parties P,C --project P --actions <<EOF
+  > forall p in P
+  >   forall c in C
+  >     p->c: m;
+  >     p.b = 2;
+  >     p.a = 1
+  > EOF
+  digraph G {
+    1 [label="PSendM1\n{start}\n→c : m\n{Pt0(c:C) = 1}\n"];
+    2 [label="PChangeB2\n{Pt0(c:C) = 1}\nb = 2;\na = 1\n{Pt0(c:C) = 3}\n"];
+    1 -> 2;
+  }
+
+Fuse head
+
+  $ protocol print --parties P,C --project P --actions <<EOF
+  > forall p in P
+  >   forall c in C
+  >     p.b = 2;
+  >     p.a = 1;
+  >     p->c: m
+  > EOF
+  digraph G {
+    1 [label="PChangeB1\n{start}\nb = 2;\na = 1\n{Pt0(c:C) = 2}\n"];
+    3 [label="PSendM3\n{Pt0(c:C) = 2}\n→c : m\n{Pt0(c:C) = 3}\n"];
+    1 -> 3;
+  }
+
+Communication grain (P)
+
+  $ protocol print --parties P,C --project P --actions --grain communication <<EOF
+  > forall p in P
+  >   forall c in C
+  >     p.a = 1;
+  >     p->c: m;
+  >     c.b = 1;
+  >     c->p: m
+  > EOF
+  digraph G {
+    1 [label="PChangeA1\n{start}\na = 1;\n→c : m\n{Pt0(c:C) = 2}\n"];
+    3 [label="PReceiveM3\n{Pt0(c:C) = 2}\nc→ : m\n{Pt0(c:C) = 3}\n"];
+    1 -> 3;
+  }
+
+Communication grain (C)
+
+  $ protocol print --parties P,C --project C --actions --grain communication <<EOF
+  > forall p in P
+  >   forall c in C
+  >     p.a = 1;
+  >     p->c: m;
+  >     c.b = 1;
+  >     c->p: m
+  > EOF
+  digraph G {
+    1 [label="CReceiveM1\n{start}\np→ : m\n{Ct0(p:P) = 1}\n"];
+    2 [label="CChangeB2\n{Ct0(p:P) = 1}\nb = 1;\n→p : m\n{Ct0(p:P) = 3}\n"];
+    1 -> 2;
+  }
+
+Statement grain
+
+  $ protocol print --parties P --project P --actions --grain statement <<EOF
+  > forall p in P
+  >     p.a = 1;
+  >     p.b = 2
+  > EOF
+  digraph G {
+    1 [label="PChangeA1\n{start}\na = 1\n{Pmain = 1}\n"];
+    2 [label="PChangeB2\n{Pmain = 1}\nb = 2\n{Pmain = 2}\n"];
+    1 -> 2;
+  }
+
+Multiple parties
+
   $ protocol print --parties P,C --project P --actions <<EOF
   > forall p in P
   >   forall c in C
@@ -17,6 +113,8 @@ Actions
     1 -> 2;
   }
 
+Nothing due to projection
+
   $ protocol print --parties P,C --project P --actions <<EOF
   > (forall p in P
   >    forall c in C
@@ -28,9 +126,9 @@ Actions
   >     c.x = 4
   > EOF
   digraph G {
-  
-  
   }
+
+Other side
 
   $ protocol print --parties P,C --project C --actions <<EOF
   > (forall p in P
@@ -43,10 +141,10 @@ Actions
   >     c.x = 4
   > EOF
   digraph G {
-    1 [label="CChangeA1\n{start}\na = 1;\nx = 2\n{Ct0(p:P) = 1}\n"];
-    2 [label="CChangeA2\n{∀ p:P. Ct0(p:P) = 1}\na = 3;\nx = 4\n{Ct1(p:P) = 2}\n"];
-    1 -> 2;
+    1 [label="CChangeA1\n{start}\na = 1;\nx = 2;\na = 3;\nx = 4\n{Ct1(p:P) = 4}\n"];
   }
+
+TLA+
 
   $ protocol tla --parties P,C <<EOF
   > (forall p in P
@@ -89,7 +187,7 @@ Actions
   
   CONSTANTS
   
-  CONSTANTS Ct0, Ct1
+  CONSTANTS Ct0
   
   CONSTANTS
   
@@ -105,7 +203,7 @@ Actions
   
   vars == <<a, x, messages, pc>>
   
-  threads == {Ct0, Ct1}
+  threads == {Ct0}
   
   participants == (C \union P)
   
@@ -125,20 +223,12 @@ Actions
     /\
       /\ a' = [a EXCEPT ![self] = 1]
       /\ x' = [x EXCEPT ![self] = 2]
-    /\ UNCHANGED <<messages>>
-  
-  CChangeA2(self) ==
-    /\ \A pi \in P : pc[self][<<Ct0, pi>>] = 1
-    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct1, p>>] = 2]]
-    /\ history' = Append(<<"CChangeA2">>, history)
-    /\
       /\ a' = [a EXCEPT ![self] = 3]
       /\ x' = [x EXCEPT ![self] = 4]
     /\ UNCHANGED <<messages>>
   
   Next ==
     \/ \E self \in C : CChangeA1(self)
-    \/ \E self \in C : CChangeA2(self)
   
   Spec == Init /\ [][Next]_<<vars, history>>
   
@@ -176,7 +266,7 @@ Actions
   
   CONSTANTS c1, p1, p2
   
-  CONSTANTS Ct0, Cmain, Pt0
+  CONSTANTS Ct0, Cmain, Pt1
   
   CONSTANTS prepare, prepared, abort
   
@@ -192,11 +282,11 @@ Actions
   
   vars == <<a, b, messages, pc>>
   
-  threads == {Ct0, Cmain, Pt0}
+  threads == {Ct0, Cmain, Pt1}
   
   participants == (C \union P)
   
-  threadParticipants == {<<Ct0, p2>>, <<Ct0, p1>>, Cmain, <<Pt0, c1>>}
+  threadParticipants == {<<Ct0, p2>>, <<Ct0, p1>>, Cmain, <<Pt1, c1>>}
   
   Init ==
     /\ a = [i \in C |-> 0]
@@ -209,8 +299,7 @@ Actions
     /\ pc[self][<<Ct0, p>>] = 0
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct0, p>>] = 1]]
     /\ history' = Append(<<"CSendPrepare1", p>>, history)
-    /\
-      /\ messages' = Send([mtype |-> prepare, msrc |-> self, mdest |-> p], messages)
+    /\ messages' = Send([mtype |-> prepare, msrc |-> self, mdest |-> p], messages)
     /\ UNCHANGED <<a, b>>
   
   CReceivePrepared2(self, p) ==
@@ -221,67 +310,75 @@ Actions
       /\ (messages[m] > 0)
       /\ m.mtype = prepared
       /\ m.mdest = self
-      /\ a' = [a EXCEPT ![self] = 1]
-      /\ messages' = Receive(m, messages)
-    /\ UNCHANGED <<b>>
+    /\ UNCHANGED <<a, b, messages>>
   
-  CReceiveAbort3(self, p) ==
-    /\ pc[self][<<Ct0, p>>] = 1
+  CChangeA3(self) ==
+    /\ pc[self][<<Ct0, p>>] = 2
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct0, p>>] = 3]]
-    /\ history' = Append(<<"CReceiveAbort3", p>>, history)
+    /\ history' = Append(<<"CChangeA3">>, history)
+    /\ a' = [a EXCEPT ![self] = 1]
+    /\ UNCHANGED <<b, messages>>
+  
+  CReceiveAbort4(self, p) ==
+    /\ pc[self][<<Ct0, p>>] = 1
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct0, p>>] = 4]]
+    /\ history' = Append(<<"CReceiveAbort4", p>>, history)
     /\ \E m \in DOMAIN messages :
       /\ (messages[m] > 0)
       /\ m.mtype = abort
       /\ m.mdest = self
-      /\ a' = [a EXCEPT ![self] = 2]
-      /\ messages' = Receive(m, messages)
-    /\ UNCHANGED <<b>>
+    /\ UNCHANGED <<a, b, messages>>
   
-  CChangeB4(self) ==
+  CChangeA5(self) ==
+    /\ pc[self][<<Ct0, p>>] = 4
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct0, p>>] = 5]]
+    /\ history' = Append(<<"CChangeA5">>, history)
+    /\ a' = [a EXCEPT ![self] = 2]
+    /\ UNCHANGED <<b, messages>>
+  
+  CChangeB6(self) ==
     /\ \A pi \in P :
-      \/ pc[self][<<Ct0, pi>>] = 2
       \/ pc[self][<<Ct0, pi>>] = 3
-    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![Cmain] = 4]]
-    /\ history' = Append(<<"CChangeB4">>, history)
-    /\
-      /\ b' = [b EXCEPT ![self] = 3]
+      \/ pc[self][<<Ct0, pi>>] = 5
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![Cmain] = 6]]
+    /\ history' = Append(<<"CChangeB6">>, history)
+    /\ b' = [b EXCEPT ![self] = 3]
     /\ UNCHANGED <<a, messages>>
   
-  PReceivePrepare5(self, c) ==
-    /\ pc[self][<<Pt0, c>>] = 0
-    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 5]]
-    /\ history' = Append(<<"PReceivePrepare5", c>>, history)
+  PReceivePrepare7(self, c) ==
+    /\ pc[self][<<Pt1, c>>] = 0
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt1, c>>] = 7]]
+    /\ history' = Append(<<"PReceivePrepare7", c>>, history)
     /\ \E m \in DOMAIN messages :
       /\ (messages[m] > 0)
       /\ m.mtype = prepare
       /\ m.mdest = self
-      /\ messages' = Receive(m, messages)
+    /\ UNCHANGED <<a, b, messages>>
+  
+  PSendPrepared8(self, c) ==
+    /\ pc[self][<<Pt1, c>>] = 7
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt1, c>>] = 8]]
+    /\ history' = Append(<<"PSendPrepared8", c>>, history)
+    /\ messages' = Send([mtype |-> prepared, msrc |-> self, mdest |-> c], messages)
     /\ UNCHANGED <<a, b>>
   
-  PSendPrepared6(self, c) ==
-    /\ pc[self][<<Pt0, c>>] = 5
-    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 6]]
-    /\ history' = Append(<<"PSendPrepared6", c>>, history)
-    /\
-      /\ messages' = Send([mtype |-> prepared, msrc |-> self, mdest |-> c], messages)
-    /\ UNCHANGED <<a, b>>
-  
-  PSendAbort7(self, c) ==
-    /\ pc[self][<<Pt0, c>>] = 5
-    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt0, c>>] = 7]]
-    /\ history' = Append(<<"PSendAbort7", c>>, history)
-    /\
-      /\ messages' = Send([mtype |-> abort, msrc |-> self, mdest |-> c], messages)
+  PSendAbort9(self, c) ==
+    /\ pc[self][<<Pt1, c>>] = 7
+    /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Pt1, c>>] = 9]]
+    /\ history' = Append(<<"PSendAbort9", c>>, history)
+    /\ messages' = Send([mtype |-> abort, msrc |-> self, mdest |-> c], messages)
     /\ UNCHANGED <<a, b>>
   
   Next ==
     \/ \E self \in C : \E p \in P : CSendPrepare1(self, p)
     \/ \E self \in C : \E p \in P : CReceivePrepared2(self, p)
-    \/ \E self \in C : \E p \in P : CReceiveAbort3(self, p)
-    \/ \E self \in C : CChangeB4(self)
-    \/ \E self \in P : \E c \in C : PReceivePrepare5(self, c)
-    \/ \E self \in P : \E c \in C : PSendPrepared6(self, c)
-    \/ \E self \in P : \E c \in C : PSendAbort7(self, c)
+    \/ \E self \in C : CChangeA3(self)
+    \/ \E self \in C : \E p \in P : CReceiveAbort4(self, p)
+    \/ \E self \in C : CChangeA5(self)
+    \/ \E self \in C : CChangeB6(self)
+    \/ \E self \in P : \E c \in C : PReceivePrepare7(self, c)
+    \/ \E self \in P : \E c \in C : PSendPrepared8(self, c)
+    \/ \E self \in P : \E c \in C : PSendAbort9(self, c)
   
   Spec == Init /\ [][Next]_<<vars, history>>
   
@@ -300,7 +397,7 @@ Actions
     abort = abort
     Ct0 = Ct0
     Cmain = Cmain
-    Pt0 = Pt0
+    Pt1 = Pt1
   SYMMETRY Symmetry
   SPECIFICATION Spec
   VIEW vars

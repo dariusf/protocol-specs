@@ -52,19 +52,21 @@ let help_cmd =
     (Cmd.info "help" ~doc ~man)
     Term.(ret (const help $ Arg.man_format $ Term.choice_names $ topic))
 
-let print project parties ast types actions latex file =
+let print project parties ast types actions latex file grain =
   (* Ppx_debug.Tracing.wrap (fun () -> *)
-  Lib.print project parties ast types actions latex file (* ) *);
+  Lib.print ~project_party:project ~parties ~ast ~types ~actions ~latex ~grain
+    (`File file)
+  (* ) *);
   `Ok ()
 
-let tla parties spec_name file =
+let tla parties spec_name grain file =
   (* Ppx_debug.Tracing.wrap (fun () -> *)
-  Lib.tla parties spec_name file (* ) *);
+  Lib.tla ~parties ~spec_name ~grain file (* ) *);
   `Ok ()
 
-let monitor parties file =
+let monitor parties grain file =
   (* Ppx_debug.Tracing.wrap (fun () -> *)
-  Lib.monitor parties file (* ) *);
+  Lib.monitor ~parties ~grain file (* ) *);
   `Ok ()
 
 let print_cmd =
@@ -97,6 +99,12 @@ let print_cmd =
     Arg.(value & flag (info ~docv:"ACTIONS" ~doc:"print actions" ["actions"]))
   in
   let latex = Arg.(value & flag (info ~docv:"LATEX" ~doc:"latex" ["latex"])) in
+  let grain =
+    Arg.(
+      value
+      & opt (some string) None
+          (info ~docv:"GRAIN" ~doc:"vary the grain of atomicity" ["grain"]))
+  in
   let man =
     [
       `S Manpage.s_description;
@@ -108,7 +116,8 @@ let print_cmd =
     (Cmd.info "print" ~doc:"renders a specification" ~man)
     Term.(
       ret
-        (const print $ project $ parties $ ast $ types $ actions $ latex $ file))
+        (const print $ project $ parties $ ast $ types $ actions $ latex $ file
+       $ grain))
 
 let tla_cmd =
   let file =
@@ -119,6 +128,12 @@ let tla_cmd =
       value
       & opt (some string) None
           (info ~docv:"PARTIES" ~doc:"indicate party sets" ["parties"]))
+  in
+  let grain =
+    Arg.(
+      value
+      & opt (some string) None
+          (info ~docv:"GRAIN" ~doc:"vary the grain of atomicity" ["grain"]))
   in
   let spec_name =
     Arg.(
@@ -136,7 +151,7 @@ let tla_cmd =
   in
   Cmd.v
     (Cmd.info "tla" ~doc:"compiles a specification to TLA+" ~man)
-    Term.(ret (const tla $ parties $ spec_name $ file))
+    Term.(ret (const tla $ parties $ spec_name $ grain $ file))
 
 let monitor_cmd =
   let file =
@@ -148,6 +163,12 @@ let monitor_cmd =
       & opt (some string) None
           (info ~docv:"PARTIES" ~doc:"indicate party sets" ["parties"]))
   in
+  let grain =
+    Arg.(
+      value
+      & opt (some string) None
+          (info ~docv:"GRAIN" ~doc:"vary the grain of atomicity" ["grain"]))
+  in
   let man =
     [
       `S Manpage.s_description;
@@ -157,7 +178,7 @@ let monitor_cmd =
   in
   Cmd.v
     (Cmd.info "monitor" ~doc:"generates a monitor for runtime verification" ~man)
-    Term.(ret (const monitor $ parties $ file))
+    Term.(ret (const monitor $ parties $ grain $ file))
 
 let cmds = [print_cmd; tla_cmd; monitor_cmd; help_cmd]
 

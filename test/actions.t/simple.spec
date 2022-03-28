@@ -8,4 +8,3 @@ forall c in C
      c.a = 2));
   c.b = 3
   
-// Inv == pc[CHOOSE c \in C : TRUE][Cmain] /= 3

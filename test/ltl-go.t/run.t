@@ -9,6 +9,7 @@
   monitorC.go
 
   $ ls
+  actions.txt
   monitorC.go
 
   $ cat monitorC.go

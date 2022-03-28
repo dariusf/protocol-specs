@@ -18,8 +18,25 @@ let parse_parties s =
   in
   (parties, party_sizes)
 
+let parse_grain s =
+  match s with
+  | None | Some "standard" -> Standard
+  | Some "communication" -> Communication
+  | Some "statement" -> Statement
+  | _ -> failwith "invalid grain"
+
 let parse file =
   let spec = Parsing.parse_spec file in
+  {
+    spec with
+    protocol =
+      spec.protocol
+      |> (* if no_normalize then Fun.id else *)
+      Normalize.normalize;
+  }
+
+let parse_string s =
+  let spec = Parsing.parse_string s in
   {
     spec with
     protocol =
@@ -71,8 +88,12 @@ let project parties env tprotocol =
   List.map2 (fun party pr -> (party.repr |> var_name, pr)) parties projected
   |> SMap.of_list
 
-let print project_party parties ast types actions latex file =
-  let spec = parse file in
+let print project_party parties ast types actions latex inp grain =
+  let spec =
+    match inp with
+    | `File file -> parse file
+    | `String s -> Parsing.parse_string s
+  in
   match parties with
   | None ->
     (* no parties given, so we can't infer types and can only show an untyped version *)
@@ -113,8 +134,11 @@ let print project_party parties ast types actions latex file =
     if ast then tprotocol |> show_tprotocol |> print_endline
     else if actions then
       let project_party = require_project_party project_party in
-      let g, nodes = Actions.split_into_actions project_party env tprotocol in
-      print_endline (Actions.to_graphviz env project_party g nodes)
+      let g, nodes =
+        Actions.split_into_actions (parse_grain grain) project_party env
+          tprotocol
+      in
+      print_endline (Actions.to_graphviz project_party g nodes)
     else (
       Print.render_functions env |> PPrint.ToChannel.pretty 0.8 120 stdout;
       tprotocol
@@ -123,11 +147,11 @@ let print project_party parties ast types actions latex file =
       |> PPrint.ToChannel.pretty 0.8 120 stdout;
       print_endline "")
 
-let print project_party parties ast types actions latex file =
-  try print project_party parties ast types actions latex file
+let print ~project_party ~parties ~ast ~types ~actions ~latex ~grain file =
+  try print project_party parties ast types actions latex file grain
   with Check_failure s -> Format.printf "%s@." s
 
-let tla parties spec_name file =
+let tla parties spec_name grain file =
   let spec_name =
     spec_name
     |> Option.get_or
@@ -141,7 +165,9 @@ let tla parties spec_name file =
   let actions =
     all
     |> SMap.mapi (fun party p ->
-           let graph, nodes = Actions.split_into_actions party env p in
+           let graph, nodes =
+             Actions.split_into_actions (parse_grain grain) party env p
+           in
            (graph, nodes, p))
   in
 
@@ -153,11 +179,11 @@ let tla parties spec_name file =
   (* if not (Sys.file_exists cfg_filename) then *)
   write_to_file ~filename:cfg_filename cfg
 
-let tla parties spec_name file =
-  try tla parties spec_name file
+let tla ~parties ~spec_name ~grain file =
+  try tla parties spec_name grain file
   with Check_failure s -> Format.printf "%s@." s
 
-let monitor parties file =
+let monitor parties grain file =
   (* TODO is this needed? *)
   let _spec_name = Filename.remove_extension file in
   let spec = parse file in
@@ -200,7 +226,9 @@ let monitor parties file =
   List.iteri
     (fun i { repr = V (_, pname) } ->
       let pr = SMap.find pname all in
-      let _, action_nodes = Actions.split_into_actions pname env pr in
+      let _, action_nodes =
+        Actions.split_into_actions (parse_grain grain) pname env pr
+      in
       let ltl =
         List.assoc_opt ~eq:String.equal pname ltl_fml
         |> Option.get_or ~default:[]
@@ -209,5 +237,6 @@ let monitor parties file =
         (List.map (fun p -> p.repr |> var_name) parties))
     parties
 
-let monitor parties file =
-  try monitor parties file with Check_failure s -> Format.printf "%s@." s
+let monitor ~parties ~grain file =
+  try monitor parties grain file
+  with Check_failure s -> Format.printf "%s@." s

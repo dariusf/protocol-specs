@@ -4,7 +4,7 @@ export OCAMLRUNPARAM=b
 .PHONY: monitor
 
 all:
-	dune test
+	dune test --display=short
 	dune build @install
 
 2pc:

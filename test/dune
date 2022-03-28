@@ -6,3 +6,13 @@
 
 (cram
  (deps %{bin:protocol}))
+
+(library
+ (name tests)
+ (libraries
+  lib)
+ (inline_tests)
+ (preprocess
+  (pps
+   ppx_expect
+   )))

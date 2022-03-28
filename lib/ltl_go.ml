@@ -684,10 +684,10 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
     |> List.map (fun (id, act) ->
            let name = Actions.node_name pname (id, act) in
            let pres =
-             match act.preconditions with
+             match act.lpre with
              | [] -> "// no preconditions"
              | _ ->
-               act.preconditions
+               act.lpre
                |> List.map (fun p ->
                       Format.sprintf
                         {|if g != nil && !(%s) {
@@ -706,7 +706,7 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
                m.Log = append(m.Log, entry{action: "%s", params: params})
                return nil|}
                (params_check act.params) pres
-               (fence_to_precondition act act.fence)
+               (fence_to_precondition act act.cpre)
                name name
            in
            Format.sprintf "case %s:\n%s" name body)

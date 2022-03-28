@@ -60,25 +60,28 @@ let echo f lexbuf =
 
 let f = Lexer.f
 
-let parse_mono_ic file ic =
-  let lexer = Lexing.from_channel ~with_positions:true ic in
-  Lexing.set_filename lexer file;
-  try Ok (lexer |> Parser.spec f) with
+let parse_lex lexbuf =
+  try Ok (lexbuf |> Parser.spec f) with
   | Parser.Error ->
-    let pos = lexer.Lexing.lex_curr_p in
-    let tok = Lexing.lexeme lexer in
+    let pos = lexbuf.Lexing.lex_curr_p in
+    let tok = Lexing.lexeme lexbuf in
     (* (Printexc.to_string e) *)
     Error
       (Format.sprintf "parse error near %s, %s, line %d, col %d@." tok
          pos.pos_fname pos.pos_lnum
          (pos.pos_cnum - pos.pos_bol + 1))
   | Lexer.SyntaxError ->
-    let pos = lexer.Lexing.lex_curr_p in
+    let pos = lexbuf.Lexing.lex_curr_p in
     (* (Printexc.to_string e) *)
     Error
       (Format.sprintf "unrecognized token, %s, line %d, col %d@." pos.pos_fname
          pos.pos_lnum
          (pos.pos_cnum - pos.pos_bol + 1))
+
+let parse_mono_ic file ic =
+  let lexer = Lexing.from_channel ~with_positions:true ic in
+  Lexing.set_filename lexer file;
+  parse_lex lexer
 
 let parse_mono file = Containers.IO.with_in file (parse_mono_ic file)
 
@@ -141,3 +144,9 @@ let parse_spec file =
   with
   | Ok p -> p
   | Error s -> failwith s
+
+let parse_string s =
+  (* let p = Parsing.parse_inc file in *)
+  let lexer = Lexing.from_string ~with_positions:true s in
+  Lexing.set_filename lexer "-";
+  match parse_lex lexer with Ok p -> p | Error s -> failwith s

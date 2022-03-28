@@ -316,6 +316,22 @@ let rec translate_protocol (p : tprotocol) =
   | Assign (v, e) ->
     let (V (_, v)) = must_be_var_t v in
     AssignLocal (v, translate_expr e)
+  | ReceiveOnly {msg= MessageD {typ; args} ; _ } ->
+    let pre =
+      [
+        Op (">", [Term "messages[m]"; Term "0"]);
+        Equals ("m.mtype", Term typ);
+        Equals ("m.mdest", Term "self");
+      ]
+    in
+    let recv =
+      AssignGlobal ("messages", Apply ("Receive", [Term "m"; Term "messages"]))
+    in
+    let assignments = List.map (fun a -> let (V (_, v)) = must_be_var_t a in
+    (* TODO *)
+    Term "a"
+    ) args in
+    Exists ([("m", Term "DOMAIN messages")], Conj (pre  ))
   | Seq ({ p = ReceiveOnly { msg = MessageD { typ; args }; _ }; _ } :: rest) ->
     let pre =
       [
@@ -327,11 +343,12 @@ let rec translate_protocol (p : tprotocol) =
     let recv =
       AssignGlobal ("messages", Apply ("Receive", [Term "m"; Term "messages"]))
     in
-    let body = List.map translate_protocol rest in
     let rest =
+      let body = List.map translate_protocol rest in
       match args with
       | [] -> body @ [recv]
       | _ ->
+        (* TODO this may be wrong. shoudld be translated into assignments? *)
         let bindings =
           args
           |> List.map (fun a ->
@@ -370,7 +387,6 @@ let rec translate_protocol (p : tprotocol) =
   | BlockingImply (c, body) -> Conj [translate_expr c; translate_protocol body]
   | Call _ -> nyi "translate protocol call"
   (* these should have been removed by now *)
-  | ReceiveOnly _ -> bug "receive should appear only inside a seq by this point"
   | Exists (_, _, _) -> nyi "do protocol exists"
   | Forall (_, _, _) -> nyi "do protocol forall"
   | Par _ -> bug "do protocol par"
@@ -417,7 +433,7 @@ let fence_to_pc tid f =
 let translate_node all_vars pname (id, node) =
   (* not sure if we want to get this from the graph? *)
   let tid = node.protocol.pmeta.tid in
-  let pc_current = fence_to_pc tid node.fence in
+  let pc_current = fence_to_pc tid node.cpre in
   let pc_next =
     AssignLocal
       ( "pc",
