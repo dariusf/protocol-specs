@@ -418,7 +418,7 @@ let to_graphviz env pname g m =
              | [] -> ""
              | _ ->
                Format.sprintf "{%a}\\n"
-                 (List.pp (Print.pp_texpr_untyped ~env))
+                 (List.pp Print.pp_texpr_untyped)
                  preconditions
            in
            let fence = Format.sprintf "{%s}\\n" (render_fence fence) in
@@ -435,8 +435,7 @@ let to_graphviz env pname g m =
            in
            let succinct = true in
            let module Protocol = struct
-             let to_string =
-               Format.asprintf "%a" (Print.pp_tprotocol_untyped ~env)
+             let to_string = Format.asprintf "%a" Print.pp_tprotocol_untyped
            end in
            begin
              (if succinct then

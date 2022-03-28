@@ -74,7 +74,7 @@ Single-decree Paxos
   promise_responses = {};
   (proposal = proposal + 1;
    (forall a in A
-      ->a : prepare(n=p2i(self) * 100 + self.proposal);
+      ->a : prepare(n=p2i(self) * 100 + proposal);
       a-> : promise(cp, cv);
       promise_responses = union(promise_responses, {a});
       (cp > 0 & cp > cp =>
@@ -83,7 +83,7 @@ Single-decree Paxos
    ||
    size(promise_responses) > majority =>*
      (forall a1 in promise_responses
-        ->a1 : propose(pn=self.proposal, pv=self.value, a1=a1);
+        ->a1 : propose(pn=proposal, pv=value, a1=a1);
         a1-> : accept))
 
   $ protocol print paxos.spec --parties P,A,L --project A
@@ -94,7 +94,7 @@ Single-decree Paxos
      (p-> : prepare(n);
       (n > highest_proposal =>
          highest_proposal = n;
-         ->p : promise(cp=self.accepted_proposal, cv=self.accepted_value))
+         ->p : promise(cp=accepted_proposal, cv=accepted_value))
       ||
       p-> : propose(pn, pv, a1);
       (pn == highest_proposal =>

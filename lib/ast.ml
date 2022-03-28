@@ -124,14 +124,18 @@ type ('e, 'v) msg =
       typ : string;
       args : ('v * 'e) list;
     }
-[@@deriving show { with_path = false }, eq]
+[@@deriving
+  show { with_path = false }, eq, visitors { variety = "map"; name = "map_msg" }]
 
 type 'v msg_destruct =
   | MessageD of {
       typ : string;
       args : 'v list;
     }
-[@@deriving show { with_path = false }, eq]
+[@@deriving
+  show { with_path = false },
+    eq,
+    visitors { variety = "map"; name = "map_msg_destruct" }]
 
 let msg name = Message { typ = name; args = [] }
 
@@ -182,24 +186,44 @@ module Protocol = struct
       visitors { variety = "map"; name = "map" },
       visitors { variety = "reduce"; name = "reduce" }]
 
-  (* provide default implementation, so subclasses are succinct *)
   class ['self] map_protocol =
-    object (_ : 'self)
-      inherit [_] map
-      method visit_'v _env m = m
-      method visit_'e _env m = m
+    object (self : 'self)
+      inherit [_] map_expr
+
+      (* primitive methods are overriden. doesn't seem to matter which one we use *)
+      inherit! [_] map
+
+      (* these methods are called and must be provided *)
       method visit_'a _env m = m
-      method visit_var _env m = m
-      method visit_msg _ _ _env m = m
-      method visit_msg_destruct _env _ m = m
+      method visit_'e env m = self#visit__expr env m
+      method visit_'v env m = self#visit__expr env m
+
+      method visit_msg ve vv env m =
+        let vp =
+          object
+            inherit [_] map_msg
+            method visit_'e env m = ve env m
+            method visit_'v env m = vv env m
+          end
+        in
+        vp#visit_msg env m
+
+      method visit_msg_destruct vv env m =
+        let vp =
+          object
+            inherit [_] map_msg_destruct
+            method visit_'v env m = vv env m
+          end
+        in
+        vp#visit_msg_destruct env m
     end
 
   class virtual ['self] reduce_protocol =
     object (self : 'self)
       inherit [_] reduce
-      method visit_'v _env _ = self#zero
-      method visit_'e _env _ = self#zero
       method visit_'a _env _ = self#zero
+      method visit_'e _env _ = self#zero
+      method visit_'v _env _ = self#zero
       method visit_var _env _ = self#zero
       method visit_msg _ _ _env _ = self#zero
       method visit_msg_destruct _env _ _ = self#zero

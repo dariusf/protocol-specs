@@ -119,7 +119,7 @@ let print project_party parties ast types actions latex file =
       Print.render_functions env |> PPrint.ToChannel.pretty 0.8 120 stdout;
       tprotocol
       |> (if types then Print.render_tprotocol ~latex ~env
-         else Print.render_tprotocol_untyped ~latex ~env)
+         else Print.render_tprotocol_untyped ~latex)
       |> PPrint.ToChannel.pretty 0.8 120 stdout;
       print_endline "")
 

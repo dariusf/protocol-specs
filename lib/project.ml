@@ -20,103 +20,28 @@ let rec vars_in e =
   | Tuple (a, b) -> List.concat_map vars_in [a; b]
   | Else | Timeout -> nyi "else/timeout"
 
-let substitute_expr ~v ~by e =
-  let rec aux e =
-    match e.expr with
-    | Int _ | Bool _ | String _ -> e
-    | Var (V (p, v1)) ->
-      let (p : party option) =
-        match p with
-        | Some (Party p1) when String.equal p1 v -> Some (Party by)
-        | _ -> p
-      in
-      let v1 = if String.equal v1 v then by else v1 in
-      { e with expr = Var (V (p, v1)) }
-    | App (f, args) -> { e with expr = App (f, List.map aux args) }
-    | Set s -> { e with expr = Set (List.map aux s) }
-    | List s -> { e with expr = List (List.map aux s) }
-    | Map s -> { e with expr = Map (List.map (fun (k, v) -> (k, aux v)) s) }
-    | Tuple (a, b) -> { e with expr = Tuple (aux a, aux b) }
-    | Else | Timeout -> nyi "else/timeout"
-  in
-  aux e
-
-let substitute ~v ~by p =
-  let rec aux p =
-    match p.p with
-    | Send { from; to_; msg = Message { typ; args } } ->
-      {
-        p with
-        p =
-          Send
-            {
-              from = substitute_expr ~v ~by from;
-              to_ = substitute_expr ~v ~by to_;
-              msg =
-                Message
-                  {
-                    typ;
-                    args =
-                      List.map
-                        (fun (va, e) -> (va, substitute_expr ~v ~by e))
-                        args;
-                  };
-            };
-      }
-    | SendOnly { to_; msg = Message { typ; args } } ->
-      {
-        p with
-        p =
-          SendOnly
-            {
-              to_ = substitute_expr ~v ~by to_;
-              msg =
-                Message
-                  {
-                    typ;
-                    args =
-                      List.map
-                        (fun (va, e) -> (va, substitute_expr ~v ~by e))
-                        args;
-                  };
-            };
-      }
-    | ReceiveOnly { from; msg } ->
-      { p with p = ReceiveOnly { from = substitute_expr ~v ~by from; msg } }
-    | Emp -> { p with p = Emp }
-    | Seq ps -> { p with p = Seq (List.map aux ps) }
-    | Par ps -> { p with p = Par (List.map aux ps) }
-    | Forall (va, s, b) ->
-      {
-        p with
-        p = Forall (substitute_expr ~v ~by va, substitute_expr ~v ~by s, aux b);
-      }
-    | Disj (a, b) -> { p with p = Disj (aux a, aux b) }
-    | Assign (va, e) ->
-      {
-        p with
-        p = Assign (substitute_expr ~v ~by va, substitute_expr ~v ~by e);
-      }
-    | Call { f; args } ->
-      { p with p = Call { f; args = List.map (substitute_expr ~v ~by) args } }
-    | Imply (e, b) -> { p with p = Imply (substitute_expr ~v ~by e, aux b) }
-    | BlockingImply (e, b) ->
-      { p with p = BlockingImply (substitute_expr ~v ~by e, aux b) }
-    | Exists (_, _, _) -> nyi "substitute Exists"
-    | Comment (_, _, _) -> nyi "substitute Comment"
-  in
-  aux p
-
-let remove_call (e : tprotocol) : tprotocol =
+let substitute ~v ~by (p : tprotocol) : tprotocol =
   let vp =
     object
       inherit [_] map_protocol
 
-      method! visit__protocol _env p =
-        match p.p with Call _ -> { p with p = Emp } | _ -> p
+      method! visit_var _env (V (p, v1)) =
+        let (p : party option) =
+          match p with
+          | Some (Party p1) when String.equal p1 v -> Some (Party by)
+          | _ -> p
+        in
+        let v1 = if String.equal v1 v then by else v1 in
+        V (p, v1)
+
+      (* don't change message fields *)
+      method! visit_msg ve _vv env (Message { typ; args }) =
+        Message { typ; args = List.map (fun (k, v) -> (k, ve env v)) args }
+
+      method! visit_msg_destruct _vv _env m = m
     end
   in
-  vp#visit__protocol () e
+  vp#visit__protocol () p
 
 (** Given the environment (which knows about all the parties),
     and a protocol to project, returns a list of protocols projected
@@ -180,7 +105,7 @@ let rec project_protocol : string -> env -> tprotocol -> tprotocol =
             let left =
               project_protocol party env (substitute ~v:name ~by:"self" body)
             in
-            let right = project_protocol party env (remove_call body) in
+            let right = project_protocol party env body in
             let set_minus_self =
               App
                 ( "\\",
@@ -229,18 +154,10 @@ let rec project_protocol : string -> env -> tprotocol -> tprotocol =
   | Comment _ -> bug "invalid comment"
 
 let strip_qualifiers (e : tprotocol) : tprotocol =
-  let ve =
-    object
-      inherit [_] map_expr
-      method! visit_var _env (V (_, v)) = V (None, v)
-    end
-  in
-  let expr e = ve#visit__expr () e in
   let vp =
     object
       inherit [_] map_protocol
-      method! visit_'e _env m = expr m
-      method! visit_'v _env m = expr m
+      method! visit_var _env (V (_, v)) = V (None, v)
     end
   in
   vp#visit__protocol () e

@@ -146,9 +146,9 @@ let rec render_texpr : ?prec:int -> env:env -> texpr -> document =
          ])
   | _ -> render_expr_ (render_texpr ~env) ~prec e
 
-let rec render_texpr_as_expr : ?prec:int -> env:env -> texpr -> document =
- fun ?(prec = 0) ~env e ->
-  match e.expr with _ -> render_expr_ (render_texpr_as_expr ~env) ~prec e
+let rec render_texpr_as_expr : ?prec:int -> texpr -> document =
+ fun ?(prec = 0) e ->
+  match e.expr with _ -> render_expr_ render_texpr_as_expr ~prec e
 
 (* let indent d = blank 2 ^^ nest 2 d in *)
 let get_protocol_prec p =
@@ -310,8 +310,8 @@ let render_protocol ?(latex = false) p = render_protocol_ latex render_expr p
 let render_tprotocol ?(latex = false) ~env p =
   render_protocol_ latex (render_texpr ~env) p
 
-let render_tprotocol_untyped ?(latex = false) ~env p =
-  render_protocol_ latex (render_texpr_as_expr ~env) p
+let render_tprotocol_untyped ?(latex = false) p =
+  render_protocol_ latex render_texpr_as_expr p
 
 let render_functions env =
   env.subprotocols |> SMap.bindings
@@ -320,7 +320,7 @@ let render_functions env =
            [
              string "protocol";
              string name ^^ parens empty;
-             parens (nest 2 (nl ^^ render_tprotocol_untyped ~env f.tp) ^^ nl);
+             parens (nest 2 (nl ^^ render_tprotocol_untyped f.tp) ^^ nl);
              nl;
            ])
   |> concat
@@ -333,10 +333,10 @@ let to_pp ?(one_line = true) render fmt a =
     pretty (render a)
 
 let pp_tprotocol ~env = to_pp (render_tprotocol ~env)
-let pp_tprotocol_untyped ~env = to_pp (render_tprotocol_untyped ~env)
+let pp_tprotocol_untyped fmt = to_pp render_tprotocol_untyped fmt
 let pp_expr = to_pp (fun t -> render_expr t)
 let pp_texpr ~env = to_pp (fun t -> render_texpr ~env t)
-let pp_texpr_untyped ~env = to_pp (fun t -> render_texpr_as_expr ~env t)
+let pp_texpr_untyped = to_pp (fun t -> render_texpr_as_expr t)
 let pp_typ ~env = to_pp (fun t -> render_typ ~env t)
 let pp_ownership ~env = to_pp (fun t -> render_own ~env t)
 

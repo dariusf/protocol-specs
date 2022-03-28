@@ -289,20 +289,17 @@ let find_party_var_by_type_of env var =
         (match env.bindings |> check_env with
         | [] ->
           dump_env env;
-          fail ~loc "could not insert qualifier for %a"
-            (Print.pp_texpr_untyped ~env)
+          fail ~loc "could not insert qualifier for %a" Print.pp_texpr_untyped
             var
         | [(c, _)] -> c
         | cs ->
           fail ~loc "more than one possible qualifier for %a: %a"
-            (Print.pp_texpr_untyped ~env)
-            var (List.pp String.pp)
+            Print.pp_texpr_untyped var (List.pp String.pp)
             (cs |> List.map fst))
       | [(c, _)] -> c
       | cs ->
         fail ~loc "more than one possible qualifier for %a: %a"
-          (Print.pp_texpr_untyped ~env)
-          var (List.pp String.pp)
+          Print.pp_texpr_untyped var (List.pp String.pp)
           (cs |> List.map fst)
     in
     Some (Party candidate : party)
