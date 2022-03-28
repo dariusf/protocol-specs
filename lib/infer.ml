@@ -488,7 +488,7 @@ let rec infer : ?in_seq:bool -> protocol -> env -> tprotocol * env =
   let loc = p.pmeta in
   match p.p with
   | Emp -> ({ p = Emp; pmeta = pmeta ~loc ~env () }, env)
-  | Call { f; args; is_self } ->
+  | Call { f; args } ->
     (* TODO lookup the function environment *)
     let args, env =
       List.fold_left
@@ -498,7 +498,7 @@ let rec infer : ?in_seq:bool -> protocol -> env -> tprotocol * env =
         ([], env) args
     in
     let args = List.rev args in
-    ({ p = Call { f; args; is_self }; pmeta = pmeta ~loc ~env () }, env)
+    ({ p = Call { f; args }; pmeta = pmeta ~loc ~env () }, env)
   | Send { from; to_; msg = Message { args; typ = mtype } } ->
     let fm, tm = (from.meta, to_.meta) in
     let (V (fp, from)) = must_be_var from in
@@ -730,15 +730,6 @@ let rec infer : ?in_seq:bool -> protocol -> env -> tprotocol * env =
   | SendOnly _ -> bug "infer_parties doesn't expect send only"
   | ReceiveOnly _ -> bug "infer_parties doesn't expect receive only"
 
-let parse_spec file =
-  (* let p = Parsing.parse_inc file in *)
-  match
-    if String.equal file "-" then Parsing.parse_mono_ic file stdin
-    else Parsing.parse_mono file
-  with
-  | Ok p -> p
-  | Error s -> failwith s
-
 let initial_env parties =
   let parties, var_info =
     parties
@@ -902,11 +893,8 @@ let rec qualify_vars env p =
                 };
           };
     }
-  | Call { f; args; is_self } ->
-    {
-      p with
-      p = Call { f; args = List.map (qualify_vars_expr env) args; is_self };
-    }
+  | Call { f; args } ->
+    { p with p = Call { f; args = List.map (qualify_vars_expr env) args } }
   | Assign (v, e) ->
     { p with p = Assign (qualify_vars_expr env v, qualify_vars_expr env e) }
   | Imply (c, b) ->

@@ -150,8 +150,6 @@ module Protocol = struct
     | Par of ('a, 'e, 'v) _protocol list
     | Disj of ('a, 'e, 'v) _protocol * ('a, 'e, 'v) _protocol
     | Call of {
-        (* is_self plays a similar role as the qualifier in self-send projection *)
-        is_self : bool;
         f : string;
         args : 'e list;
       }
@@ -184,6 +182,7 @@ module Protocol = struct
       visitors { variety = "map"; name = "map" },
       visitors { variety = "reduce"; name = "reduce" }]
 
+  (* provide default implementation, so subclasses are succinct *)
   class ['self] map_protocol =
     object (_ : 'self)
       inherit [_] map

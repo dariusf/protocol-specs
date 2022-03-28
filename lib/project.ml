@@ -97,18 +97,8 @@ let substitute ~v ~by p =
         p with
         p = Assign (substitute_expr ~v ~by va, substitute_expr ~v ~by e);
       }
-    | Call { f; args; _ } ->
-      {
-        p with
-        p =
-          Call
-            {
-              f;
-              args = List.map (substitute_expr ~v ~by) args;
-              (* toggles this flag if we're substituting with self *)
-              is_self = String.equal by "self";
-            };
-      }
+    | Call { f; args } ->
+      { p with p = Call { f; args = List.map (substitute_expr ~v ~by) args } }
     | Imply (e, b) -> { p with p = Imply (substitute_expr ~v ~by e, aux b) }
     | BlockingImply (e, b) ->
       { p with p = BlockingImply (substitute_expr ~v ~by e, aux b) }
@@ -116,6 +106,17 @@ let substitute ~v ~by p =
     | Comment (_, _, _) -> nyi "substitute Comment"
   in
   aux p
+
+let remove_call (e : tprotocol) : tprotocol =
+  let vp =
+    object
+      inherit [_] map_protocol
+
+      method! visit__protocol _env p =
+        match p.p with Call _ -> { p with p = Emp } | _ -> p
+    end
+  in
+  vp#visit__protocol () e
 
 (** Given the environment (which knows about all the parties),
     and a protocol to project, returns a list of protocols projected
@@ -148,9 +149,8 @@ let rec project_protocol : string -> env -> tprotocol -> tprotocol =
       else Emp
     in
     { pr with p }
-  | Call { is_self; _ } ->
-    (* the sole purpose of this field *)
-    let p = if is_self then pr.p else Emp in
+  | Call _ ->
+    let p = if true then pr.p else Emp in
     { pr with p }
   | Imply (c, body) ->
     let body1 = project_protocol party env body in
@@ -180,7 +180,7 @@ let rec project_protocol : string -> env -> tprotocol -> tprotocol =
             let left =
               project_protocol party env (substitute ~v:name ~by:"self" body)
             in
-            let right = project_protocol party env body in
+            let right = project_protocol party env (remove_call body) in
             let set_minus_self =
               App
                 ( "\\",

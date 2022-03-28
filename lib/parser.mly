@@ -57,7 +57,7 @@ protocol :
   | p1 = var; ARROW; p2 = var; COLON; m = IDENT; args = loption(delimited(LPAREN, separated_nonempty_list(COMMA, msg_kvp), RPAREN));
     { p_with_pos $startpos $endpos (Send { from = p1; to_ = p2; msg = Message { typ = m; args = args } }) }
   | DOLLAR; f = IDENT; args = loption(delimited(LPAREN, separated_list(COMMA, expr), RPAREN));
-    { p_with_pos $startpos $endpos (Call {is_self = false; f; args}) }
+    { p_with_pos $startpos $endpos (Call {f; args}) }
   | p1 = protocol; SEMI; p2 = protocol;
     { p_with_pos $startpos $endpos (Seq [p1; p2]) }
   | p1 = protocol; PAR; p2 = protocol;

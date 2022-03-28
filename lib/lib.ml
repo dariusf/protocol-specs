@@ -19,7 +19,7 @@ let parse_parties s =
   (parties, party_sizes)
 
 let parse file =
-  let spec = Infer.parse_spec file in
+  let spec = Parsing.parse_spec file in
   {
     spec with
     protocol =

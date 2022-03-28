@@ -133,3 +133,11 @@ let parse_inc file =
              (match pos with
              | None -> ""
              | Some (line, pos) -> Format.sprintf "line %d, col %d" line pos)))
+
+let parse_spec file =
+  (* let p = Parsing.parse_inc file in *)
+  match
+    if String.equal file "-" then parse_mono_ic file stdin else parse_mono file
+  with
+  | Ok p -> p
+  | Error s -> failwith s
