@@ -77,9 +77,7 @@ let rec project_protocol : string -> env -> tprotocol -> tprotocol =
       else Emp
     in
     { pr with p }
-  | Call _ ->
-    let p = if true then pr.p else Emp in
-    { pr with p }
+  | Call _ -> pr
   | Imply (c, body) ->
     let body1 = project_protocol party env body in
     let p =
