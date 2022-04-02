@@ -316,7 +316,7 @@ let rec translate_protocol (p : tprotocol) =
   | Assign (v, e) ->
     let (V (_, v)) = must_be_var_t v in
     AssignLocal (v, translate_expr e)
-  | ReceiveOnly {msg= MessageD {typ; args} ; _ } ->
+  | ReceiveOnly { msg = MessageD { typ; args }; _ } ->
     let pre =
       [
         Op (">", [Term "messages[m]"; Term "0"]);
@@ -324,14 +324,18 @@ let rec translate_protocol (p : tprotocol) =
         Equals ("m.mdest", Term "self");
       ]
     in
-    let recv =
+    let _recv =
       AssignGlobal ("messages", Apply ("Receive", [Term "m"; Term "messages"]))
     in
-    let assignments = List.map (fun a -> let (V (_, v)) = must_be_var_t a in
-    (* TODO *)
-    Term "a"
-    ) args in
-    Exists ([("m", Term "DOMAIN messages")], Conj (pre  ))
+    let _assignments =
+      List.map
+        (fun a ->
+          let (V (_, _v)) = must_be_var_t a in
+          (* TODO *)
+          Term "a")
+        args
+    in
+    Exists ([("m", Term "DOMAIN messages")], Conj pre)
   | Seq ({ p = ReceiveOnly { msg = MessageD { typ; args }; _ }; _ } :: rest) ->
     let pre =
       [

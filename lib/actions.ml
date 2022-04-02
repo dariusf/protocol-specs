@@ -136,357 +136,6 @@ type state = {
   revisit : (int list * int list) list;
 }
 
-(** groups a seq into sub-seqs such that each one corresponds to an atomic action.
-
-    subactions are
-
-    - send
-    - receive
-    - assignment
-    - something else (like a disj), but containing only subactions
-
-    atomic actions are
-
-    1. a+
-    2. s
-    3. r a*
-    4. e
-
-    there are other longer sequences which could be actions, like a+ s, but we'll keep it simple for now.
-*)
-let rec group_seq :
-    env ->
-    texpr list ->
-    (string * string) list ->
-    pmeta ->
-    (string * state) list ->
-    tprotocol list ->
-    state list =
- fun env lpre params meta proc_actions (ts : tprotocol list) ->
-  let rec loop curr acc (ts : tprotocol list) =
-    match ts with
-    | [] ->
-      curr :: acc
-      (* remove empty seqs. we could not add them instead, but this seems cleaner *)
-      |> List.filter (function [] -> false | _ -> true)
-      |> List.map List.rev |> List.rev
-    | t :: ts1 ->
-      (match t.p with
-      | ReceiveOnly _ ->
-        (* also terminate current sequence *)
-        loop [t] (curr :: acc) ts1
-      | Assign (_, _) -> loop (t :: curr) acc ts1
-      | SendOnly _ | _ ->
-        (* always terminate the current sequence, and don't even start a new one *)
-        loop [] ([t] :: curr :: acc) ts1)
-  in
-  let label_action prs =
-    match prs with
-    | { p = ReceiveOnly _; pmeta } :: _
-    | { p = SendOnly _; pmeta } :: _
-    | { p = Assign _; pmeta } :: _ ->
-      let id = fresh_node_id () in
-      let thread = pmeta.tid in
-      let g = G.add_vertex G.empty id in
-      let used_params =
-        params
-        |> List.filter (fun (pa, _) ->
-               List.mem ~eq:String.equal pa
-                 (prs |> List.concat_map used_names
-                |> List.uniq ~eq:String.equal))
-      in
-
-      let unq_fence = Cond (thread, id) in
-      let cpost =
-        (* List.fold_right (fun (v, s) t -> Forall (v, s, t)) params *)
-        unq_fence
-      in
-      let node =
-        {
-          params = used_params;
-          lpre;
-          protocol = { p = Seq prs; pmeta = meta };
-          (* temporarily, a more specific one is filled in when this appears as part of a larger structure *)
-          cpre = ThreadStart;
-          cpost;
-        }
-      in
-      let m = IMap.singleton id node in
-      {
-        start = [id];
-        end_ = [id];
-        graph = g;
-        actions = m;
-        post = unq_fence;
-        revisit = [];
-      }
-    | [pp] -> split_actions env lpre params proc_actions pp
-    | _ -> bug "not a valid composite action"
-  in
-  loop [] [] ts |> List.map label_action
-
-and split_actions :
-    env ->
-    texpr list ->
-    (string * string) list ->
-    (string * state) list ->
-    tprotocol ->
-    state =
- fun env lpre params proc_actions (t : tprotocol) ->
-  match t.p with
-  | Forall (v, s, body) ->
-    let (V (_, v1)) = must_be_var_t v in
-    let (V (_, s1)) = must_be_var_t s in
-    let st = split_actions env lpre ((v1, s1) :: params) proc_actions body in
-    { st with post = Forall (v1, s1, st.post) }
-  | Seq ps ->
-    (* empty precondition *)
-    let ps1 = group_seq env [] params t.pmeta proc_actions ps in
-
-    (* only the first in a seq gets the precondition, because it may invalidate it, and we don't check for that atm *)
-    let ps1 =
-      List.mapi
-        (fun i p ->
-          if i = 0 then
-            { p with actions = IMap.map (fun v -> { v with lpre }) p.actions }
-          else p)
-        ps1
-    in
-
-    (* the fence cond is what the SUCCESSOR of a node has to wait for *)
-    let actions = ps1 in
-
-    let st =
-      foldl1
-        (fun {
-               start = st;
-               end_ = et;
-               graph = gt;
-               actions = mt;
-               post = ft;
-               revisit;
-             }
-             {
-               start = sc;
-               end_ = ec;
-               graph = gc;
-               actions = mc;
-               post = fc;
-               revisit;
-             } ->
-          let g1 = G.concat_graphs_with ~ending:et ~starting:sc gt gc in
-          (* Format.eprintf
-             "folding seq: fence between actions %s (%s to %s) and %s (%s to %s): \
-              %a and %a@."
-             ([%derive.show: int list] (G.find_vertices (fun _ -> true) gt))
-             ([%derive.show: int list] st)
-             ([%derive.show: int list] et)
-             ([%derive.show: int list] (G.find_vertices (fun _ -> true) gc))
-             ([%derive.show: int list] sc)
-             ([%derive.show: int list] ec)
-             pp_fence_cond ft pp_fence_cond fc; *)
-          {
-            start = st;
-            end_ = ec;
-            graph = g1;
-            actions =
-              IMap.disjoint_union mt
-                (mc
-                (* |> IMap.mapi (fun id n ->
-                       match G.in_degree gc id with
-                       | 0 -> { n with fence = ft }
-                       | _ -> n
-                       ) *)
-                |> IMap.mapi (fun id n ->
-                       if List.mem ~eq:Int.equal id sc then { n with cpre = ft }
-                       else n));
-            (* move to the next one *)
-            post = fc;
-            revisit = [];
-          })
-        actions
-    in
-    st
-  | SendOnly _ | ReceiveOnly _ | Assign (_, _) ->
-    (* this happens when an assignment is on its own, outside a seq. the simplest thing to do is treat it as a seq *)
-    split_actions env lpre params proc_actions { t with p = Seq [t] }
-  | Par ps ->
-    let actions = List.map (split_actions env lpre params proc_actions) ps in
-    let st =
-      List.fold_right
-        (fun {
-               start = sc;
-               end_ = ec;
-               graph = gc;
-               actions = mc;
-               post = fc;
-               revisit = r1;
-             }
-             {
-               start = st;
-               end_ = et;
-               graph = gt;
-               actions = mt;
-               post = ft;
-               revisit = r2;
-             } ->
-          (* take disjoint union of the two graphs *)
-          {
-            start = sc @ st;
-            end_ = ec @ et;
-            graph = G.merge_graphs gc gt;
-            actions = IMap.disjoint_union mc mt;
-            post = AllOf [fc; ft];
-            revisit = r1 @ r2;
-          })
-        actions
-        {
-          start = [];
-          end_ = [];
-          graph = G.empty;
-          actions = IMap.empty;
-          post = AllOf [];
-          revisit = [];
-        }
-    in
-    (* { st with post = AllOf st.post } *)
-    st
-  | Disj (a, b) ->
-    (* TODO mutually exclusive constraints *)
-    let {
-      start = as_;
-      end_ = ae;
-      graph = ag;
-      actions = am;
-      post = af;
-      revisit = r1;
-    } =
-      split_actions env lpre params proc_actions a
-    in
-    let {
-      start = bs;
-      end_ = be;
-      graph = bg;
-      actions = bm;
-      post = bf;
-      revisit = r2;
-    } =
-      split_actions env lpre params proc_actions b
-    in
-    {
-      start = as_ @ bs;
-      end_ = ae @ be;
-      graph = G.merge_graphs ag bg;
-      actions = IMap.disjoint_union am bm;
-      post = AnyOf [af; bf];
-      revisit = r1 @ r2;
-    }
-  | Imply (cond, p) | BlockingImply (cond, p) ->
-    split_actions env (cond :: lpre) params proc_actions p
-  | Call { f = name; _ } ->
-    (* print_endline "call"; *)
-    (* possibly cyclic graph *)
-    (match List.assoc_opt ~eq:String.equal name proc_actions with
-    | Some st ->
-      (* recursive call. add our fence to theirs *)
-      (* Format.eprintf "recursive call %s %s@."
-         ([%derive.show: int list] s)
-         ([%derive.show: int list] e); *)
-      st
-    | None ->
-      (* print_endline "none"; *)
-      let fbody = SMap.find name env.subprotocols in
-      (* create the beginning node *)
-      let id = fresh_node_id () in
-      let cpost =
-        (* List.fold_right
-           (fun (v, s) t -> Forall (v, s, t))
-           params *)
-        Cond (t.pmeta.tid, id)
-      in
-      (* Format.printf "cpost: %s@." (render_fence cpost); *)
-      (* Format.printf "preconditions: %a@." (List.pp pp_texpr) lpre; *)
-      let node =
-        {
-          params;
-          lpre;
-          protocol =
-            {
-              p = Emp;
-              pmeta =
-                pmeta ~tid:t.pmeta.tid ~loc:t.pmeta.ploc ~env:t.pmeta.penv ();
-            };
-          cpre = (* may not be right *)
-                 ThreadStart;
-          cpost;
-        }
-      in
-      let m = IMap.singleton id node in
-      let g = G.add_vertex G.empty id in
-      let s = [id] in
-      let e = [id] in
-
-      (* the cpre for that node is the current call site's *)
-      let { start = s1; end_ = e1; graph = g1; actions = m1; post = f; revisit }
-          =
-        (* TODO this is the only place proc_actions is changed. remove it later *)
-        split_actions env lpre params
-          (( name,
-             {
-               start = s;
-               end_ = e;
-               graph = g;
-               actions = m;
-               post = cpost;
-               revisit = [];
-             } )
-          :: proc_actions)
-          fbody.tp
-      in
-      (* Format.eprintf "emerged from fn body %a@." pp_fence_cond f; *)
-      (* if there's recursion in the body, it's possible the fence here will be of the form AnyOf[id; ...].
-         this is harmless so we don't filter it out *)
-      (* problems:
-         - immediate successors of function actions don't have its preconditions
-         - function actions don't have preconditions of recursive calls
-      *)
-      {
-        start = [id];
-        end_ = e1;
-        graph = G.concat_graphs_with ~starting:s1 ~ending:[id] g g1;
-        (* it's possible the same node reappears due to recursion *)
-        actions =
-          IMap.union
-            (fun _ a _ ->
-              (* Format.eprintf "node a %a@." pp_node a; *)
-              (* Format.eprintf "node b %a@." pp_node a; *)
-              (* Some { a with fence = AnyOf [a.fence; b.fence] } *)
-              Some a)
-            m m1
-          (* |> IMap.mapi (fun id n ->
-                 if List.mem ~eq:Int.equal id s1 then
-                   { n with fence = my_fence }
-                 else
-                   n) *);
-        post = f;
-        revisit = [];
-      }
-      (* () *))
-  | Exists (_, _, _) -> nyi "find actions exists"
-  | Comment (_, _, _) -> bug "find actions comment"
-  | Emp ->
-    {
-      start = [];
-      end_ = [];
-      graph = G.empty;
-      actions = IMap.empty;
-      post = ThreadStart;
-      revisit = [];
-    }
-  | Send _ -> bug "find actions send"
-
-(* START SIMPLE *)
-
 let split_actions_simple :
     texpr list ->
     (string * string) list ->
@@ -504,9 +153,6 @@ let split_actions_simple :
       { st with post = Forall (v1, s1, st.post) }
     | Imply (cond, p) | BlockingImply (cond, p) -> aux (cond :: lpre) params p
     | Seq ps ->
-      (* empty precondition *)
-      (* let ps1 = group_seq env [] params t.pmeta proc_actions ps in *)
-
       (* convert them all, then stitch them together after *)
       let ps1 =
         (* empty precondition *)
@@ -545,41 +191,12 @@ let split_actions_simple :
                  revisit = r2;
                } ->
             let g1 = G.concat_graphs_with ~ending:et ~starting:sc gt gc in
-
-            (* TODO modify et and ec *)
-            (* TODO actions *)
-
-            (* Format.eprintf
-               "folding seq: fence between actions %s (%s to %s) and %s (%s to %s): \
-                %a and %a@."
-               ([%derive.show: int list] (G.find_vertices (fun _ -> true) gt))
-               ([%derive.show: int list] st)
-               ([%derive.show: int list] et)
-               ([%derive.show: int list] (G.find_vertices (fun _ -> true) gc))
-               ([%derive.show: int list] sc)
-               ([%derive.show: int list] ec)
-               pp_fence_cond ft pp_fence_cond fc; *)
             {
               start = st;
               end_ = ec;
               graph = g1;
               actions =
                 IMap.disjoint_union mt
-                  (* |> IMap.mapi (fun id n ->
-                         if List.mem ~eq:Int.equal id et then
-                           let post1 =
-                             sc |> List.map (fun s -> (IMap.find s mc).cpre)
-                           in
-                           {
-                             n with
-                             cpost =
-                               (match post1 with
-                               | [p] -> p
-                               | _ ->
-                                 (* TODO correct? *)
-                                 AnyOf post1);
-                           }
-                         else n) *)
                   (mc
                   (* change precondition to match predecessor's. instead we're changing post to match successor's *)
                   |> IMap.mapi (fun id n ->
@@ -632,82 +249,32 @@ let split_actions_simple :
         | _ -> bug "unexpected"
       end
     | Call { f = name; _ } ->
-      (* print_endline "call"; *)
       (* possibly cyclic graph *)
-      (* print_endline "none"; *)
-      (* let fbody = SMap.find name env.subprotocols in *)
       (* create the beginning node *)
       let id = fresh_node_id () in
-      let cpre =
-        (* List.fold_right
-           (fun (v, s) t -> Forall (v, s, t))
-           params *)
-        (* Cond (t.pmeta.tid, id) *)
-        ThreadStart
-      in
+      let cpre = ThreadStart in
       let dest_id = List.assoc ~eq:String.equal name fn_entrypoints in
       let cpost = Cond (t.pmeta.tid, dest_id) in
-      (* Format.printf "cpost: %s@." (render_fence cpost); *)
-      (* Format.printf "preconditions: %a@." (List.pp pp_texpr) lpre; *)
       let action =
         {
           params;
           lpre;
-          protocol =
-            {
-              p = Call { f = name; args = [] };
-              pmeta =
-                t.pmeta
-                (* pmeta ~tid:t.pmeta.tid ~loc:t.pmeta.ploc ~env:t.pmeta.penv (); *);
-            };
+          protocol = { p = Call { f = name; args = [] }; pmeta = t.pmeta };
           cpre;
-          (* may not be right *)
-          (* ThreadStart; *)
           cpost;
         }
       in
       let m = IMap.singleton id action in
 
       let g = G.add_edge (G.add_vertex G.empty id) id dest_id in
-
-      (* let s = [id] in
-         let e = [id] in *)
-
-      (* the cpre for that node is the current call site's *)
-      (* let { start = s1; end_ = e1; graph = g1; actions = m1; post = f } =
-           aux lpre params fbody.tp
-         in *)
-      (* Format.eprintf "emerged from fn body %a@." pp_fence_cond f; *)
-      (* if there's recursion in the body, it's possible the fence here will be of the form AnyOf[id; ...].
-         this is harmless so we don't filter it out *)
-      (* problems:
-         - immediate successors of function actions don't have its preconditions
-         - function actions don't have preconditions of recursive calls
-      *)
       {
         start = [id];
         end_ = [id];
         graph = g;
-        (* G.concat_graphs_with ~starting:s ~ending:[id] g g1; *)
-        (* it's possible the same node reappears due to recursion *)
-        actions =
-          (* IMap.union *)
-          (* (fun _ a _ -> *)
-          (* Format.eprintf "node a %a@." pp_node a; *)
-          (* Format.eprintf "node b %a@." pp_node a; *)
-          (* Some { a with fence = AnyOf [a.fence; b.fence] } *)
-          (* Some a) *)
-          m
-          (* m1 *)
-          (* |> IMap.mapi (fun id n ->
-                 if List.mem ~eq:Int.equal id s1 then
-                   { n with fence = my_fence }
-                 else
-                   n) *);
+        actions = m;
         post = cpost;
-        revisit = [([id], [dest_id])] (* revisit = []; *);
+        revisit = [([id], [dest_id])];
       }
-      (* () *)
     | Par ps ->
       let actions = List.map (aux lpre params) ps in
       let st =
@@ -747,7 +314,6 @@ let split_actions_simple :
             revisit = [];
           }
       in
-      (* { st with post = AllOf st.post } *)
       st
     | Disj (a, b) ->
       (* TODO mutually exclusive constraints *)
@@ -793,8 +359,6 @@ let split_actions_simple :
     | Send _ -> bug "find actions send"
   in
   aux lpre params tprotocol
-
-(* END *)
 
 let compact = false
 let maybe_nl = if compact then "" else "\n"
@@ -936,43 +500,6 @@ let label_threads env party (p : tprotocol) : tprotocol =
   in
   aux { name = main_thread; params = [] } p
 
-let postprocess_graph_old g m =
-  let fn_actions =
-    IMap.bindings m
-    |> List.filter (fun (_, n) ->
-           match n.protocol.p with Emp -> true | _ -> false)
-  in
-  (* let fn_node_preconditions =
-       fn_actions
-       |> List.map (fun (id, _) ->
-              ( id,
-                AnyOf
-                  (G.pred g id |> List.map (fun n1 -> (IMap.find n1 m).my_fence))
-              ))
-     in *)
-  (* Format.eprintf "fn actions %s@."
-     ([%derive.show: int list] (fn_actions |> List.map fst)); *)
-  let fn_node_successor_preconditions =
-    fn_actions
-    |> List.concat_map (fun (id, n) ->
-           G.succ g id |> List.map (fun suc -> (suc, n.cpost)))
-  in
-  (* Format.eprintf "pred %s@."
-       ([%derive.show: (int * fence_cond) list] fn_node_preconditions);
-     Format.eprintf "succ %s@."
-       ([%derive.show: (int * fence_cond) list] fn_node_successor_preconditions); *)
-  (* let m =
-       List.fold_right
-         (fun (id, f) m1 -> IMap.add id { (IMap.find id m1) with fence = f } m1)
-         fn_node_preconditions m
-     in *)
-  let m =
-    List.fold_right
-      (fun (id, f) m1 -> IMap.add id { (IMap.find id m1) with cpre = f } m1)
-      fn_node_successor_preconditions m
-  in
-  (g, m)
-
 let is_directed_edge n1 n2 g =
   (* TODO check post1 = pre2? *)
   if
@@ -1067,78 +594,6 @@ let fuse n1 n2 graph actions =
     in
     (graph, actions)
 
-(** inefficient triangular substitutions. sadly our implementation of union find doesn't work here because linking by rank means we can't control which element should remain (which depends on the topology of the graph). see UF tests for more info *)
-module Redirects = struct
-  type t = (int * int) list
-
-  let empty = []
-  let iter f = List.iter (fun (k, v) -> f k v)
-
-  (** [b] is deleted and is now referred to as [a] *)
-  let fuse a b r = (b, a) :: r
-
-  (** absence from this data structure => presence *)
-  let rec find a r =
-    match List.assoc_opt ~eq:Int.equal a r with None -> a | Some a -> find a r
-end
-
-(** we start with a set of two sets of nodes to revisit, where there is a path from each node in the first set to each node in the second set.
-  
-  for every such set of start and end nodes, for every start, traverse forward, fusing nodes until we hit something in end. if we can't fuse, we don't stop there, but continue trying to fuse successors. *)
-let postprocess_graph_imp grain revisit graph actions =
-  log "grain: %a" pp_grain grain;
-  let g, a, _m =
-    List.fold_right
-      (fun (start, end_) (g, a, m) ->
-        log "start: %a" (List.pp Int.pp) start;
-        log "end_: %a" (List.pp Int.pp) end_;
-        Redirects.iter (fun k v -> log "%d -redirect-> %d" k v) m;
-        List.fold_right
-          (fun start (g, a, m) ->
-            let rec loop start (g, a, m) =
-              log "graph: %s" (to_graphviz "Debug" g a);
-              let succ =
-                G.succ g start |> List.map (fun s -> Redirects.find s m)
-              in
-              match succ with
-              | [s] when start = s ->
-                (* TODO is it possible that we miss trying to fuse a successor of this node that is not in a cycle? not sure *)
-                log "cycle, not fusing %d" start;
-                (g, a, m)
-              | [s]
-                when List.mem ~eq:Int.equal s end_
-                     && should_merge_protocols grain
-                          (IMap.find start actions).protocol
-                          (IMap.find s actions).protocol ->
-                log "ended at %d %d; fusing" start s;
-                let g, a = fuse start s g a in
-                (g, a, Redirects.fuse start s m)
-              | [s]
-                when should_merge_protocols grain
-                       (IMap.find start actions).protocol
-                       (IMap.find s actions).protocol (* && s is not cyclic *)
-                ->
-                log "fuse %d %d" start s;
-                let g, a = fuse start s g a in
-                loop start (g, a, Redirects.fuse start s m)
-              | [s] ->
-                log "continuing down";
-                loop s (g, a, m)
-              | _ ->
-                log
-                  "not doing %d because either cannot fuse, no successor, or \
-                   more than one successor@."
-                  start;
-                (g, a, m)
-            in
-            loop start (g, a, m))
-          start (g, a, m))
-      revisit
-      (* nodes may not be present depending on the order in which they are fused, so we need a way to "redirect" deleted node ids to present ones *)
-      (graph, actions, Redirects.empty)
-  in
-  (g, a)
-
 (* more declarative version which iterates to a fixed point. O(E^2)
 
    graph rewriting approach: find all candidate edges.
@@ -1198,122 +653,80 @@ let split_into_actions :
                { sp with tp = sp.tp |> label_threads env party });
     }
   in
-  let legacy = false in
-  match legacy with
-  | true ->
-    let st = split_actions env [] [] [] t in
-    (* this is necessary because cyclic structures can't be dealt with using recursion *)
-    let g, m = postprocess_graph_old st.graph st.actions in
-    (g, m)
-  | false ->
-    (* define every function's entry point *)
-    let fns = env.subprotocols |> SMap.bindings in
-    (* let initial_graph, fn_entrypoints = *)
-    let fn_entrypoints =
-      List.fold_right
-        (fun (name, _sp) t ->
-          let id = fresh_node_id () in
-          (* let g = G.add_vertex g id in *)
-          (name, id) :: t)
-        (* (g, (name, id) :: t)) *)
-        (* fns (G.empty, []) *)
-        fns []
-    in
+  (* define every function's entry point *)
+  let fns = env.subprotocols |> SMap.bindings in
+  (* let initial_graph, fn_entrypoints = *)
+  let fn_entrypoints =
+    List.fold_right
+      (fun (name, _sp) t ->
+        let id = fresh_node_id () in
+        (* let g = G.add_vertex g id in *)
+        (name, id) :: t)
+      (* (g, (name, id) :: t)) *)
+      (* fns (G.empty, []) *)
+      fns []
+  in
 
-    (* analyze functions first *)
-    let fns =
-      env.subprotocols |> SMap.bindings
-      |> List.map (fun (name, sp) ->
-             let st = split_actions_simple [] [] fn_entrypoints sp.tp in
-             (* put in starting precondition *)
-             (* let actions =
-                  List.fold_right
-                    (fun c t ->
-                      IMap.update c
-                        (function
-                          | None -> bug "node not present"
-                          | Some act ->
-                            Some
-                              {
-                                act with
-                                cpre =
-                                  Cond
-                                    ( act.protocol.pmeta.tid,
-                                      List.assoc ~eq:String.equal name fn_entrypoints
-                                    );
-                              })
-                        t)
-                    st.start st.actions
-                in *)
-             (* create the starting actions and link to the beginning of the function *)
-             let st =
-               let entry = List.assoc ~eq:String.equal name fn_entrypoints in
-               let fn_start =
-                 match st.start with
-                 | [s] -> s
-                 | _ -> bug "invalid function start"
-               in
-               let entry_cond = Cond (sp.tp.pmeta.tid, entry) in
-               let actions =
-                 st.actions
-                 |> IMap.add entry
-                      {
-                        lpre = [];
-                        params = [];
-                        protocol = { pmeta = sp.tp.pmeta; p = Emp };
-                        cpre = entry_cond;
-                        (* cpost = Cond (sp.tp.pmeta.tid, fn_start); *)
-                        cpost = entry_cond;
-                      }
-                 |> IMap.update fn_start (function
-                      | None -> bug "invalid"
-                      | Some act -> Some { act with cpre = entry_cond })
-               in
-               let graph = G.add_edge st.graph entry fn_start in
-               { st with actions; graph }
+  (* analyze functions first *)
+  let fns =
+    env.subprotocols |> SMap.bindings
+    |> List.map (fun (name, sp) ->
+           let st = split_actions_simple [] [] fn_entrypoints sp.tp in
+           (* create the starting actions and link to the beginning of the function *)
+           let st =
+             let entry = List.assoc ~eq:String.equal name fn_entrypoints in
+             let fn_start =
+               match st.start with
+               | [s] -> s
+               | _ -> bug "invalid function start"
              in
-             (name, st))
-    in
+             let entry_cond = Cond (sp.tp.pmeta.tid, entry) in
+             let actions =
+               st.actions
+               |> IMap.add entry
+                    {
+                      lpre = [];
+                      params = [];
+                      protocol = { pmeta = sp.tp.pmeta; p = Emp };
+                      cpre = entry_cond;
+                      (* cpost = Cond (sp.tp.pmeta.tid, fn_start); *)
+                      cpost = entry_cond;
+                    }
+               |> IMap.update fn_start (function
+                    | None -> bug "invalid"
+                    | Some act -> Some { act with cpre = entry_cond })
+             in
+             let graph = G.add_edge st.graph entry fn_start in
+             { st with actions; graph }
+           in
+           (name, st))
+  in
 
-    (* analyze main + starting precondition *)
-    let st = split_actions_simple [] [] fn_entrypoints t in
-    let st =
-      let actions =
-        (* List.fold_right
-           (fun c t ->
-             IMap.update c
-               (function
-                 | None -> bug "node not present"
-                 | Some act -> Some { act with cpre = ThreadStart })
-               t)
-           st.start *)
-        st.actions
-      in
-      { st with actions }
-    in
+  (* analyze main + starting precondition *)
+  let st = split_actions_simple [] [] fn_entrypoints t in
+  let st =
+    let actions = st.actions in
+    { st with actions }
+  in
 
-    (* TODO add graph edges between functions *)
-    (* TODO why are seq edges missing from revisit *)
-    (* TODO remove the dummy skips *)
+  (* combine everything into a single graph *)
+  let graph =
+    let g = List.map (fun s -> s.graph) (st :: List.map snd fns) in
+    List.fold_right (fun c t -> G.merge_graphs c t) g G.empty
+  in
+  let actions =
+    let n = List.map (fun s -> s.actions) (st :: List.map snd fns) in
+    List.fold_right (fun c t -> IMap.disjoint_union c t) n IMap.empty
+  in
+  let revisit =
+    st.revisit @ (fns |> List.map snd |> List.concat_map (fun f -> f.revisit))
+  in
 
-    (* combine everything into a single graph *)
-    let graph =
-      let g = List.map (fun s -> s.graph) (st :: List.map snd fns) in
-      List.fold_right (fun c t -> G.merge_graphs c t) g G.empty
-    in
-    let actions =
-      let n = List.map (fun s -> s.actions) (st :: List.map snd fns) in
-      List.fold_right (fun c t -> IMap.disjoint_union c t) n IMap.empty
-    in
-    let revisit =
-      st.revisit @ (fns |> List.map snd |> List.concat_map (fun f -> f.revisit))
-    in
-
-    log "revisit: %a"
-      (List.pp (Pair.pp (List.pp Int.pp) (List.pp Int.pp)))
-      revisit;
-    let graph, actions = postprocess_graph grain revisit graph actions in
-    (graph, actions)
+  log "revisit: %a"
+    (List.pp (Pair.pp (List.pp Int.pp) (List.pp Int.pp)))
+    revisit;
+  let graph, actions = postprocess_graph grain revisit graph actions in
+  (graph, actions)
 
 let collect_message_types (p : tprotocol) =
   (* TODO this only collects message types, not args, which should be checked as well *)
