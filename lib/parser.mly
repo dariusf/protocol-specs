@@ -11,12 +11,12 @@
 %token <int> INT
 %token <string> IDENT
 %token <string> STRING
-%token FORALL EXISTS IN DOT IF WHEN DISJ SEMI PAR ARROW EQ STAR DOLLAR
+%token FORALL EXISTS IN DOT IF THEN END COND WHEN DISJ SEMI PAR ARROW EQ STAR DOLLAR
 %token INVARIANT LTL PROTOCOL
 
 %left PAR DISJ
 (* this also resolves shift/reduce conflicts with par/disj/semi, has to be before (lower than) semi *)
-%right IF WHEN
+%right COND WHEN
 (* this resolves the shift/reduce conflict caused by forall protocol; protocol in favour of shifting (negation of case 1 in 6.1 of the menhir manual) if this is before semi (try moving it after to see the effect). it's given a name because we don't want to use the rightmost terminal to figure out that production's precedence level *)
 %right forall_exists
 %left SEMI (* this being after if/when makes it the reverse of what ocaml does: semicolons get nested inside conditionals  *)
@@ -64,7 +64,7 @@ protocol :
     { p_with_pos $startpos $endpos (Par [p1; p2]) }
   | p1 = protocol; DISJ; p2 = protocol;
     { p_with_pos $startpos $endpos (Disj (p1, p2)) }
-  | b = expr; IF; p = protocol;
+  | b = expr; COND; p = protocol;
     { p_with_pos $startpos $endpos (Imply (b, p)) }
   | b = expr; WHEN; p = protocol;
     { p_with_pos $startpos $endpos (BlockingImply (b, p)) }
@@ -74,6 +74,11 @@ protocol :
     { p_with_pos $startpos $endpos (Forall (v, s, p)) }
   | EXISTS; v = var; IN; s = var; p = protocol; %prec forall_exists
     { p_with_pos $startpos $endpos (Exists (v, s, p)) }
+  | IF; b = expr; THEN; p1 = protocol; ELSE; p2 = protocol; END
+    { let notb = with_pos $startpos $endpos (App ("!", [b])) in
+      let left = p_with_pos $startpos $endpos (BlockingImply (b, p1)) in
+      let right = p_with_pos $startpos $endpos (BlockingImply (notb, p2)) in
+      p_with_pos $startpos $endpos (Disj (left, right)) }
   | LPAREN; p = protocol; RPAREN;
     { p }
 

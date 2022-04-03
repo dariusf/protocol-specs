@@ -5,17 +5,17 @@ forall c in C
      \/
      p->c: abort;
      c.has_aborted = true));
-  (!has_aborted =>
+  (if has_aborted then
+    forall p in P
+      c->p: abort;
+      p->c: abort_ack(p=p);
+      aborted = union(aborted, {p})
+   else
     forall p in P
       c->p: commit;
       p->c: commit_ack(p=p);
       committed = union(committed, {p})
-   \/
-   has_aborted =>
-    forall p in P
-      c->p: abort;
-      p->c: abort_ack(p=p);
-      aborted = union(aborted, {p}))
+   end)
 
 ltl ([] (size(committed) + size(aborted) == size(P) ==>
   committed == {} | aborted == {}))

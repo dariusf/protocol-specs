@@ -5,6 +5,9 @@ let show_token t =
   let open P in
   match t with
   | WHEN -> "WHEN"
+  | IF -> "IF"
+  | THEN -> "THEN"
+  | END -> "END"
   | TIMEOUT -> "TIMEOUT"
   | ELSE -> "ELSE"
   | DOLLAR -> "DOLLAR"
@@ -19,7 +22,7 @@ let show_token t =
   | LPAREN -> "LPAREN"
   | INT i -> Format.sprintf "INT %d" i
   | IN -> "IN"
-  | IF -> "IF"
+  | COND -> "COND"
   | IMPLIES -> "IMPLIES"
   | IDENT i -> Format.sprintf "IDENT %s" i
   | STRING i -> Format.sprintf "STRING %s" i

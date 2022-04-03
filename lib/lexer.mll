@@ -27,6 +27,9 @@ rule f = parse
   | "ltl" { LTL }
   | "timeout" { TIMEOUT }
   | "else" { ELSE }
+  | "if" { IF }
+  | "then" { THEN }
+  | "end" { END }
   | ident as i { IDENT i }
   | "$" { DOLLAR }
   | "&" { AND }
@@ -41,7 +44,7 @@ rule f = parse
   | ":" { COLON }
   | "," { COMMA }
   | "->" { ARROW }
-  | "=>" { IF }
+  | "=>" { COND }
   | "==>" { IMPLIES }
   | "=>*" { WHEN }
   | "=" { EQ }
