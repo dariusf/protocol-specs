@@ -8,13 +8,13 @@ forall c in C
   (if has_aborted then
     forall p in P
       c->p: abort;
-      p->c: abort_ack(p=p);
-      aborted = union(aborted, {p})
+      p->c: abort_ack;
+      c.aborted = union(c.aborted, {p})
    else
     forall p in P
       c->p: commit;
-      p->c: commit_ack(p=p);
-      committed = union(committed, {p})
+      p->c: commit_ack;
+      c.committed = union(c.committed, {p})
    end)
 
 ltl ([] (size(committed) + size(aborted) == size(P) ==>

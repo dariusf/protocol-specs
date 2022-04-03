@@ -11,7 +11,7 @@ type fml =
   | Apply of string * fml list
   | Op of string * fml list
   | Term of string
-  (* this is not symmetric but oh well, we only generate this from our specs, not hadnwrite *)
+  (* this is not symmetric but oh well, we only generate this from our specs, not handwrite *)
   | Equals of string * fml
   (* AssignLocal(v, f) is v' = [v EXCEPT ![self] = subst(v, v[self], f) ] *)
   | AssignLocal of string * fml
