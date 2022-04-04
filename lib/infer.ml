@@ -472,10 +472,15 @@ and infer_expr : expr -> env -> texpr * env =
   | MapComp _ ->
     (* infer_all (List.map snd b) env *)
     nyi "infer_parties_expr map comp"
+  | MapProj _ ->
+    (* infer_all (List.map snd b) env *)
+    nyi "infer_parties_expr map proj"
+  | Let _ ->
+    (* infer_all (List.map snd b) env *)
+    nyi "infer_parties_expr let"
   | Tuple (_, _) ->
     (* infer_all [a; b] env *)
     nyi "infer_parties_expr tuple"
-  | Else | Timeout -> nyi "else/timeout"
 
 (* can no longer use ppx_debug because of labelled arg *)
 let rec infer : ?in_seq:bool -> protocol -> env -> tprotocol * env =
@@ -817,8 +822,9 @@ let rec check_instantiated_expr env (t : texpr) =
   | App (_, args) -> List.iter (check_instantiated_expr env) args
   | Map _ -> nyi "map check_instanted_expr"
   | MapComp _ -> nyi "map comp check_instanted_expr"
+  | MapProj _ -> nyi "map proj check_instanted_expr"
+  | Let _ -> nyi "let check_instanted_expr"
   | Tuple (_, _) -> nyi "tuple check_instanted_expr"
-  | Else | Timeout -> nyi "else/timeout"
 
 let rec check_instantiated env p =
   match p.p with
@@ -860,8 +866,9 @@ let rec qualify_vars_expr _ (t : texpr) =
     { t with expr = App (f, List.map (qualify_vars_expr env) args) }
   | Map _ -> nyi "map check_instanted_expr"
   | MapComp _ -> nyi "map comp check_instanted_expr"
+  | MapProj _ -> nyi "map proj check_instanted_expr"
+  | Let _ -> nyi "let check_instanted_expr"
   | Tuple (_, _) -> nyi "tuple check_instanted_expr"
-  | Else | Timeout -> nyi "else/timeout"
 
 (** this approach of separately traversing the AST is taken because
   trying to qualify during type inference won't work, as types won't be fully

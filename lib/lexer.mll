@@ -4,7 +4,7 @@ exception SyntaxError
 }
 
 let digit = ['0'-'9']
-let ident = ['a'-'z' 'A'-'Z'] ['a'-'z' 'A'-'Z' '0'-'9' '_']*
+let ident = ['_' 'a'-'z' 'A'-'Z'] ['a'-'z' 'A'-'Z' '0'-'9' '_']*
 let num = (digit | ['1'-'9'] digit*)
 let tabs = ['\t' ' ']
 
@@ -26,11 +26,11 @@ rule token = parse
   | "invariant" { INVARIANT }
   | "protocol" { PROTOCOL }
   | "ltl" { LTL }
-  | "timeout" { TIMEOUT }
-  | "else" { ELSE }
   | "if" { IF }
   | "then" { THEN }
+  | "else" { ELSE }
   | "end" { END }
+  | "let" { LET }
   | ident as i { IDENT i }
   | "$" { DOLLAR }
   | "&" { AND }
@@ -68,6 +68,7 @@ rule token = parse
   | "[" { LBRACKET }
   | "]" { RBRACKET }
   | "<>" { DIAMOND }
+  (* conflict with empty list *)
   | "[]" { BOX }
   | '"' { STRING (string `Double (Buffer.create 100) lexbuf) }
   | '\'' { STRING (string `Single (Buffer.create 100) lexbuf) }

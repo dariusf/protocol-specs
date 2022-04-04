@@ -54,8 +54,6 @@ let render_expr_ :
   | Int i -> string (string_of_int i)
   | Bool b -> string (string_of_bool b)
   | String s -> string (Format.sprintf {|'%s'|} s)
-  | Timeout -> string "timeout"
-  | Else -> string "else"
   | Set es -> braces (List.map f es |> separate (spaced comma))
   | List es -> brackets (List.map f es |> separate (spaced comma))
   | Map es ->
@@ -85,6 +83,12 @@ let render_expr_ :
             match mc.pred with
             | None -> []
             | Some e -> [string "if"; space; f e]))
+  (* temporarily disabled, until shift/reduce conflict can be fixed *)
+  (* | MapProj (e, { expr = String i; _ }) -> concat [f e; dot; string i] *)
+  | MapProj (e, i) -> concat [f e; brackets (f i)]
+  | Let (x, e1, e2) ->
+    separate space
+      [string "let"; render_var x; equals; f e1; string "in"; (* nl; *) f e2]
   | App (fn, args) ->
     if List.length args = 2 && not (is_alpha fn.[0]) then
       let n = get_expr_prec fn in
@@ -112,8 +116,6 @@ let rec strip_type : texpr -> expr =
     | Int i -> Int i
     | Bool b -> Bool b
     | String s -> String s
-    | Timeout -> Timeout
-    | Else -> Else
     | Var v -> Var v
     | Set es -> Set (List.map strip_type es)
     | List es -> List (List.map strip_type es)
@@ -127,6 +129,8 @@ let rec strip_type : texpr -> expr =
           inp = strip_type mc.inp;
           pred = Option.map strip_type mc.pred;
         }
+    | MapProj (e, i) -> MapProj (strip_type e, strip_type i)
+    | Let (x, e1, e2) -> Let (x, strip_type e1, strip_type e2)
     | App (f, args) -> App (f, List.map strip_type args)
     | Tuple (_, _) -> failwith "tuples?"
   in

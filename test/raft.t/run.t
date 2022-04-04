@@ -1,6 +1,25 @@
 Raft
 
-$ protocol print raft.spec
+  $ protocol print raft.spec
+  (forall s in S
+     s.role = 'follower';
+     s.current_term = 1;
+     s.voted_for = none;
+     s.votes_responded = {};
+     s.votes_granted = {};
+     s.voter_log = {};
+     s['log'] = [];
+     s.next_index = ${{k: 1 for k, _ in S}};
+     s.match_index = ${{k: 0 for k, _ in S}});
+  $timeout()
+  ||
+  $restart()
+  ||
+  $start_election()
+  ||
+  $client_requests()
+  ||
+  $replicate()
 
 $ protocol print raft.spec --parties P,A,L --project P
 

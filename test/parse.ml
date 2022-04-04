@@ -1,7 +1,7 @@
 open Lib
 
 let%expect_test "lexer" =
-  let inp = "${{k:v for k, v in 1}} => 1" in
+  let inp = "if b then forall c in C c.a = 1 else c->b: m end" in
   let lb = Lexing.from_string inp in
   print_string "prot: ";
   let rec loop () =
@@ -14,7 +14,7 @@ let%expect_test "lexer" =
   in
   loop ();
   [%expect
-    {| prot: DOLLAR LCURLY2 IDENT COLON IDENT FOR IDENT COMMA IDENT IN INT RCURLY2 COND INT |}]
+    {| prot: IF IDENT THEN FORALL IDENT IN IDENT IDENT DOT IDENT EQ INT ELSE IDENT ARROW IDENT COLON IDENT END |}]
 
 let%expect_test "parsing" =
   let test s =
@@ -23,6 +23,25 @@ let%expect_test "parsing" =
   in
   test "p.a = ${{ k: v for k, v in {} }}";
   test "p.a = 'b'";
-  [%expect {|
+  test "p.a = p.a[1]";
+  test "p.a = p.a['x']";
+  (* test "p.a = p.a.x"; *)
+  test "p.a = [0]";
+  test "p.a = [ ]";
+  test "if b then forall c in C c.a = 1 else c->b: m end";
+  test "p.a = let x = 1 in y";
+  [%expect
+    {|
     p.a = ${{k: v for k, v in {}}}
-    p.a = 'b' |}]
+    p.a = 'b'
+    p.a = p.a[1]
+    p.a = p.a['x']
+    p.a = [0]
+    p.a = []
+    b =>*
+      (forall c in C
+         c.a = 1)
+    \/
+    !(b) =>*
+      c->b : m
+    p.a = let x = 1 in y |}]

@@ -309,8 +309,9 @@ let rec translate_expr (e : texpr) =
   | List _ -> nyi "do expr list"
   | Map _ -> nyi "do expr map"
   | MapComp _ -> nyi "do expr map comp"
+  | MapProj _ -> nyi "do expr map proj"
+  | Let _ -> nyi "do expr let"
   | Tuple (_, _) -> nyi "do expr tuple"
-  | Else | Timeout -> nyi "else/timeout"
 
 let rec translate_protocol (p : tprotocol) =
   match p.p with

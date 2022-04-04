@@ -67,8 +67,7 @@ module Expr = struct
     | Int of int
     | Bool of bool
     | String of string
-    | Timeout
-    | Else
+    | Let of var * 'm _expr * 'm _expr
     | Set of 'm _expr list
     | List of 'm _expr list
     | Map of (string * 'm _expr) list
@@ -80,6 +79,7 @@ module Expr = struct
         inp : 'm _expr;
         pred : 'm _expr option;
       }
+    | MapProj of 'm _expr * 'm _expr
     | App of string * 'm _expr list
     | Var of var
     | Tuple of 'm _expr * 'm _expr
@@ -177,7 +177,7 @@ module Protocol = struct
         to_ : 'v;
         msg : ('e, 'v) msg;
       }
-    | Assign of 'v * 'e
+    | Assign of 'e * 'e
     | Imply of 'e * ('a, 'e, 'v) _protocol
     | BlockingImply of 'e * ('a, 'e, 'v) _protocol
     (* TODO use bindlib? *)
