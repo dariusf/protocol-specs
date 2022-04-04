@@ -72,6 +72,14 @@ module Expr = struct
     | Set of 'm _expr list
     | List of 'm _expr list
     | Map of (string * 'm _expr) list
+    | MapComp of {
+        map_key : 'm _expr;
+        map_val : 'm _expr;
+        bind_key : var;
+        bind_val : var;
+        inp : 'm _expr;
+        pred : 'm _expr option;
+      }
     | App of string * 'm _expr list
     | Var of var
     | Tuple of 'm _expr * 'm _expr

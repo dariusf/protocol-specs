@@ -128,7 +128,7 @@ Note that the parens are only added when necessary.
   ||
   a.b = f(a, 1, 2)
   ||
-  a.b = {a: 1}
+  a.b = {{a: 1}}
   ||
   s->r : m(a=1, b=2)
   ||
@@ -303,7 +303,7 @@ Note that the parens are only added when necessary.
                         };
                       { pmeta =
                         { start = { line = 12; col = 2 };
-                          stop = { line = 12; col = 14 } };
+                          stop = { line = 12; col = 16 } };
                         p =
                         (Assign (
                            { meta =
@@ -312,13 +312,13 @@ Note that the parens are only added when necessary.
                              expr = (Var a.b) },
                            { meta =
                              { start = { line = 12; col = 8 };
-                               stop = { line = 12; col = 14 } };
+                               stop = { line = 12; col = 16 } };
                              expr =
                              (Map
                                 [("a",
                                   { meta =
-                                    { start = { line = 12; col = 12 };
-                                      stop = { line = 12; col = 13 } };
+                                    { start = { line = 12; col = 13 };
+                                      stop = { line = 12; col = 14 } };
                                     expr = (Int 1) })
                                   ])
                              }

@@ -6,6 +6,7 @@ let show_token t =
   match t with
   | WHEN -> "WHEN"
   | IF -> "IF"
+  | FOR -> "FOR"
   | THEN -> "THEN"
   | END -> "END"
   | TIMEOUT -> "TIMEOUT"
@@ -20,12 +21,12 @@ let show_token t =
   | DISJ -> "DISJ"
   | NOT -> "NOT"
   | LPAREN -> "LPAREN"
-  | INT i -> Format.sprintf "INT %d" i
+  | INT _ -> "INT"
   | IN -> "IN"
   | COND -> "COND"
   | IMPLIES -> "IMPLIES"
-  | IDENT i -> Format.sprintf "IDENT %s" i
-  | STRING i -> Format.sprintf "STRING %s" i
+  | IDENT _ -> "IDENT"
+  | STRING _ -> "STRING"
   | FORALL -> "FORALL"
   | EXISTS -> "EXISTS"
   | EQ -> "EQ"
@@ -44,6 +45,8 @@ let show_token t =
   | DIV -> "DIV"
   | LCURLY -> "LCURLY"
   | RCURLY -> "RCURLY"
+  | LCURLY2 -> "LCURLY2"
+  | RCURLY2 -> "RCURLY2"
   | LBRACKET -> "LBRACKET"
   | RBRACKET -> "RBRACKET"
   | GE -> ">="
@@ -61,10 +64,8 @@ let echo f lexbuf =
   Format.printf "tok %s@." (show_token t);
   t
 
-let f = Lexer.f
-
 let parse_lex lexbuf =
-  try Ok (lexbuf |> Parser.spec f) with
+  try Ok (lexbuf |> Parser.spec Lexer.token) with
   | Parser.Error ->
     let pos = lexbuf.Lexing.lex_curr_p in
     let tok = Lexing.lexeme lexbuf in
@@ -112,7 +113,7 @@ let get_parse_error env =
 let rec parse lexbuf (checkpoint : Ast.spec I.checkpoint) =
   match checkpoint with
   | I.InputNeeded _env ->
-    let token = Lexer.f lexbuf in
+    let token = Lexer.token lexbuf in
     let startp = lexbuf.lex_start_p and endp = lexbuf.lex_curr_p in
     let checkpoint = I.offer checkpoint (token, startp, endp) in
     parse lexbuf checkpoint

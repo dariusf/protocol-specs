@@ -42,6 +42,7 @@ let get_expr_prec op =
 let fact f n = match n with 0 -> 1 | _ -> n * f (n - 1)
 let rec fact1 n = fact fact1 n
 let get_expr_assoc _ = `Left
+let braces2 d = braces (braces d)
 
 (** prec is the precedence of the context, so we make sure to
     parenthesize when passing an expression with lower precedence into one with higher precedence. see https://stackoverflow.com/a/43639618. starting with 0 means we
@@ -58,9 +59,32 @@ let render_expr_ :
   | Set es -> braces (List.map f es |> separate (spaced comma))
   | List es -> brackets (List.map f es |> separate (spaced comma))
   | Map es ->
-    braces
+    braces2
       (List.map (fun (k, v) -> concat [string k; spaced colon; f v]) es
       |> separate (spaced comma))
+  | MapComp mc ->
+    dollar
+    ^^ braces2
+         (concat
+            ([
+               f mc.map_key;
+               spaced colon;
+               f mc.map_val;
+               space;
+               string "for";
+               space;
+               render_var mc.bind_key;
+               spaced comma;
+               render_var mc.bind_val;
+               space;
+               string "in";
+               space;
+               f mc.inp;
+             ]
+            @
+            match mc.pred with
+            | None -> []
+            | Some e -> [string "if"; space; f e]))
   | App (fn, args) ->
     if List.length args = 2 && not (is_alpha fn.[0]) then
       let n = get_expr_prec fn in
@@ -94,6 +118,15 @@ let rec strip_type : texpr -> expr =
     | Set es -> Set (List.map strip_type es)
     | List es -> List (List.map strip_type es)
     | Map es -> Map (List.map (fun (k, v) -> (k, strip_type v)) es)
+    | MapComp mc ->
+      MapComp
+        {
+          mc with
+          map_key = strip_type mc.map_key;
+          map_val = strip_type mc.map_val;
+          inp = strip_type mc.inp;
+          pred = Option.map strip_type mc.pred;
+        }
     | App (f, args) -> App (f, List.map strip_type args)
     | Tuple (_, _) -> failwith "tuples?"
   in
@@ -332,6 +365,7 @@ let to_pp ?(one_line = true) render fmt a =
     (if one_line then "@[<h>%a@]@?" else "%a")
     pretty (render a)
 
+let pp_protocol fmt = to_pp render_protocol fmt
 let pp_tprotocol ~env = to_pp (render_tprotocol ~env)
 let pp_tprotocol_untyped fmt = to_pp render_tprotocol_untyped fmt
 let pp_expr = to_pp (fun t -> render_expr t)

@@ -1,6 +1,9 @@
 open Containers
 open Common
 open Ast
+module Print = Print
+module Lexer = Lexer
+module Parsing = Parsing
 
 let parse_parties s =
   let combined =

@@ -7,6 +7,10 @@ all:
 	dune test --display=short
 	dune build @install
 
+w:
+	dune test --display=short -w
+	dune build @install
+
 2pc:
 	dune build @install
 	protocol print test/2pc.t/2pc.spec --parties C,P --project P --actions | dot -Tpng -o p.png
@@ -41,10 +45,10 @@ messages:
 	menhir --list-errors lib/parser.mly > lib/parser.messages
 
 debug-parser:
-	 menhir --dump --explain lib/parser.mly
+	menhir --dump --explain --interpret --interpret-show-cst --trace lib/parser.mly
 
-end-debug-parser:
-	 rm lib/parser.{ml,mli,automaton,conflicts}
+debug-parser-end:
+	 rm lib/parser.{automaton,conflicts}
 
 image:
 	docker build -t dariusf/protocol-specs .

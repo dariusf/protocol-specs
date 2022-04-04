@@ -308,6 +308,7 @@ let rec translate_expr (e : texpr) =
   | Var (V (_, v)) -> Term v
   | List _ -> nyi "do expr list"
   | Map _ -> nyi "do expr map"
+  | MapComp _ -> nyi "do expr map comp"
   | Tuple (_, _) -> nyi "do expr tuple"
   | Else | Timeout -> nyi "else/timeout"
 

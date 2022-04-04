@@ -289,7 +289,7 @@ let rec extract_subexprs env (t : texpr) =
     (res, merged_maps)
   | Else | Timeout -> nyi "else timeout"
   | App (_, _)
-  | Int _ | Bool _ | String _ | Set _ | List _ | Map _ | Var _
+  | Int _ | Bool _ | String _ | Set _ | List _ | Map _ | MapComp _ | Var _
   | Tuple (_, _) ->
     let v = fresh () in
     ({ t with expr = Var (V (None, v)) }, SMap.singleton v t)
@@ -302,7 +302,8 @@ let rec fml_to_ltl3tools (t : texpr) =
     Format.sprintf "%s -> %s" (fml_to_ltl3tools a) (fml_to_ltl3tools b)
   | Var (V (_, v)) -> v
   | App (_, _) | Else | Timeout -> nyi "else/timeout"
-  | Int _ | Bool _ | String _ | Set _ | List _ | Map _ | Tuple (_, _) ->
+  | Int _ | Bool _ | String _ | Set _ | List _ | Map _ | MapComp _ | Tuple (_, _)
+    ->
     bug "fml to ltl3 unexpected node"
 
 let fml_ownership env (t : texpr) =
@@ -319,7 +320,8 @@ let fml_ownership env (t : texpr) =
     | Int _ | Bool _ | String _ | Var _ -> []
     | Else -> nyi "fml ownership else"
     | Timeout -> nyi "fml ownership timeout"
-    | Map _ -> nyi "fml ownership tuple"
+    | Map _ -> nyi "fml ownership map"
+    | MapComp _ -> nyi "fml ownership map comp"
     | Tuple (_, _) -> nyi "fml ownership tuple"
   in
   aux t |> List.uniq ~eq:String.equal
@@ -469,6 +471,7 @@ let rec compile parties te =
     Format.sprintf "map[string]bool{%s}" values
   | List _ -> nyi "compile list"
   | Map _ -> nyi "compile map"
+  | MapComp _ -> nyi "compile map comp"
   | App (f, args) ->
     let args = List.map (compile parties) args in
     if String.equal f "!=" then (

@@ -65,33 +65,15 @@ let fresh_node_id =
     incr n;
     r
 
-let rec used_names_expr (t : texpr) =
-  match t.expr with
-  | Int _ | Bool _ | String _ -> []
-  | Map kvs -> List.concat_map (fun (_, v) -> used_names_expr v) kvs
-  | Set args | List args | App (_, args) -> List.concat_map used_names_expr args
-  | Var (V (_, v)) -> [v]
-  | Tuple (_, _) -> nyi "tuple used names"
-  | Else | Timeout -> nyi "else/timeout"
-
-let rec used_names (t : tprotocol) =
-  match t.p with
-  | Seq es | Par es -> List.concat_map used_names es
-  | Disj (a, b) -> used_names a @ used_names b
-  | Assign (v, e) -> used_names_expr v @ used_names_expr e
-  | Imply (c, b) | BlockingImply (c, b) -> used_names_expr c @ used_names b
-  | Forall (v, s, b) -> used_names_expr v @ used_names_expr s @ used_names b
-  | SendOnly { to_; msg = Message { args; _ } } ->
-    List.concat_map used_names_expr ([to_] @ List.map snd args)
-  | ReceiveOnly { from; msg = MessageD { args; _ } } ->
-    List.concat_map used_names_expr ([from] @ args)
-  | Exists (_, _, _) -> nyi "used names exists"
-  | Call { args; _ } ->
-    (* not higher-order *)
-    List.concat_map used_names_expr args
-  | Send _ -> bug "used names send"
-  | Comment (_, _, _) -> bug "used names comment"
-  | Emp -> bug "used names emp"
+(* not binders, but used variables *)
+let used_names (t : tprotocol) =
+  let vp =
+    object
+      inherit [_] reduce_protocol_list
+      method! visit_var _env (V (_, n)) = [n]
+    end
+  in
+  vp#visit__protocol () t |> List.uniq ~eq:String.equal
 
 type fence_cond =
   (* TODO tid? *)

@@ -8,15 +8,16 @@ let ident = ['a'-'z' 'A'-'Z'] ['a'-'z' 'A'-'Z' '0'-'9' '_']*
 let num = (digit | ['1'-'9'] digit*)
 let tabs = ['\t' ' ']
 
-rule f = parse
+rule token = parse
   (* | spaces as s { SPACE (String.length s) } *)
   (* -1 for the newline *)
   (* | indent as s { Lexing.new_line lexbuf; INDENT (String.length s - 1) } *)
-  | '\n' { Lexing.new_line lexbuf; f lexbuf }
-  | tabs+ { f lexbuf }
+  | '\n' { Lexing.new_line lexbuf; token lexbuf }
+  | tabs+ { token lexbuf }
   | num as n { INT (int_of_string n) }
   | "forall" { FORALL }
   | "exists" { EXISTS }
+  | "for" { FOR }
   | "in" { IN }
   | "true" { TRUE }
   | "false" { FALSE }
@@ -60,6 +61,8 @@ rule f = parse
   | "<=" { LE }
   | "(" { LPAREN }
   | ")" { RPAREN }
+  | "{{" { LCURLY2 }
+  | "}}" { RCURLY2 }
   | "{" { LCURLY }
   | "}" { RCURLY }
   | "[" { LBRACKET }
@@ -72,7 +75,7 @@ rule f = parse
   | eof { EOF }
 
 and comments = parse
-  | '\n' { Lexing.new_line lexbuf; f lexbuf }
+  | '\n' { Lexing.new_line lexbuf; token lexbuf }
   | _ { comments lexbuf }
 
 and string buf = parse

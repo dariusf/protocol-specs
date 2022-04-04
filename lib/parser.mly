@@ -6,12 +6,12 @@
 %token LPAREN RPAREN COLON COMMA
 %token AND OR NOT PLUS MINUS SETMINUS DIV LT LE GT GE EQEQ NEQ
 %token BOX DIAMOND IMPLIES
-%token TRUE FALSE LBRACKET RBRACKET LCURLY RCURLY
+%token TRUE FALSE LBRACKET RBRACKET LCURLY2 RCURLY2 LCURLY RCURLY
 %token TIMEOUT ELSE
 %token <int> INT
 %token <string> IDENT
 %token <string> STRING
-%token FORALL EXISTS IN DOT IF THEN END COND WHEN DISJ SEMI PAR ARROW EQ STAR DOLLAR
+%token FORALL EXISTS IN DOT FOR IF THEN END COND WHEN DISJ SEMI PAR ARROW EQ STAR DOLLAR
 %token INVARIANT LTL PROTOCOL
 
 %left PAR DISJ
@@ -32,7 +32,7 @@
 %left DIV STAR
 %nonassoc NOT
 
-%start <protocol> p
+%start <protocol> prot
 %start <spec> spec
 
 %%
@@ -48,7 +48,7 @@ spec_decl :
   | PROTOCOL; name = IDENT; args = delimited(LPAREN, separated_list(COMMA, IDENT), RPAREN); LPAREN; pr = protocol; RPAREN;
     { Function (name, args, pr) }
 
-p :
+prot :
   | pr = protocol; EOF { pr }
 
 protocol :
@@ -108,9 +108,12 @@ expr :
   | u = unop; e = expr; { with_pos $startpos $endpos (App (u, [e])) }
   | es = delimited(LCURLY, separated_list(COMMA, expr), RCURLY) { with_pos $startpos $endpos (Set es) }
   | es = delimited(LBRACKET, separated_nonempty_list(COMMA, expr), RBRACKET) { with_pos $startpos $endpos (List es) }
-  (* empty set/map are ambiguous *)
-  | es = delimited(LCURLY, separated_nonempty_list(COMMA, map_kvp), RCURLY) { with_pos $startpos $endpos (Map es) }
+  | es = delimited(LCURLY2, separated_nonempty_list(COMMA, map_kvp), RCURLY2) { with_pos $startpos $endpos (Map es) }
+  | DOLLAR; LCURLY2; map_key = expr; COLON; map_val = expr; FOR; bind_key = IDENT; COMMA; bind_val = IDENT; IN; inp = expr; pred = option(map_comp_pred) RCURLY2 { with_pos $startpos $endpos (MapComp { map_key; map_val; bind_key = V (None, bind_key); bind_val = V (None, bind_val); inp; pred }) }
   | LPAREN; e = expr; RPAREN; { e }
+
+map_comp_pred :
+  | IF; p = expr; { p }
 
 var :
   | var = IDENT;

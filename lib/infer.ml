@@ -124,9 +124,7 @@ let rec unify :
         (fun a b t ->
           let* env = t in
           unify a b env)
-        (a1 @ [r1])
-        (a2 @ [r2])
-        (Ok env)
+        (a1 @ [r1]) (a2 @ [r2]) (Ok env)
     else Error (`Does_not_unify "argument lists have different lengths")
   | TyVar a1, b1 | b1, TyVar a1 ->
     (* if one is a variable, look it up and bind it or unify what is already there *)
@@ -471,6 +469,9 @@ and infer_expr : expr -> env -> texpr * env =
   | Map _ ->
     (* infer_all (List.map snd b) env *)
     nyi "infer_parties_expr map"
+  | MapComp _ ->
+    (* infer_all (List.map snd b) env *)
+    nyi "infer_parties_expr map comp"
   | Tuple (_, _) ->
     (* infer_all [a; b] env *)
     nyi "infer_parties_expr tuple"
@@ -815,6 +816,7 @@ let rec check_instantiated_expr env (t : texpr) =
       fail ~loc:t.meta.loc "failed to infer party for %s" v
   | App (_, args) -> List.iter (check_instantiated_expr env) args
   | Map _ -> nyi "map check_instanted_expr"
+  | MapComp _ -> nyi "map comp check_instanted_expr"
   | Tuple (_, _) -> nyi "tuple check_instanted_expr"
   | Else | Timeout -> nyi "else/timeout"
 
@@ -857,6 +859,7 @@ let rec qualify_vars_expr _ (t : texpr) =
   | App (f, args) ->
     { t with expr = App (f, List.map (qualify_vars_expr env) args) }
   | Map _ -> nyi "map check_instanted_expr"
+  | MapComp _ -> nyi "map comp check_instanted_expr"
   | Tuple (_, _) -> nyi "tuple check_instanted_expr"
   | Else | Timeout -> nyi "else/timeout"
 
