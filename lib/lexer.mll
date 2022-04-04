@@ -69,7 +69,8 @@ rule token = parse
   | "]" { RBRACKET }
   | "<>" { DIAMOND }
   | "[]" { BOX }
-  | '"' { STRING (string (Buffer.create 100) lexbuf) }
+  | '"' { STRING (string `Double (Buffer.create 100) lexbuf) }
+  | '\'' { STRING (string `Single (Buffer.create 100) lexbuf) }
   | "//" { comments lexbuf }
   | _ { raise SyntaxError }
   | eof { EOF }
@@ -78,17 +79,21 @@ and comments = parse
   | '\n' { Lexing.new_line lexbuf; token lexbuf }
   | _ { comments lexbuf }
 
-and string buf = parse
-| [^'"' '\n' '\\']+
-  { Buffer.add_string buf (Lexing.lexeme lexbuf); string buf lexbuf }
+and string which buf = parse
+| [^'"' '\'' '\n' '\\']+
+  { Buffer.add_string buf (Lexing.lexeme lexbuf); string which buf lexbuf }
 | '\n'
-  { Buffer.add_string buf (Lexing.lexeme lexbuf); Lexing.new_line lexbuf; string buf lexbuf }
+  { Buffer.add_string buf (Lexing.lexeme lexbuf); Lexing.new_line lexbuf; string which buf lexbuf }
 | '\\' '"'
-  { Buffer.add_char buf '"'; string buf lexbuf }
+  { Buffer.add_char buf '"'; string which buf lexbuf }
+| '\\' '\''
+  { Buffer.add_char buf '\''; string which buf lexbuf }
 | '\\'
-  { Buffer.add_char buf '\\'; string buf lexbuf }
+  { Buffer.add_char buf '\\'; string which buf lexbuf }
 | '"'
-  { Buffer.contents buf }
+  { match which with | `Double -> Buffer.contents buf | `Single -> Buffer.add_char buf '"'; string which buf lexbuf }
+| '\''
+  { match which with | `Single -> Buffer.contents buf | `Double -> Buffer.add_char buf '\''; string which buf lexbuf }
 | eof
   { raise SyntaxError }
 | _

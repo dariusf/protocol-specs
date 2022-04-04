@@ -53,7 +53,7 @@ let render_expr_ :
   match e.expr with
   | Int i -> string (string_of_int i)
   | Bool b -> string (string_of_bool b)
-  | String s -> string (Format.sprintf {|"%s"|} s)
+  | String s -> string (Format.sprintf {|'%s'|} s)
   | Timeout -> string "timeout"
   | Else -> string "else"
   | Set es -> braces (List.map f es |> separate (spaced comma))

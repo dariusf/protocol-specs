@@ -28,10 +28,10 @@ Non-blocking atomic commitment
      no = true)
   ||
   no | some_failed =>*
-    outcome = "abort"
+    outcome = 'abort'
   \/
   voted_yes == P =>*
-    outcome = "commit"
+    outcome = 'commit'
 
   $ protocol print nbac.spec --parties P,F --project F
   forall p in P

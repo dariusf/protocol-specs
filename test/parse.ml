@@ -17,6 +17,12 @@ let%expect_test "lexer" =
     {| prot: DOLLAR LCURLY2 IDENT COLON IDENT FOR IDENT COMMA IDENT IN INT RCURLY2 COND INT |}]
 
 let%expect_test "parsing" =
-  let inp = "p.a = ${{ k: v for k, v in {} }}" in
-  Format.printf "%a@." Print.pp_protocol (parse_string inp).protocol;
-  [%expect {| p.a = ${{k: v for k, v in {}}} |}]
+  let test s =
+    let inp = s in
+    Format.printf "%a@." Print.pp_protocol (parse_string inp).protocol
+  in
+  test "p.a = ${{ k: v for k, v in {} }}";
+  test "p.a = 'b'";
+  [%expect {|
+    p.a = ${{k: v for k, v in {}}}
+    p.a = 'b' |}]
