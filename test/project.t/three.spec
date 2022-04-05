@@ -1,3 +1,7 @@
+party p in P ()
+party c in C ()
+party d in D ()
+
 forall p in P
   forall c in C
     c->p: m1;

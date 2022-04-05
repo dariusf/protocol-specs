@@ -52,21 +52,21 @@ let help_cmd =
     (Cmd.info "help" ~doc ~man)
     Term.(ret (const help $ Arg.man_format $ Term.choice_names $ topic))
 
-let print project parties ast types actions latex file grain =
+let print project ast types actions latex file grain =
   (* Ppx_debug.Tracing.wrap (fun () -> *)
-  Lib.print ~project_party:project ~parties ~ast ~types ~actions ~latex ~grain
+  Lib.print ~project_party:project ~ast ~types ~actions ~latex ~grain
     (`File file)
   (* ) *);
   `Ok ()
 
-let tla parties spec_name grain file =
+let tla spec_name grain file =
   (* Ppx_debug.Tracing.wrap (fun () -> *)
-  Lib.tla ~parties ~spec_name ~grain file (* ) *);
+  Lib.tla ~spec_name ~grain file (* ) *);
   `Ok ()
 
-let monitor parties grain file =
+let monitor grain file =
   (* Ppx_debug.Tracing.wrap (fun () -> *)
-  Lib.monitor ~parties ~grain file (* ) *);
+  Lib.monitor ~grain file (* ) *);
   `Ok ()
 
 let print_cmd =
@@ -79,12 +79,6 @@ let print_cmd =
       & opt (some string) None
           (info ~docv:"PROJECT" ~doc:"project protocol for a specific party"
              ["project"]))
-  in
-  let parties =
-    Arg.(
-      value
-      & opt (some string) None
-          (info ~docv:"PARTIES" ~doc:"indicate party sets" ["parties"]))
   in
   let ast =
     Arg.(value & flag (info ~docv:"AST" ~doc:"dumps the AST" ["ast"]))
@@ -115,19 +109,11 @@ let print_cmd =
   Cmd.v
     (Cmd.info "print" ~doc:"renders a specification" ~man)
     Term.(
-      ret
-        (const print $ project $ parties $ ast $ types $ actions $ latex $ file
-       $ grain))
+      ret (const print $ project $ ast $ types $ actions $ latex $ file $ grain))
 
 let tla_cmd =
   let file =
     Arg.(value & pos 0 string "-" & info [] ~docv:"FILE" ~doc:"file")
-  in
-  let parties =
-    Arg.(
-      value
-      & opt (some string) None
-          (info ~docv:"PARTIES" ~doc:"indicate party sets" ["parties"]))
   in
   let grain =
     Arg.(
@@ -151,17 +137,11 @@ let tla_cmd =
   in
   Cmd.v
     (Cmd.info "tla" ~doc:"compiles a specification to TLA+" ~man)
-    Term.(ret (const tla $ parties $ spec_name $ grain $ file))
+    Term.(ret (const tla $ spec_name $ grain $ file))
 
 let monitor_cmd =
   let file =
     Arg.(value & pos 0 string "-" & info [] ~docv:"FILE" ~doc:"file")
-  in
-  let parties =
-    Arg.(
-      value
-      & opt (some string) None
-          (info ~docv:"PARTIES" ~doc:"indicate party sets" ["parties"]))
   in
   let grain =
     Arg.(
@@ -178,7 +158,7 @@ let monitor_cmd =
   in
   Cmd.v
     (Cmd.info "monitor" ~doc:"generates a monitor for runtime verification" ~man)
-    Term.(ret (const monitor $ parties $ grain $ file))
+    Term.(ret (const monitor $ grain $ file))
 
 let cmds = [print_cmd; tla_cmd; monitor_cmd; help_cmd]
 

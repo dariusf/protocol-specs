@@ -33,7 +33,7 @@ Single-decree Paxos
               (forall l in L
                  a1->l : accept)))))
 
-  $ protocol print paxos.spec --parties P,A,L --types
+  $ protocol print paxos.spec --types
   (forall (p : party P;global) in (P : {party P};global)
      (p.proposal : int;P) = 0;
      (p.value : int;P) = 1;
@@ -66,7 +66,7 @@ Single-decree Paxos
               (forall (l : party L;global) in (L : {party L};global)
                  (a1 : party A;A)->(l : party L;global) : accept)))))
 
-  $ protocol print paxos.spec --parties P,A,L --project P
+  $ protocol print paxos.spec --project P
   proposal = 0;
   value = 1;
   cp = {0, 0};
@@ -86,7 +86,7 @@ Single-decree Paxos
         ->a1 : propose(pn=proposal, pv=value, a1=a1);
         a1-> : accept))
 
-  $ protocol print paxos.spec --parties P,A,L --project A
+  $ protocol print paxos.spec --project A
   highest_proposal = 0;
   accepted_proposal = 0;
   accepted_value = 0;
@@ -104,7 +104,7 @@ Single-decree Paxos
          (forall l in L
             ->l : accept))))
 
-  $ protocol print paxos.spec --parties P,A,L --project L
+  $ protocol print paxos.spec --project L
   forall p in P
     forall a1 in promise_responses
       a1-> : accept

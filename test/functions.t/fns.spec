@@ -1,3 +1,5 @@
+party p in P ()
+party c in C ()
 
 protocol f() (
   (forall p in P

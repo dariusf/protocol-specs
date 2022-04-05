@@ -4,22 +4,7 @@ open Ast
 module Print = Print
 module Lexer = Lexer
 module Parsing = Parsing
-
-let parse_parties s =
-  let combined =
-    s |> String.split ~by:","
-    |> List.map (fun pc ->
-           match String.split ~by:":" pc with
-           | [repr] -> (repr, 0)
-           | [repr; c] -> (repr, int_of_string c)
-           | _ -> bad_input "unable to parse party spec")
-  in
-
-  let parties = List.map (fun (p, _) -> { repr = var p }) combined in
-  let party_sizes =
-    combined |> List.map (fun (p, c) -> (p, c)) |> SMap.of_list
-  in
-  (parties, party_sizes)
+module Ast = Ast
 
 let parse_grain s =
   match s with
@@ -48,16 +33,18 @@ let parse_string s =
       Normalize.normalize;
   }
 
-let require_parties p =
-  match Option.map parse_parties p with
-  | None | Some ([], _) -> bad_input "--parties must be given to infer types"
-  | Some ps -> ps
-
 let require_project_party p =
   Option.get_exn_or "a party must be chosen using --project" p
 
-let typecheck parties spec =
-  let env = Infer.initial_env parties in
+let typecheck spec =
+  (* load the initial environment *)
+  let party_decls =
+    spec.decls
+    |> List.filter_map (function
+         | SpecParty sp -> Some (sp.var, sp.set, sp.initial, sp.size)
+         | _ -> None)
+  in
+  let env = Infer.initial_env party_decls in
   let fns =
     spec.decls
     |> List.filter_map (function
@@ -82,24 +69,31 @@ let typecheck parties spec =
         })
       env fns
   in
-  let tp, env = Infer.check spec.protocol env in
   (* type-checked functions are returned in the env, no longer in spec *)
-  (env, tp)
+  let tp, env = Infer.check spec.protocol env in
+  (* handle legacy code *)
+  let parties =
+    party_decls |> List.map (fun (_, s, _, _) -> { repr = V (None, s) })
+  in
+  let party_sizes =
+    party_decls |> List.map (fun (_, s, _, sz) -> (s, sz)) |> SMap.of_list
+  in
+  (env, tp, parties, party_sizes)
 
 let project parties env tprotocol =
   let projected = Project.project parties env tprotocol in
   List.map2 (fun party pr -> (party.repr |> var_name, pr)) parties projected
   |> SMap.of_list
 
-let print project_party parties ast types actions latex inp grain =
+let print ~project_party ~ast ~types ~actions ~latex ~grain inp =
   let spec =
     match inp with
     | `File file -> parse file
     | `String s -> Parsing.parse_string s
   in
-  match parties with
-  | None ->
-    (* no parties given, so we can't infer types and can only show an untyped version *)
+  match types || Option.is_some project_party with
+  | false ->
+    (* show an untyped version *)
     (* TODO functions are not printed here *)
     if ast then
       (* protocol |> show_protocol |> print_endline *)
@@ -108,10 +102,9 @@ let print project_party parties ast types actions latex inp grain =
       spec.protocol
       |> Print.render_protocol ~latex
       |> PPrint.ToChannel.pretty 0.8 120 stdout
-  | _ ->
+  | true ->
     (* print typed version *)
-    let parties, _ = require_parties parties in
-    let env, tprotocol = typecheck parties spec in
+    let env, tprotocol, parties, _party_sizes = typecheck spec in
     (* if there is a party to project on, operate on its protocol from here on. also project the protocols in the environment *)
     let env, tprotocol =
       match project_party with
@@ -150,19 +143,19 @@ let print project_party parties ast types actions latex inp grain =
       |> PPrint.ToChannel.pretty 0.8 120 stdout;
       print_endline "")
 
-let print ~project_party ~parties ~ast ~types ~actions ~latex ~grain file =
-  try print project_party parties ast types actions latex file grain
+let print ~project_party ~ast ~types ~actions ~latex ~grain file =
+  try print ~project_party ~ast ~types ~actions ~latex ~grain file
   with Check_failure s -> Format.printf "%s@." s
 
-let tla parties spec_name grain file =
+let tla spec_name grain file =
   let spec_name =
     spec_name
     |> Option.get_or
          ~default:(file |> Filename.remove_extension |> Filename.basename)
   in
-  let parties, party_sizes = require_parties parties in
+  (* let parties, party_sizes = require_parties parties in *)
   let spec = parse file in
-  let env, tprotocol = typecheck parties spec in
+  let env, tprotocol, parties, party_sizes = typecheck spec in
   let all = project parties env tprotocol in
 
   let actions =
@@ -182,19 +175,16 @@ let tla parties spec_name grain file =
   (* if not (Sys.file_exists cfg_filename) then *)
   write_to_file ~filename:cfg_filename cfg
 
-let tla ~parties ~spec_name ~grain file =
-  try tla parties spec_name grain file
-  with Check_failure s -> Format.printf "%s@." s
+let tla ~spec_name ~grain file =
+  try tla spec_name grain file with Check_failure s -> Format.printf "%s@." s
 
-let monitor parties grain file =
+let monitor grain file =
   (* TODO is this needed? *)
   let _spec_name = Filename.remove_extension file in
   let spec = parse file in
 
-  let parties, _ = require_parties parties in
-
   (* infer type for protocol *)
-  let env, tprotocol = typecheck parties spec in
+  let env, tprotocol, parties, _party_sizes = typecheck spec in
 
   (* project *)
   let all = project parties env tprotocol in
@@ -240,6 +230,5 @@ let monitor parties grain file =
         (List.map (fun p -> p.repr |> var_name) parties))
     parties
 
-let monitor ~parties ~grain file =
-  try monitor parties grain file
-  with Check_failure s -> Format.printf "%s@." s
+let monitor ~grain file =
+  try monitor grain file with Check_failure s -> Format.printf "%s@." s

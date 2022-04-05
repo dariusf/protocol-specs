@@ -1,5 +1,8 @@
 // A Case Study of Agreement Problems in Distributed Systems: Non-Blocking Atomic Commitment (1997)
 
+party p in P ()
+party f in F ()
+
 forall f in F
   forall p in P
     // timeout =>* // this is unnecessary but expresses intent

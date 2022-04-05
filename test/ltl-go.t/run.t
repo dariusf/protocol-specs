@@ -1,7 +1,9 @@
 
   $ ls
 
-  $ protocol monitor --parties C,P <<EOF
+  $ protocol monitor <<EOF
+  > party c in C ()
+  > party p in P ()
   > forall c in C
   >   c.a = 1
   > ltl ([] (a > 0))
@@ -11,6 +13,7 @@
   $ ls
   actions.txt
   monitorC.go
+  types.txt
 
   $ cat monitorC.go
   package rvc

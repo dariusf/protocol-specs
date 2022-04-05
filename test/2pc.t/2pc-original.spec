@@ -1,3 +1,5 @@
+party c in C ()
+party p in P ()
 
 forall c in C
   (forall p in P

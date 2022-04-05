@@ -6,13 +6,13 @@
 %token LPAREN RPAREN COLON COMMA
 %token AND OR NOT PLUS MINUS SETMINUS DIV LT LE GT GE EQEQ NEQ
 %token BOX DIAMOND IMPLIES
-%token TRUE FALSE LBRACKET RBRACKET LCURLY2 RCURLY2 LCURLY RCURLY
+%token TRUE FALSE LBRACKET RBRACKET LCURLY2 RCURLY2 LCURLY RCURLY LANGLE2 RANGLE2
 %token ELSE
 %token <int> INT
 %token <string> IDENT
 %token <string> STRING
-%token FORALL EXISTS IN DOT FOR IF THEN END COND WHEN DISJ SEMI PAR ARROW EQ STAR DOLLAR LET
-%token INVARIANT LTL PROTOCOL
+%token FORALL EXISTS IN DOT FOR IF THEN END COND WHEN DISJ SEMI PAR ARROW EQ STAR DOLLAR LET QUESTION
+%token INVARIANT LTL PROTOCOL PARTY
 
 %left PAR DISJ
 (* this also resolves shift/reduce conflicts with par/disj/semi, has to be before (lower than) semi *)
@@ -24,6 +24,7 @@
 (* keep in sync with the table in Print *)
 %nonassoc BOX DIAMOND
 %right IMPLIES
+%right QUESTION
 %left OR
 %left AND
 %left EQEQ NEQ
@@ -49,6 +50,8 @@ spec_decl :
     { Invariant i }
   | LTL; LPAREN; i = expr; RPAREN
     { Ltl i }
+  | PARTY; var = IDENT; IN; set = IDENT; b = delimited(LPAREN, option(protocol), RPAREN);
+    { Normalize.to_specparty var set b }
   | PROTOCOL; name = IDENT; args = delimited(LPAREN, separated_list(COMMA, IDENT), RPAREN); LPAREN; pr = protocol; RPAREN;
     { Function (name, args, pr) }
 
@@ -117,8 +120,10 @@ expr :
   | u = unop; e = expr; { with_pos $startpos $endpos (App (u, [e])) }
   | es = delimited(LCURLY, separated_list(COMMA, expr), RCURLY) { with_pos $startpos $endpos (Set es) }
   | es = delimited(LBRACKET, separated_list(COMMA, expr), RBRACKET) { with_pos $startpos $endpos (List es) }
-  | es = delimited(LCURLY2, separated_nonempty_list(COMMA, map_kvp), RCURLY2) { with_pos $startpos $endpos (Map es) }
+  | es = delimited(LANGLE2, separated_nonempty_list(COMMA, map_kvp), RANGLE2) { with_pos $startpos $endpos (Record es) }
+  | es = delimited(LCURLY2, separated_list(COMMA, map_kvp), RCURLY2) { with_pos $startpos $endpos (Map es) }
   | DOLLAR; LCURLY2; map_key = expr; COLON; map_val = expr; FOR; bind_key = IDENT; COMMA; bind_val = IDENT; IN; inp = expr; pred = option(map_comp_pred) RCURLY2 { with_pos $startpos $endpos (MapComp { map_key; map_val; bind_key = V (None, bind_key); bind_val = V (None, bind_val); inp; pred }) }
+  | e1 = expr; QUESTION; e2 = expr; COLON; e3 = expr { with_pos $startpos $endpos (Ite (e1, e2, e3)) }
   | LPAREN; e = expr; RPAREN; { e }
 
 map_comp_pred :

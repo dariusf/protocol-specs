@@ -1,3 +1,7 @@
+party p in P (size = 1)
+party a in A (size = 3)
+party l in L (size = 1)
+
 // all currently-competing proposers
 (forall p in P
   p.proposal = 0;

@@ -1,6 +1,7 @@
 Actions
 
-  $ protocol print --parties P --project P --actions <<EOF
+  $ protocol print --project P --actions <<EOF
+  > party p in P ()
   > forall p in P
   >     p.a = 1
   > EOF
@@ -10,7 +11,8 @@ Actions
 
 Default grain
 
-  $ protocol print --parties P --project P --actions <<EOF
+  $ protocol print --project P --actions <<EOF
+  > party p in P ()
   > forall p in P
   >     p.a = 1;
   >     p.b = 2
@@ -21,7 +23,9 @@ Default grain
 
 Fuse tail
 
-  $ protocol print --parties P,C --project P --actions <<EOF
+  $ protocol print --project P --actions <<EOF
+  > party p in P ()
+  > party c in C ()
   > forall p in P
   >   forall c in C
   >     p->c: m;
@@ -36,7 +40,9 @@ Fuse tail
 
 Fuse head
 
-  $ protocol print --parties P,C --project P --actions <<EOF
+  $ protocol print --project P --actions <<EOF
+  > party p in P ()
+  > party c in C ()
   > forall p in P
   >   forall c in C
   >     p.b = 2;
@@ -51,7 +57,9 @@ Fuse head
 
 Communication grain (P)
 
-  $ protocol print --parties P,C --project P --actions --grain communication <<EOF
+  $ protocol print --project P --actions --grain communication <<EOF
+  > party p in P ()
+  > party c in C ()
   > forall p in P
   >   forall c in C
   >     p.a = 1;
@@ -67,7 +75,9 @@ Communication grain (P)
 
 Communication grain (C)
 
-  $ protocol print --parties P,C --project C --actions --grain communication <<EOF
+  $ protocol print --project C --actions --grain communication <<EOF
+  > party p in P ()
+  > party c in C ()
   > forall p in P
   >   forall c in C
   >     p.a = 1;
@@ -83,7 +93,8 @@ Communication grain (C)
 
 Statement grain
 
-  $ protocol print --parties P --project P --actions --grain statement <<EOF
+  $ protocol print --project P --actions --grain statement <<EOF
+  > party p in P ()
   > forall p in P
   >     p.a = 1;
   >     p.b = 2
@@ -96,7 +107,9 @@ Statement grain
 
 Multiple parties
 
-  $ protocol print --parties P,C --project P --actions <<EOF
+  $ protocol print --project P --actions <<EOF
+  > party p in P ()
+  > party c in C ()
   > forall p in P
   >   forall c in C
   >     c.a = 1;
@@ -115,7 +128,9 @@ Multiple parties
 
 Nothing due to projection
 
-  $ protocol print --parties P,C --project P --actions <<EOF
+  $ protocol print --project P --actions <<EOF
+  > party p in P ()
+  > party c in C ()
   > (forall p in P
   >    forall c in C
   >      c.a = 1;
@@ -130,7 +145,9 @@ Nothing due to projection
 
 Other side
 
-  $ protocol print --parties P,C --project C --actions <<EOF
+  $ protocol print --project C --actions <<EOF
+  > party p in P ()
+  > party c in C ()
   > (forall p in P
   >    forall c in C
   >      c.a = 1;
@@ -146,7 +163,9 @@ Other side
 
 TLA+
 
-  $ protocol tla --parties P,C <<EOF
+  $ protocol tla <<EOF
+  > party p in P ()
+  > party c in C ()
   > (forall p in P
   >    forall c in C
   >      c.a = 1;
@@ -234,7 +253,8 @@ TLA+
   
   ===============================================================================
 
-  $ protocol tla --parties P:2,C:1 simple.spec
+
+  $ protocol tla simple.spec
   simple.tla
   simple.cfg
 
@@ -384,6 +404,7 @@ TLA+
   
   ===============================================================================
 
+
   $ cat simple.cfg
   
   CONSTANTS
@@ -402,3 +423,4 @@ TLA+
   SPECIFICATION Spec
   VIEW vars
   \* INVARIANT Inv
+

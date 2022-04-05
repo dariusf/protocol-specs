@@ -1,3 +1,4 @@
+open Containers
 open Ast
 
 let rec normalize_once p =
@@ -51,3 +52,43 @@ let rec normalize p =
 let rec normalize_t p =
   let p1 = normalize_once p in
   if equal_tprotocol p p1 then p1 else normalize_t p1
+
+let interpret_seq_of_assignments_as_specparty bs =
+  let bindings =
+    List.filter_map
+      (fun x ->
+        match x.p with
+        | Assign ({ expr = Var (V (q, v)); _ }, e) -> Some (q, v, e)
+        | _ ->
+          (* can also ignore and drop *)
+          failwith
+            ("must be a seq of assignments "
+            ^ Format.asprintf "%a" pp_protocol x))
+      bs
+  in
+  let vars =
+    bindings
+    |> List.filter_map (fun (q, v, e) ->
+           match q with Some _ -> Some (v, e) | None -> None)
+  in
+  let size =
+    bindings
+    |> List.filter_map (fun (q, v, e) ->
+           match (q, v, e.expr) with None, "size", Int i -> Some i | _ -> None)
+    |> List.head_opt |> Option.get_or ~default:0
+  in
+  (vars, size)
+
+let to_specparty var set b =
+  let initial, size =
+    match b with
+    | None -> ([], 0)
+    | Some b ->
+      (* normalize so nested seqs are flattened into a single top-level seq *)
+      (match (normalize b).p with
+      | Seq xs -> interpret_seq_of_assignments_as_specparty xs
+      | Assign ({ expr = Var (V (_, _)); _ }, _) ->
+        interpret_seq_of_assignments_as_specparty [b]
+      | _ -> failwith "must be a seq of assignments")
+  in
+  SpecParty { var; set; initial; size }

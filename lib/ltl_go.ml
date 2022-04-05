@@ -289,8 +289,7 @@ let rec extract_subexprs env (t : texpr) =
     (res, merged_maps)
   | App (_, _)
   | Int _ | Bool _ | String _ | Set _ | List _ | Map _ | MapComp _ | MapProj _
-  | Let _ | Var _
-  | Tuple (_, _) ->
+  | Ite _ | Let _ | Var _ | Record _ ->
     let v = fresh () in
     ({ t with expr = Var (V (None, v)) }, SMap.singleton v t)
 
@@ -303,8 +302,7 @@ let rec fml_to_ltl3tools (t : texpr) =
   | Var (V (_, v)) -> v
   | App (_, _) -> nyi "app"
   | Int _ | Bool _ | String _ | Set _ | List _ | Map _ | MapComp _ | MapProj _
-  | Let _
-  | Tuple (_, _) ->
+  | Ite _ | Let _ | Record _ ->
     bug "fml to ltl3 unexpected node"
 
 let fml_ownership env (t : texpr) =
@@ -319,11 +317,12 @@ let fml_ownership env (t : texpr) =
     match t.expr with
     | Set args | List args | App (_, args) -> List.concat_map aux args
     | Int _ | Bool _ | String _ | Var _ -> []
+    | Ite _ -> nyi "fml ownership ite"
     | Map _ -> nyi "fml ownership map"
     | MapComp _ -> nyi "fml ownership map comp"
     | MapProj _ -> nyi "fml ownership map proj"
     | Let _ -> nyi "fml ownership let"
-    | Tuple (_, _) -> nyi "fml ownership tuple"
+    | Record _ -> nyi "fml ownership record"
   in
   aux t |> List.uniq ~eq:String.equal
 
@@ -448,13 +447,13 @@ let rec compile_typ env t =
   | TyParty _ ->
     (* how are parties represented? *)
     "string"
-  | TySet t1 -> Format.sprintf "map[%s]bool" (compile_typ env t1)
-  | TyList _ -> nyi "compile type list"
   | TyVar v -> compile_typ env (IMap.find (UF.value v) env.types)
   | TyInt -> "int"
   | TyBool -> "bool"
   | TyString -> "string"
   | TyFn (_, _) -> nyi "compile type fn"
+  | TyRecord _ -> nyi "compile type record"
+  | TyMap (_, _) -> nyi "compile type map"
 
 let uses_reflect = ref false
 
@@ -472,6 +471,7 @@ let rec compile parties te =
     Format.sprintf "map[string]bool{%s}" values
   | List _ -> nyi "compile list"
   | Map _ -> nyi "compile map"
+  | Ite _ -> nyi "compile ite"
   | MapComp _ -> nyi "compile map comp"
   | MapProj _ -> nyi "compile map proj"
   | Let _ -> nyi "compile let"
@@ -492,7 +492,7 @@ let rec compile parties te =
   | Var (V (_, v)) when List.mem ~eq:String.equal v parties ->
     Format.sprintf "l.vars[\"%s\"]" (state_var_name v)
   | Var (V (_, v)) -> Format.sprintf "g.%s" (state_var_name v)
-  | Tuple (_, _) -> nyi "compile tuple"
+  | Record _ -> nyi "compile record"
 
 let check_monitorability env ltl node_colors =
   if

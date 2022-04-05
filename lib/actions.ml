@@ -459,7 +459,7 @@ let label_threads env party (p : tprotocol) : tprotocol =
            in *)
         let s_pname =
           match s.meta.info.typ with
-          | TySet (TyParty p) ->
+          | TyMap (TyParty p, TyBool) ->
             (IMap.find (UF.value p) env.parties).repr |> var_name
           | _ -> fail ~loc:s.meta.loc "%s should be a party set" s1
         in

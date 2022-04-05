@@ -1,18 +1,23 @@
 Simplest multiparty examples
 
-  $ protocol print --parties C,P --project C <<EOF
+  $ protocol print --project C <<EOF
+  > party p in P ()
+  > party c in C ()
   > forall p in P
   >   p.a = 1
   > EOF
   skip
 
-  $ protocol print --parties C,P --project P <<EOF
+  $ protocol print --project P <<EOF
+  > party p in P ()
   > forall p in P
   >   p.a = 1
   > EOF
   a = 1
 
-  $ protocol print --parties C,P --project C <<EOF
+  $ protocol print --project C <<EOF
+  > party p in P ()
+  > party c in C ()
   > forall c in C
   >   forall p in P
   >     c->p: m;
@@ -22,7 +27,9 @@ Simplest multiparty examples
     ->p : m;
     p-> : n
 
-  $ protocol print --parties C,P --project P <<EOF
+  $ protocol print --project P <<EOF
+  > party p in P ()
+  > party c in C ()
   > forall c in C
   >   forall p in P
   >     c->p: m;
@@ -34,7 +41,9 @@ Simplest multiparty examples
 
 Dynamic party set (i.e. types are used to compute projection)
 
-  $ protocol print --parties C,P --project P <<EOF
+  $ protocol print --project P <<EOF
+  > party p in P ()
+  > party c in C ()
   > forall c in C
   >   c.s = P;
   >   forall p in c.s
@@ -45,7 +54,7 @@ Dynamic party set (i.e. types are used to compute projection)
 
 A seq involving a particular party (C), where there's a chain of messages in the middle that does not go through or end at C.
 
-  $ protocol print --parties P,C,D basic.spec
+  $ protocol print basic.spec
   forall c in C
     forall p in P
       c->p : m;
@@ -55,25 +64,25 @@ A seq involving a particular party (C), where there's a chain of messages in the
 
 The chain disappears entirely from C.
 
-  $ protocol print --parties P,C,D --project C basic.spec
+  $ protocol print --project C basic.spec
   forall p in P
     ->p : m;
     a = 1
 
-  $ protocol print --parties P,C,D --project P basic.spec
+  $ protocol print --project P basic.spec
   forall c in C
     c-> : m;
     (forall d in D
        ->d : n)
 
-  $ protocol print --parties P,C,D --project D basic.spec
+  $ protocol print --project D basic.spec
   forall c in C
     forall p in P
       p-> : n
 
 A chain of messages that goes through C but does not end at it.
 
-  $ protocol print --parties P,C,D three.spec
+  $ protocol print three.spec
   forall p in P
     forall c in C
       c->p : m1;
@@ -84,7 +93,7 @@ A chain of messages that goes through C but does not end at it.
          p->d : m5);
       c.a = 1
 
-  $ protocol print --parties P,C,D --project C three.spec
+  $ protocol print --project C three.spec
   forall p in P
     ->p : m1;
     (forall d in D
@@ -92,7 +101,7 @@ A chain of messages that goes through C but does not end at it.
        ->p : m4);
     a = 1
 
-  $ protocol print --parties P,C,D --project P three.spec
+  $ protocol print --project P three.spec
   forall c in C
     c-> : m1;
     (forall d in D
@@ -100,7 +109,7 @@ A chain of messages that goes through C but does not end at it.
        c-> : m4;
        ->d : m5)
 
-  $ protocol print --parties P,C,D --project D three.spec
+  $ protocol print --project D three.spec
   forall p in P
     forall c in C
       p-> : m2;
@@ -109,7 +118,7 @@ A chain of messages that goes through C but does not end at it.
 
 A chain of messages that ends at C.
 
-  $ protocol print --parties P,C,D ex1.spec
+  $ protocol print ex1.spec
   forall c in C
     forall p in P
       c->p : m;
@@ -118,20 +127,20 @@ A chain of messages that ends at C.
          d->c : msg);
       c.a = 1
 
-  $ protocol print --parties P,C,D --project C ex1.spec
+  $ protocol print --project C ex1.spec
   forall p in P
     ->p : m;
     (forall d in D
        d-> : msg);
     a = 1
 
-  $ protocol print --parties P,C,D --project P ex1.spec
+  $ protocol print --project P ex1.spec
   forall c in C
     c-> : m;
     (forall d in D
        ->d : n(c=c))
 
-  $ protocol print --parties P,C,D --project D ex1.spec
+  $ protocol print --project D ex1.spec
   forall c in C
     forall p in P
       p-> : n(c);
@@ -141,7 +150,8 @@ Multiple uses of the same party set.
 
 Classic example from the paper
 
-  $ protocol print --parties C --project C - <<EOF
+  $ protocol print --project C - <<EOF
+  > party c in C ()
   > forall c in C
   >   forall d in (C \ {c})
   >     c->d: m;
@@ -158,7 +168,8 @@ Classic example from the paper
 
 Including self-send
 
-  $ protocol print --parties C --project C - <<EOF
+  $ protocol print --project C - <<EOF
+  > party c in C ()
   > forall c in C
   >   forall d in C
   >     c->d: m;
@@ -180,7 +191,8 @@ Including self-send
 
 Explicit self-send
 
-  $ protocol print --parties C --project C - <<EOF
+  $ protocol print --project C - <<EOF
+  > party c in C ()
   > forall c in C
   >   c->c: m;
   >   forall d in (C \ {c})
@@ -196,7 +208,8 @@ Explicit self-send
 
 Literal self-send
 
-  $ protocol print --parties C --project C - <<EOF
+  $ protocol print --project C - <<EOF
+  > party c in C ()
   > forall c in C
   >   c->c: m
   > EOF
@@ -206,7 +219,9 @@ Literal self-send
 Unintuitive example. If |C| = 1, only one message is received from P (in the first thread).
 If |C| = 2, both threads receive messages.
 
-  $ protocol print --parties C,P --project C - <<EOF
+  $ protocol print --project C - <<EOF
+  > party p in P ()
+  > party c in C ()
   > forall c in C
   >   forall p in P
   >     forall d in C
@@ -219,7 +234,9 @@ If |C| = 2, both threads receive messages.
     forall p in P
       p-> : m
 
-  $ protocol print --parties C,P --project P - <<EOF
+  $ protocol print --project P - <<EOF
+  > party p in P ()
+  > party c in C ()
   > forall c in C
   >   forall p in P
   >     forall d in C
@@ -231,7 +248,9 @@ If |C| = 2, both threads receive messages.
 
 More standard variations
 
-  $ protocol print --parties C,P --project C - <<EOF
+  $ protocol print --project C - <<EOF
+  > party p in P ()
+  > party c in C ()
   > forall p in P
   >   forall d in C
   >     p->d: m
@@ -239,7 +258,9 @@ More standard variations
   forall p in P
     p-> : m
 
-  $ protocol print --parties C,P --project C - <<EOF
+  $ protocol print --project C - <<EOF
+  > party p in P ()
+  > party c in C ()
   > forall c in C
   >   forall p in P
   >     forall d in (C \ {c})
@@ -251,7 +272,8 @@ More standard variations
 
 More than two self-sends
 
-  $ protocol print --parties C --project C - <<EOF
+  $ protocol print --project C - <<EOF
+  > party c in C ()
   > forall c in C
   >   forall d in C
   >     forall e in C

@@ -1,3 +1,6 @@
+party c in C (size=1)
+party p in P (size=2)
+
 forall c in C
   (forall p in P
     c->p: prepare;

@@ -5,6 +5,7 @@ let show_token t =
   let open P in
   match t with
   | WHEN -> "WHEN"
+  | PARTY -> "PARTY"
   | IF -> "IF"
   | FOR -> "FOR"
   | THEN -> "THEN"
@@ -46,8 +47,11 @@ let show_token t =
   | RCURLY -> "RCURLY"
   | LCURLY2 -> "LCURLY2"
   | RCURLY2 -> "RCURLY2"
+  | LANGLE2 -> "LANGLE2"
+  | RANGLE2 -> "RANGLE2"
   | LBRACKET -> "LBRACKET"
   | RBRACKET -> "RBRACKET"
+  | QUESTION -> "QUESTION"
   | GE -> "GE"
   | GT -> "GT"
   | LE -> "LE"

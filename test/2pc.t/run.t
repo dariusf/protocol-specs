@@ -40,7 +40,7 @@ The classic two-phase commit protocol.
        c->p : abort;
        p->c : abort_ack)
 
-  $ protocol print --parties P,C --types 2pc.spec
+  $ protocol print --types 2pc.spec
   forall (c : party C;global) in (C : {party C};global)
     (forall (p : party P;global) in (P : {party P};global)
        (c : party C;global)->(p : party P;global) : prepare;
@@ -60,7 +60,7 @@ The classic two-phase commit protocol.
           (p : party P;global)->(c : party C;global) : commit_ack;
           (c.committed : {party P};C) = union((c.committed : {party P};C), {(p : party P;global)})))
 
-  $ protocol print 2pc.spec --parties C,P --project C
+  $ protocol print 2pc.spec --project C
   (forall p in P
      ->p : prepare;
      (p-> : prepared
@@ -79,7 +79,7 @@ The classic two-phase commit protocol.
         p-> : commit_ack;
         committed = union(committed, {p})))
 
-  $ protocol print 2pc.spec --parties C,P --project P
+  $ protocol print 2pc.spec --project P
   forall c in C
     c-> : prepare;
     (->c : prepared
@@ -95,7 +95,7 @@ The classic two-phase commit protocol.
 
   $ protocol print 2pc-wait.spec > 2pc1-wait.spec && protocol print 2pc1-wait.spec | protocol print > 2pc2-wait.spec && diff -uw 2pc1-wait.spec 2pc2-wait.spec
 
-  $ protocol print 2pc.spec --parties C,P --project P --actions
+  $ protocol print 2pc.spec --project P --actions
   digraph G {
     1 [label="PReceivePrepare1\n{start}\nc→ : prepare\n{Pt0(c:C) = 1}\n"];
     2 [label="PSendPrepared2\n{Pt0(c:C) = 1}\n→c : prepared\n{Pt0(c:C) = 2}\n"];
@@ -114,7 +114,7 @@ The classic two-phase commit protocol.
     1 -> 2;
   }
 
-  $ protocol print 2pc.spec --parties C,P --project C --actions
+  $ protocol print 2pc.spec --project C --actions
   digraph G {
     1 [label="CSendPrepare1\n{start}\n→p : prepare\n{Ct0(p:P) = 1}\n"];
     2 [label="CReceivePrepared2\n{Ct0(p:P) = 1}\np→ : prepared\n{Ct0(p:P) = 2}\n"];
@@ -139,7 +139,7 @@ The classic two-phase commit protocol.
     1 -> 2;
   }
 
-  $ protocol tla 2pc.spec --parties C:1,P:2
+  $ protocol tla 2pc.spec
   2pc.tla
   2pc.cfg
 
@@ -372,6 +372,7 @@ The classic two-phase commit protocol.
   
   ===============================================================================
 
+
   $ cat 2pc.cfg
   
   CONSTANTS
@@ -395,7 +396,8 @@ The classic two-phase commit protocol.
   VIEW vars
   \* INVARIANT Inv
 
-  $ protocol monitor --parties C,P 2pc.spec
+
+  $ protocol monitor 2pc.spec
   monitorC.go
   monitorP.go
 

@@ -33,16 +33,49 @@ module VMap = struct
       map
 end
 
-type typ =
-  | TyParty of UF.t
-  | TySet of typ
-  | TyList of typ
-  | TyVar of UF.t
-  | TyInt
-  | TyBool
-  | TyString
-  | TyFn of typ list * typ
-[@@deriving show { with_path = false }, eq]
+module Typ = struct
+  type typ =
+    | TyParty of UF.t
+    (* | ty_set of typ *)
+    (* | ty_list of typ *)
+    | TyMap of typ * typ
+    | TyRecord of (string * typ) list
+    | TyVar of UF.t
+    | TyInt
+    | TyBool
+    | TyString
+    | TyFn of typ list * typ
+  [@@deriving
+    show { with_path = false },
+      eq,
+      visitors { variety = "map"; name = "map" },
+      visitors { variety = "reduce"; name = "reduce" }]
+
+  let ty_set t = TyMap (t, TyBool)
+  let ty_list t = TyMap (TyInt, t)
+
+  class ['self] map_typ =
+    object (_ : 'self)
+      inherit [_] map
+      method visit_t _env t = t
+    end
+
+  class virtual ['self] reduce_typ =
+    object (self : 'self)
+      inherit [_] reduce
+      method visit_t _env _ = self#zero
+    end
+
+  class ['self] reduce_typ_list =
+    object (self : 'self)
+      inherit [_] reduce
+      method zero = []
+      method plus a b = a @ b
+      method visit_t _env _ = self#zero
+    end
+end [@warning "-17"]
+
+include Typ
 
 type meta = { loc : loc }
 
@@ -71,6 +104,7 @@ module Expr = struct
     | Set of 'm _expr list
     | List of 'm _expr list
     | Map of (string * 'm _expr) list
+    | Record of (string * 'm _expr) list
     | MapComp of {
         map_key : 'm _expr;
         map_val : 'm _expr;
@@ -82,7 +116,7 @@ module Expr = struct
     | MapProj of 'm _expr * 'm _expr
     | App of string * 'm _expr list
     | Var of var
-    | Tuple of 'm _expr * 'm _expr
+    | Ite of 'm _expr * 'm _expr * 'm _expr
   [@@deriving
     show { with_path = false },
       eq,
@@ -242,8 +276,8 @@ module Protocol = struct
       method visit_'v env v = self#visit__expr env v
 
       (* this won't recurse inside messages. currently not needed *)
-      method visit_msg _ _ _env _ = self#zero
-      method visit_msg_destruct _env _ _ = self#zero
+      method visit_msg _ve _vv _env _m = self#zero
+      method visit_msg_destruct _vv _env _m = self#zero
     end
 
   class ['self] reduce_protocol_list =
@@ -339,6 +373,12 @@ type spec_decl =
   | Invariant of expr
   | Ltl of expr
   | Function of string * string list * protocol
+  | SpecParty of {
+      var : string;
+      set : string;
+      initial : (string * expr) list;
+      size : int;
+    }
 [@@deriving show { with_path = false }]
 
 type spec = {

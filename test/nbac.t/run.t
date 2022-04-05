@@ -1,6 +1,6 @@
 Non-blocking atomic commitment
 
-  $ protocol print nbac.spec --parties P,F --project P
+  $ protocol print nbac.spec --project P
   forall f in F
     (f-> : exception(id);
      some_failed = true
@@ -33,7 +33,7 @@ Non-blocking atomic commitment
   voted_yes == P =>*
     outcome = 'commit'
 
-  $ protocol print nbac.spec --parties P,F --project F
+  $ protocol print nbac.spec --project F
   forall p in P
     (->p : exception(id=p)
      \/

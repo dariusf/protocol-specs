@@ -24,6 +24,7 @@ rule token = parse
   | "and" { AND }
   | "or" { OR }
   | "invariant" { INVARIANT }
+  | "party" { PARTY }
   | "protocol" { PROTOCOL }
   | "ltl" { LTL }
   | "if" { IF }
@@ -31,6 +32,8 @@ rule token = parse
   | "else" { ELSE }
   | "end" { END }
   | "let" { LET }
+  | "always" { BOX }
+  | "eventually" { DIAMOND }
   | ident as i { IDENT i }
   | "$" { DOLLAR }
   | "&" { AND }
@@ -63,12 +66,15 @@ rule token = parse
   | ")" { RPAREN }
   | "{{" { LCURLY2 }
   | "}}" { RCURLY2 }
+  | "<<" { LANGLE2 }
+  | ">>" { RANGLE2 }
   | "{" { LCURLY }
   | "}" { RCURLY }
   | "[" { LBRACKET }
   | "]" { RBRACKET }
+  | "?" { QUESTION }
   | "<>" { DIAMOND }
-  (* conflict with empty list *)
+  (* conflict with empty list; consider using always *)
   | "[]" { BOX }
   | '"' { STRING (string `Double (Buffer.create 100) lexbuf) }
   | '\'' { STRING (string `Single (Buffer.create 100) lexbuf) }

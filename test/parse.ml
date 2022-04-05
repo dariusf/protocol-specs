@@ -45,3 +45,19 @@ let%expect_test "parsing" =
     !(b) =>*
       c->b : m
     p.a = let x = 1 in y |}]
+
+let%expect_test "spec" =
+  let test s =
+    let inp = s in
+    (parse_string inp).decls
+    |> List.iter (fun d -> Format.printf "%a@." Print.pp_spec_decl d)
+  in
+  test {|party c in C (
+    c.a = 1;
+    c.b = 2)
+  p.a = 1|};
+  [%expect {|
+    party c in C (
+      c.a = 1;
+      c.b = 2
+    ) |}]

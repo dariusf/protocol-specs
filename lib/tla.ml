@@ -311,7 +311,8 @@ let rec translate_expr (e : texpr) =
   | MapComp _ -> nyi "do expr map comp"
   | MapProj _ -> nyi "do expr map proj"
   | Let _ -> nyi "do expr let"
-  | Tuple (_, _) -> nyi "do expr tuple"
+  | Record _ -> nyi "do expr tuple"
+  | Ite _ -> nyi "do expr ite"
 
 let rec translate_protocol (p : tprotocol) =
   match p.p with
@@ -479,13 +480,13 @@ let rec default_value_of_type env t =
   | TyParty _ ->
     (* TODO does this matter? *)
     Term "0"
-  | TySet _ -> Set []
-  | TyList _ -> List []
   | TyVar v -> default_value_of_type env (IMap.find (UF.value v) env.types)
   | TyInt -> Term "0"
   | TyBool -> Term "FALSE"
   | TyString -> Term {|""|}
   | TyFn (_, _) -> nyi "default party fn"
+  | TyMap (_, _) -> nyi "default party map"
+  | TyRecord _ -> nyi "default party record"
 
 let single_party_to_tla all_vars env nodes pname protocol =
   let vars = Actions.assigned_variables protocol in

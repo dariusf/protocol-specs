@@ -56,6 +56,9 @@ let render_expr_ :
   | String s -> string (Format.sprintf {|'%s'|} s)
   | Set es -> braces (List.map f es |> separate (spaced comma))
   | List es -> brackets (List.map f es |> separate (spaced comma))
+  | Ite (e1, e2, e3) ->
+    separate space
+      [parens (f e1); string "?"; parens (f e2); colon; parens (f e3)]
   | Map es ->
     braces2
       (List.map (fun (k, v) -> concat [string k; spaced colon; f v]) es
@@ -104,37 +107,14 @@ let render_expr_ :
     else
       precede (string fn) (parens (List.map f args |> separate (spaced comma)))
   | Var v -> render_var v
-  | Tuple (_, _) -> failwith "tuples?"
+  | Record kvs ->
+    angles
+      (angles
+         (List.map (fun (k, v) -> concat [string k; spaced colon; f v]) kvs
+         |> separate (spaced comma)))
 
 let rec render_expr : ?prec:int -> expr -> document =
  fun ?prec e -> render_expr_ render_expr ?prec e
-
-let rec strip_type : texpr -> expr =
- fun e ->
-  let e1 =
-    match e.expr with
-    | Int i -> Int i
-    | Bool b -> Bool b
-    | String s -> String s
-    | Var v -> Var v
-    | Set es -> Set (List.map strip_type es)
-    | List es -> List (List.map strip_type es)
-    | Map es -> Map (List.map (fun (k, v) -> (k, strip_type v)) es)
-    | MapComp mc ->
-      MapComp
-        {
-          mc with
-          map_key = strip_type mc.map_key;
-          map_val = strip_type mc.map_val;
-          inp = strip_type mc.inp;
-          pred = Option.map strip_type mc.pred;
-        }
-    | MapProj (e, i) -> MapProj (strip_type e, strip_type i)
-    | Let (x, e1, e2) -> Let (x, strip_type e1, strip_type e2)
-    | App (f, args) -> App (f, List.map strip_type args)
-    | Tuple (_, _) -> failwith "tuples?"
-  in
-  { meta = e.meta.loc; expr = e1 }
 
 let render_party party = render_var party.repr
 let render_uf u = string ("$" ^ string_of_int (UF.value u))
@@ -150,8 +130,25 @@ let render_own ~env own =
 let rec render_typ ?(latex = false) ~env t =
   match t with
   | TyParty p -> separate space [string "party"; render_own ~env (Party p)]
-  | TySet e -> braces (render_typ ~latex ~env e)
-  | TyList e -> brackets (render_typ ~latex ~env e)
+  | TyMap (k, v) ->
+    concat
+      [
+        string "map";
+        parens
+          (separate (spaced comma)
+             [render_typ ~latex ~env k; render_typ ~latex ~env v]);
+      ]
+  | TyRecord kvs ->
+    concat
+      [
+        string "record";
+        parens
+          (separate (spaced comma)
+             (List.map
+                (fun (k, v) ->
+                  concat [string k; colon; render_typ ~latex ~env v])
+                kvs));
+      ]
   | TyVar v ->
     (match IMap.find_opt (UF.value v) env.types with
     | None -> separate space [string "unbound"; render_uf v]
@@ -362,6 +359,37 @@ let render_functions env =
            ])
   |> concat
 
+let render_spec_decl (decl : spec_decl) =
+  match decl with
+  | Invariant _ -> failwith "invariant"
+  | Ltl _ -> failwith "ltl"
+  | Function (_, _, _) -> failwith "function"
+  | SpecParty sp ->
+    separate space
+      [
+        string "party";
+        string sp.var;
+        string "in";
+        string sp.set;
+        parens
+          (nest 2
+             (nl
+             ^^ (sp.initial
+                |> List.map (fun (v, e) ->
+                       concat
+                         [
+                           string sp.var;
+                           dot;
+                           string v;
+                           space;
+                           equals;
+                           space;
+                           render_expr e;
+                         ])
+                |> separate (semi ^^ nl)))
+          ^^ nl);
+      ]
+
 let pretty fmt d = PPrint.ToFormatter.pretty 0.8 120 fmt d
 
 let to_pp ?(one_line = true) render fmt a =
@@ -377,6 +405,7 @@ let pp_texpr ~env = to_pp (fun t -> render_texpr ~env t)
 let pp_texpr_untyped = to_pp (fun t -> render_texpr_as_expr t)
 let pp_typ ~env = to_pp (fun t -> render_typ ~env t)
 let pp_ownership ~env = to_pp (fun t -> render_own ~env t)
+let pp_spec_decl = to_pp render_spec_decl
 
 let pp_tid fmt t =
   Format.fprintf fmt "%s%s" t.name
