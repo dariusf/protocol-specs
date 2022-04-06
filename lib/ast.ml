@@ -338,7 +338,7 @@ and env = {
   bindings : var_info SMap.t;
   local_bindings : var_info SMap.t;
   polymorphic : scheme SMap.t;
-  subprotocols : subprotocol SMap.t;
+  subprotocols : subprotocol SMap.t; [@equal fun _ _ -> true]
 }
 [@@deriving show { with_path = false }, eq]
 
