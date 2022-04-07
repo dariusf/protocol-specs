@@ -1132,48 +1132,6 @@ let rec type_instantiated env t =
   | TyFn (args, ret) ->
     List.for_all (type_instantiated env) args && type_instantiated env ret
 
-(* let rec check_instantiated_expr env (t : texpr) =
-     match t.expr with
-     | Int _ | Bool _ | String _ -> ()
-     | Set s -> List.iter (check_instantiated_expr env) s
-     | List l -> List.iter (check_instantiated_expr env) l
-     | Var (V (_, v)) ->
-       let { typ; own } = t.meta.info in
-       if not (type_instantiated env typ) then
-         fail ~loc:t.meta.loc "failed to infer type for %s" v;
-       if not (party_instantiated env own) then
-         fail ~loc:t.meta.loc "failed to infer party for %s" v
-     | App (_, args) -> List.iter (check_instantiated_expr env) args
-     | Map _ -> nyi "map check_instanted_expr"
-     | MapComp _ -> nyi "map comp check_instanted_expr"
-     | MapProj _ -> nyi "map proj check_instanted_expr"
-     | Let _ -> nyi "let check_instanted_expr"
-     | Record _ -> nyi "record check_instanted_expr"
-
-   let rec check_instantiated env p =
-     match p.p with
-     | Seq s | Par s -> List.iter (check_instantiated env) s
-     | Disj (a, b) -> List.iter (check_instantiated env) [a; b]
-     | Send { from; to_; msg = Message { args; _ } } ->
-       check_instantiated_expr env from;
-       check_instantiated_expr env to_;
-       List.iter (fun (_, e) -> check_instantiated_expr env e) args
-     | Call { args; _ } -> List.iter (check_instantiated_expr env) args
-     | Assign (v, e) ->
-       check_instantiated_expr env v;
-       check_instantiated_expr env e
-     | Imply (c, b) | BlockingImply (c, b) ->
-       check_instantiated_expr env c;
-       check_instantiated env b
-     | Forall (v, s, b) | Exists (v, s, b) ->
-       check_instantiated_expr env v;
-       check_instantiated_expr env s;
-       check_instantiated env b
-     | Emp -> bug "emp should not appear"
-     | SendOnly _ -> bug "send only should not appear"
-     | ReceiveOnly _ -> bug "receive only should not appear"
-     | Comment (_, _, _) -> bug "comment should not appear" *)
-
 let check_instantiated, check_instantiated_expr =
   let vp =
     object
@@ -1194,70 +1152,6 @@ let check_instantiated, check_instantiated_expr =
   in
   ( (fun env (tp : tprotocol) -> vp#visit__protocol env tp),
     fun env (tp : texpr) -> vp#visit__expr env tp )
-
-(* let rec qualify_vars_expr _ (t : texpr) =
-   let env = t.meta.env in
-   match t.expr with
-   | Int _ | Bool _ | String _ -> t
-   | Set s -> { t with expr = Set (List.map (qualify_vars_expr env) s) }
-   | List l -> { t with expr = List (List.map (qualify_vars_expr env) l) }
-   | Var (V (p, v)) ->
-     (match p with
-     | None ->
-       let party = find_party_var_by_type_of env t in
-       { t with expr = Var (V (party, v)) }
-     | Some _ -> t)
-   | App (f, args) ->
-     { t with expr = App (f, List.map (qualify_vars_expr env) args) }
-   | Map _ -> nyi "map check_instanted_expr"
-   | MapComp _ -> nyi "map comp check_instanted_expr"
-   | MapProj _ -> nyi "map proj check_instanted_expr"
-   | Let _ -> nyi "let check_instanted_expr"
-   | Record _ -> nyi "record check_instanted_expr" *)
-
-(* let rec qualify_vars env p =
-   match p.p with
-   | Seq s -> { p with p = Seq (List.map (qualify_vars env) s) }
-   | Par s -> { p with p = Par (List.map (qualify_vars env) s) }
-   | Disj (a, b) -> { p with p = Disj (qualify_vars env a, qualify_vars env b) }
-   | Send { from; to_; msg = Message { typ; args } } ->
-     {
-       p with
-       p =
-         Send
-           {
-             from = qualify_vars_expr env from;
-             to_ = qualify_vars_expr env to_;
-             msg =
-               Message
-                 {
-                   typ;
-                   args =
-                     args
-                     |> List.map (fun (k, v) -> (k, (qualify_vars_expr env) v));
-                 };
-           };
-     }
-   | Call { f; args } ->
-     { p with p = Call { f; args = List.map (qualify_vars_expr env) args } }
-   | Assign (v, e) ->
-     { p with p = Assign (qualify_vars_expr env v, qualify_vars_expr env e) }
-   | Imply (c, b) ->
-     { p with p = Imply (qualify_vars_expr env c, qualify_vars env b) }
-   | BlockingImply (c, b) ->
-     { p with p = BlockingImply (qualify_vars_expr env c, qualify_vars env b) }
-   | Forall (v, s, b) ->
-     {
-       p with
-       p =
-         Forall
-           (qualify_vars_expr env v, qualify_vars_expr env s, qualify_vars env b);
-     }
-   | Exists _ -> nyi "exists qualifer vars"
-   | Emp -> bug "emp should not appear"
-   | SendOnly _ -> bug "send only should not appear"
-   | ReceiveOnly _ -> bug "receive only should not appear"
-   | Comment (_, _, _) -> bug "comment should not appear" *)
 
 (** this approach of separately traversing the AST is taken because
   trying to qualify during type inference won't work, as types won't be fully

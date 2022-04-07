@@ -39,32 +39,37 @@ let require_project_party p =
 let project_all_parties parties env tprotocol : (tprotocol * env) SMap.t =
   (* p -> [p_a, p_b, ...] *)
   let projected = Project.project parties env tprotocol in
-  let envs =
-    (* ps -> [ [p_a_1, p_a_2, ...], [p_b_1, p_b_2, ...], ...]
-       -> [[p_a_1, p_b_1, ...], [p_a_2, p_b_2, ...], ...]
-    *)
-    env.subprotocols |> SMap.bindings
-    |> List.map (fun (_, sp) -> sp)
-    |> List.map (fun sp ->
-           List.map (fun pa -> (sp, pa)) (Project.project parties env sp.tp))
-    |> transpose
-    (* this transposing business is required because of the interface of Project.project *)
-  in
-  let results =
-    List.map2
-      (fun p e ->
-        ( p,
-          {
-            env with
-            subprotocols =
-              List.map (fun (sp, p) -> (sp.fname, { sp with tp = p })) e
-              |> SMap.of_list;
-          } ))
-      projected envs
-    |> List.map2 (fun n r -> (var_name n.repr, r)) parties
+  match SMap.cardinal env.subprotocols with
+  | 0 ->
+    List.map2 (fun party p -> (var_name party.repr, (p, env))) parties projected
     |> SMap.of_list
-  in
-  results
+  | _ ->
+    let envs =
+      (* ps -> [ [p_a_1, p_a_2, ...], [p_b_1, p_b_2, ...], ...]
+         -> [[p_a_1, p_b_1, ...], [p_a_2, p_b_2, ...], ...]
+      *)
+      env.subprotocols |> SMap.bindings
+      |> List.map (fun (_, sp) -> sp)
+      |> List.map (fun sp ->
+             List.map (fun pa -> (sp, pa)) (Project.project parties env sp.tp))
+      |> transpose
+      (* this transposing business is required because of the interface of Project.project *)
+    in
+    let results =
+      List.map2
+        (fun p e ->
+          ( p,
+            {
+              env with
+              subprotocols =
+                List.map (fun (sp, p) -> (sp.fname, { sp with tp = p })) e
+                |> SMap.of_list;
+            } ))
+        projected envs
+      |> List.map2 (fun n r -> (var_name n.repr, r)) parties
+      |> SMap.of_list
+    in
+    results
 
 (* (*
      List.map2 (fun party pr -> (party.repr |> var_name, pr)) parties projected
@@ -157,7 +162,7 @@ let print ~project_party ~ast ~types ~actions ~latex ~grain inp =
     | `File file -> parse file
     | `String s -> Parsing.parse_string s
   in
-  match types || Option.is_some project_party with
+  match actions || types || Option.is_some project_party with
   | false ->
     (* show an untyped version *)
     (* TODO functions are not printed here *)

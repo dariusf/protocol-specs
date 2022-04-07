@@ -451,9 +451,10 @@ let rec compile_typ env t =
   | TyInt -> "int"
   | TyBool -> "bool"
   | TyString -> "string"
-  | TyFn (_, _) -> nyi "compile type fn"
-  | TyRecord _ -> nyi "compile type record"
-  | TyMap (_, _) -> nyi "compile type map"
+  | TyMap (k, v) ->
+    Format.asprintf "map[%s]%s" (compile_typ env k) (compile_typ env v)
+  | TyFn (_, _) -> nyi "compile type fn" (* seems hard *)
+  | TyRecord _ -> "interface{}" (* TODO struct *)
 
 let uses_reflect = ref false
 

@@ -34,42 +34,42 @@ Single-decree Paxos
                  a1->l : accept)))))
 
   $ protocol print paxos.spec --types
-  (forall (p : party P;global) in (P : {party P};global)
+  (forall (p : party P;global) in (P : map(party P, bool);global)
      (p.proposal : int;P) = 0;
      (p.value : int;P) = 1;
-     (p.cp : [int];P) = {0, 0};
-     (p.majority : int;P) = size((A : {party A};global)) / 2 + 1;
-     (p.promise_responses : {party A};P) = {});
-  (forall (a : party A;global) in (A : {party A};global)
+     (p.cp : map(int, int);P) = [0, 0];
+     (p.majority : int;P) = size((A : map(party A, bool);global)) / 2 + 1;
+     (p.promise_responses : map(party A, bool);P) = {});
+  (forall (a : party A;global) in (A : map(party A, bool);global)
      (a.highest_proposal : int;A) = 0;
      (a.accepted_proposal : int;A) = 0;
      (a.accepted_value : int;A) = 0);
-  (forall (p : party P;global) in (P : {party P};global)
+  (forall (p : party P;global) in (P : map(party P, bool);global)
      ((p.proposal : int;P) = (p.proposal : int;P) + 1;
-      (forall (a : party A;global) in (A : {party A};global)
+      (forall (a : party A;global) in (A : map(party A, bool);global)
          (p : party P;global)->(a : party A;global) : prepare((n : int;A)=p2i((p : party P;global)) * 100 + (p.proposal : int;P));
          ((a.n : int;A) > (a.highest_proposal : int;A) =>
             (a.highest_proposal : int;A) = (a.n : int;A);
             (a : party A;global)->(p : party P;global) : promise((cp : int;P)=(a.accepted_proposal : int;A), (cv : int;P)=(a.accepted_value : int;A));
-            (p.promise_responses : {party A};P) = union((p.promise_responses : {party A};P), {(a : party A;global)});
+            (p.promise_responses : map(party A, bool);P) = union((p.promise_responses : map(party A, bool);P), {(a : party A;global)});
             ((p.cp : int;P) > 0 & (p.cp : int;P) > (p.cp : int;P) =>
                (p.cp : int;P) = (p.cp : int;P);
                (p.value : int;P) = (p.cv : int;P))))
       ||
-      size((p.promise_responses : {party A};P)) > (p.majority : int;P) =>*
-        (forall (a1 : party A;P) in (p.promise_responses : {party A};P)
+      size((p.promise_responses : map(party A, bool);P)) > (p.majority : int;P) =>*
+        (forall (a1 : party A;P) in (p.promise_responses : map(party A, bool);P)
            (p : party P;global)->(a1 : party A;P) : propose((pn : int;A)=(p.proposal : int;P), (pv : int;A)=(p.value : int;P), (a1 : party A;A)=(a1 : party A;P));
            ((a1.pn : int;A) == (a1.highest_proposal : int;A) =>
               (a1.accepted_proposal : int;A) = (a1.pn : int;A);
               (a1.accepted_value : int;A) = (a1.pv : int;A);
               (a1 : party A;A)->(p : party P;global) : accept;
-              (forall (l : party L;global) in (L : {party L};global)
+              (forall (l : party L;global) in (L : map(party L, bool);global)
                  (a1 : party A;A)->(l : party L;global) : accept)))))
 
   $ protocol print paxos.spec --project P
   proposal = 0;
   value = 1;
-  cp = {0, 0};
+  cp = [0, 0];
   majority = size(A) / 2 + 1;
   promise_responses = {};
   (proposal = proposal + 1;

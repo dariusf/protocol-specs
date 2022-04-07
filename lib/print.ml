@@ -55,6 +55,7 @@ let render_expr_ :
   | Bool b -> string (string_of_bool b)
   | String s -> string (Format.sprintf {|'%s'|} s)
   | Set es -> braces (List.map f es |> separate (spaced comma))
+  | List [] -> brackets space
   | List es -> brackets (List.map f es |> separate (spaced comma))
   | Ite (e1, e2, e3) ->
     separate space

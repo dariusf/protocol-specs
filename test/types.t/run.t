@@ -36,8 +36,8 @@ Message variables are also local.
   >     c->p: m(a=1);
   >     p.b = a
   > EOF
-  forall (c : party C;global) in (C : {party C};global)
-    forall (p : party P;global) in (P : {party P};global)
+  forall (c : party C;global) in (C : map(party C, bool);global)
+    forall (p : party P;global) in (P : map(party P, bool);global)
       (c : party C;global)->(p : party P;global) : m((a : int;P)=1);
       (p.b : int;P) = (p.a : int;P)
 
@@ -63,9 +63,9 @@ Qualifying r allows us to infer the type.
   >     r = union(p.r, {c});
   >     c->p: m
   > EOF
-  forall (c : party C;global) in (C : {party C};global)
-    forall (p : party P;global) in (P : {party P};global)
-      (p.r : {party C};P) = union((p.r : {party C};P), {(c : party C;global)});
+  forall (c : party C;global) in (C : map(party C, bool);global)
+    forall (p : party P;global) in (P : map(party P, bool);global)
+      (p.r : map(party C, bool);P) = union((p.r : map(party C, bool);P), {(c : party C;global)});
       (c : party C;global)->(p : party P;global) : m
 
 Here it's not possible for members of party C to know which of them should send a message to P because they don't know s, which resides on p...
@@ -92,9 +92,9 @@ Here it's not possible for members of party C to know which of them should send 
   >     p->x: n(x=x);
   >     x->p: m
   > EOF
-  forall (p : party P;global) in (P : {party P};global)
-    (p.s : {party C};P) = (C : {party C};global);
-    (forall (x : party C;P) in (p.s : {party C};P)
+  forall (p : party P;global) in (P : map(party P, bool);global)
+    (p.s : map(party C, bool);P) = (C : map(party C, bool);global);
+    (forall (x : party C;P) in (p.s : map(party C, bool);P)
        (p : party P;global)->(x : party C;P) : n((x : party C;C)=(x : party C;P));
        (x : party C;C)->(p : party P;global) : m)
 
@@ -117,10 +117,10 @@ This fails because we cannot infer a type for a...
   > forall c in C
   >   c.a = union(c.a, {c})
   > EOF
-  (forall (c : party C;global) in (C : {party C};global)
-     (c.a : {party C};C) = {});
-  (forall (c : party C;global) in (C : {party C};global)
-     (c.a : {party C};C) = union((c.a : {party C};C), {(c : party C;global)}))
+  (forall (c : party C;global) in (C : map(party C, bool);global)
+     (c.a : map(party C, bool);C) = {});
+  (forall (c : party C;global) in (C : map(party C, bool);global)
+     (c.a : map(party C, bool);C) = union((c.a : map(party C, bool);C), {(c : party C;global)}))
 
 party c in C (c.a = 1)
 party p in P ()

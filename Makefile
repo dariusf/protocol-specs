@@ -4,9 +4,8 @@ export OCAMLRUNPARAM=b
 .PHONY: monitor
 
 all:
-	# stuff/types.sh a
 	dune test --display=short
-	# dune build @install
+	dune build @install
 
 w:
 	dune test --display=short -w

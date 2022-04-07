@@ -4,6 +4,10 @@ open Common.Printing
 open Ast
 open Infer.Cast
 
+open Log.Make (struct
+  let name = "tla"
+end)
+
 type fml =
   | Conj of fml list
   | Disj of fml list
@@ -315,6 +319,7 @@ let rec translate_expr (e : texpr) =
   | Ite _ -> nyi "do expr ite"
 
 let rec translate_protocol (p : tprotocol) =
+  log "translate %a" Print.pp_tprotocol_untyped p;
   match p.p with
   | Assign (v, e) ->
     let (V (_, v)) = must_be_var_t v in
@@ -461,6 +466,7 @@ let translate_node all_vars pname (id, node) =
               Term "history";
             ] ) )
   in
+  log "translate node %d" id;
   let body = translate_protocol node.protocol in
   let assigned = assignments_fml body in
   let unchanged =
@@ -486,9 +492,9 @@ let rec default_value_of_type env t =
   | TyInt -> Term "0"
   | TyBool -> Term "FALSE"
   | TyString -> Term {|""|}
-  | TyFn (_, _) -> nyi "default party fn"
-  | TyMap (_, _) -> nyi "default party map"
-  | TyRecord _ -> nyi "default party record"
+  | TyMap (_, _) -> Term "[]" (* TODO ? *)
+  | TyRecord _ -> Term "[]" (* TODO ? *)
+  | TyFn (_, _) -> nyi "default value fn"
 
 let single_party_to_tla all_vars env nodes pname protocol =
   let vars = Actions.assigned_variables protocol in

@@ -41,24 +41,24 @@ The classic two-phase commit protocol.
        p->c : abort_ack)
 
   $ protocol print --types 2pc.spec
-  forall (c : party C;global) in (C : {party C};global)
-    (forall (p : party P;global) in (P : {party P};global)
+  forall (c : party C;global) in (C : map(party C, bool);global)
+    (forall (p : party P;global) in (P : map(party P, bool);global)
        (c : party C;global)->(p : party P;global) : prepare;
        ((p : party P;global)->(c : party C;global) : prepared
         \/
         (p : party P;global)->(c : party C;global) : abort;
         (c.has_aborted : bool;C) = true));
     ((c.has_aborted : bool;C) =>*
-       (forall (p : party P;global) in (P : {party P};global)
+       (forall (p : party P;global) in (P : map(party P, bool);global)
           (c : party C;global)->(p : party P;global) : abort;
           (p : party P;global)->(c : party C;global) : abort_ack;
-          (c.aborted : {party P};C) = union((c.aborted : {party P};C), {(p : party P;global)}))
+          (c.aborted : map(party P, bool);C) = union((c.aborted : map(party P, bool);C), {(p : party P;global)}))
      \/
      !((c.has_aborted : bool;C)) =>*
-       (forall (p : party P;global) in (P : {party P};global)
+       (forall (p : party P;global) in (P : map(party P, bool);global)
           (c : party C;global)->(p : party P;global) : commit;
           (p : party P;global)->(c : party C;global) : commit_ack;
-          (c.committed : {party P};C) = union((c.committed : {party P};C), {(p : party P;global)})))
+          (c.committed : map(party P, bool);C) = union((c.committed : map(party P, bool);C), {(p : party P;global)})))
 
   $ protocol print 2pc.spec --project C
   (forall p in P
@@ -195,8 +195,8 @@ The classic two-phase commit protocol.
   
   Init ==
     /\ has_aborted = [i \in C |-> FALSE]
-    /\ aborted = [i \in C |-> {}]
-    /\ committed = [i \in C |-> {}]
+    /\ aborted = [i \in C |-> []]
+    /\ committed = [i \in C |-> []]
     /\ messages = [i \in {} |-> 0]
     /\ history = <<>>
     /\ pc = [i \in participants |-> [j \in threadParticipants |-> 0]]

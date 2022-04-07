@@ -37,7 +37,7 @@ let%expect_test "parsing" =
     p.a = p.a[1]
     p.a = p.a['x']
     p.a = [0]
-    p.a = []
+    p.a = [ ]
     b =>*
       (forall c in C
          c.a = 1)

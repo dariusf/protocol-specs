@@ -127,7 +127,7 @@ let split_actions_simple :
     state =
  fun lpre params fn_entrypoints (tprotocol : tprotocol) ->
   let rec aux lpre params t =
-    (* Format.printf "t: %a@." Print.pp_tprotocol_untyped t; *)
+    log "split simple: %a" Print.pp_tprotocol_untyped t;
     match t.p with
     | Forall (v, s, body) ->
       let (V (_, v1)) = must_be_var_t v in
@@ -669,11 +669,18 @@ let split_into_actions :
            (* create the starting actions and link to the beginning of the function *)
            let st =
              let entry = List.assoc ~eq:String.equal name fn_entrypoints in
-             let fn_start =
-               match st.start with
-               | [s] -> s
-               | _ -> bug "invalid function start"
-             in
+             (* let fn_start =
+                  match st.start with
+                  | [s] -> s
+                  | _ ->
+                    bug "invalid function start %d %a %a" (List.length st.start)
+                      Print.pp_tprotocol_untyped
+                      (IMap.find (st.start |> List.hd) st.actions).protocol
+                      Print.pp_tprotocol_untyped
+                      (IMap.find (st.start |> List.tl |> List.hd) st.actions)
+                        .protocol
+                in *)
+             (* see if anything bad happens when we have multiple starts, say due to par *)
              let entry_cond = Cond (sp.tp.pmeta.tid, entry) in
              let actions =
                st.actions
@@ -686,11 +693,18 @@ let split_into_actions :
                       (* cpost = Cond (sp.tp.pmeta.tid, fn_start); *)
                       cpost = entry_cond;
                     }
-               |> IMap.update fn_start (function
-                    | None -> bug "invalid"
-                    | Some act -> Some { act with cpre = entry_cond })
              in
-             let graph = G.add_edge st.graph entry fn_start in
+             let actions, graph =
+               List.fold_right
+                 (fun st (a, g) ->
+                   ( IMap.update st
+                       (function
+                         | None -> bug "invalid"
+                         | Some act -> Some { act with cpre = entry_cond })
+                       a,
+                     G.add_edge g entry st ))
+                 st.start (actions, st.graph)
+             in
              { st with actions; graph }
            in
            (name, st))
