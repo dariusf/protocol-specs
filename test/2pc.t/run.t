@@ -497,7 +497,7 @@ The classic two-phase commit protocol.
   		m.Log = append(m.Log, entry{action: "CReceiveAbort3", params: params})
   		return nil
   	case CChangeHasAborted4:
-  
+  		// no params check
   		// no logical preconditions
   		if !(m.PC["Ct0_"+(params[0] /* p : P */)] == 3) {
   			return fmt.Errorf("control precondition of CChangeHasAborted4 %v violated", params)
@@ -591,7 +591,7 @@ The classic two-phase commit protocol.
   		}
   		m.PC["Ct0_"+(params[0] /* p : P */)] = 3
   	case CChangeHasAborted4:
-  
+  		// no params check
   		m.PC["Ct0_"+(params[0] /* p : P */)] = 4
   	case CSendAbort5:
   		if len(params) != 1 {

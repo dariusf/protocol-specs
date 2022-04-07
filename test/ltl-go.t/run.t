@@ -11,7 +11,7 @@
   func (m *Monitor) precondition(g *Global, action Action, params ...string) error {
   	switch action {
   	case CChangeB1:
-  
+  		// no params check
   		if g != nil && !(g.B > 0) {
   			return fmt.Errorf("logical precondition of %s, %v violated", "CChangeB1", params)
   		}
@@ -29,7 +29,7 @@
   func (m *Monitor) applyPostcondition(action Action, params ...string) error {
   	switch action {
   	case CChangeB1:
-  
+  		// no params check
   		m.PC["Cmain"] = 1
   	default:
   		panic("invalid action")
@@ -49,7 +49,7 @@
   func (m *Monitor) precondition(g *Global, action Action, params ...string) error {
   	switch action {
   	case CChangeA1:
-  
+  		// no params check
   		// no logical preconditions
   		if !(m.PC["Cmain"] == 0) {
   			return fmt.Errorf("control precondition of CChangeA1 %v violated", params)
@@ -65,7 +65,7 @@
   func (m *Monitor) applyPostcondition(action Action, params ...string) error {
   	switch action {
   	case CChangeA1:
-  
+  		// no params check
   		m.PC["Cmain"] = 1
   	default:
   		panic("invalid action")

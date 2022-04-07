@@ -307,7 +307,7 @@ Monitor
   func (m *Monitor) precondition(g *Global, action Action, params ...string) error {
   	switch action {
   	case CSendReq62:
-  
+  		// no params check
   		// no logical preconditions
   		if !(m.PC["Cmain"] == 62) {
   			return fmt.Errorf("control precondition of CSendReq62 %v violated", params)
@@ -315,7 +315,7 @@ Monitor
   		m.Log = append(m.Log, entry{action: "CSendReq62", params: params})
   		return nil
   	case CChangeValue64:
-  
+  		// no params check
   		// no logical preconditions
   		if !(allSet(m.vars["S"], func(s string) bool { return m.PC["Ct22_"+(s)] == 63 })) {
   			return fmt.Errorf("control precondition of CChangeValue64 %v violated", params)
@@ -323,7 +323,7 @@ Monitor
   		m.Log = append(m.Log, entry{action: "CChangeValue64", params: params})
   		return nil
   	case CCall73:
-  
+  		// no params check
   		// no logical preconditions
   		if !(m.PC["Ct20"] == 0) {
   			return fmt.Errorf("control precondition of CCall73 %v violated", params)
@@ -339,7 +339,7 @@ Monitor
   func (m *Monitor) precondition(g *Global, action Action, params ...string) error {
   	switch action {
   	case SChangeRole1:
-  
+  		// no params check
   		// no logical preconditions
   		if !(m.PC["Smain"] == 1) {
   			return fmt.Errorf("control precondition of SChangeRole1 %v violated", params)
@@ -347,7 +347,7 @@ Monitor
   		m.Log = append(m.Log, entry{action: "SChangeRole1", params: params})
   		return nil
   	case SDummy2:
-  
+  		// no params check
   		// no logical preconditions
   		if !(m.PC["Smain"] == 2) {
   			return fmt.Errorf("control precondition of SDummy2 %v violated", params)
@@ -355,7 +355,7 @@ Monitor
   		m.Log = append(m.Log, entry{action: "SDummy2", params: params})
   		return nil
   	case SChangeRole3:
-  
+  		// no params check
   		// no logical preconditions
   		if !(m.PC["Smain"] == 3) {
   			return fmt.Errorf("control precondition of SChangeRole3 %v violated", params)
@@ -363,7 +363,7 @@ Monitor
   		m.Log = append(m.Log, entry{action: "SChangeRole3", params: params})
   		return nil
   	case SDummy4:
-  
+  		// no params check
   		// no logical preconditions
   		if !(m.PC["Smain"] == 4) {
   			return fmt.Errorf("control precondition of SDummy4 %v violated", params)
@@ -371,7 +371,7 @@ Monitor
   		m.Log = append(m.Log, entry{action: "SDummy4", params: params})
   		return nil
   	case SReceiveReq5:
-  
+  		// no params check
   		// no logical preconditions
   		if !(m.PC["Smain"] == 5) {
   			return fmt.Errorf("control precondition of SReceiveReq5 %v violated", params)
@@ -379,7 +379,7 @@ Monitor
   		m.Log = append(m.Log, entry{action: "SReceiveReq5", params: params})
   		return nil
   	case SChangeLog7:
-  
+  		// no params check
   		// no logical preconditions
   		if !(m.PC["St5_"+(params[0] /* c : C */)] == 6) {
   			return fmt.Errorf("control precondition of SChangeLog7 %v violated", params)
@@ -417,7 +417,7 @@ Monitor
   		m.Log = append(m.Log, entry{action: "SReceiveAppendEntries14", params: params})
   		return nil
   	case SCall15:
-  
+  		// no params check
   		// no logical preconditions
   		if !(allSet(m.vars["S  {self}"], func(t string) bool { return m.PC["St8_"+(t)] == 13 }) && allSet(m.vars["S  {self}"], func(s string) bool { return m.PC["St9_"+(s)] == 14 })) {
   			return fmt.Errorf("control precondition of SCall15 %v violated", params)
@@ -425,7 +425,7 @@ Monitor
   		m.Log = append(m.Log, entry{action: "SCall15", params: params})
   		return nil
   	case SChangeRole22:
-  
+  		// no params check
   		// no logical preconditions
   		if !(m.PC["Smain"] == 2) {
   			return fmt.Errorf("control precondition of SChangeRole22 %v violated", params)
@@ -475,7 +475,7 @@ Monitor
   		m.Log = append(m.Log, entry{action: "SReceiveRequestVote35", params: params})
   		return nil
   	case SChange_LogOk36:
-  
+  		// no params check
   		// no logical preconditions
   		if !(m.PC["St14_"+(params[0] /* s : S */)] == 35) {
   			return fmt.Errorf("control precondition of SChange_LogOk36 %v violated", params)
@@ -503,7 +503,7 @@ Monitor
   		m.Log = append(m.Log, entry{action: "SCall41", params: params})
   		return nil
   	case SChangeRole44:
-  
+  		// no params check
   		// no logical preconditions
   		if !(m.PC["St0"] == 0) {
   			return fmt.Errorf("control precondition of SChangeRole44 %v violated", params)
@@ -511,7 +511,7 @@ Monitor
   		m.Log = append(m.Log, entry{action: "SChangeRole44", params: params})
   		return nil
   	case SCall54:
-  
+  		// no params check
   		// no logical preconditions
   		if !(m.PC["St1"] == 0) {
   			return fmt.Errorf("control precondition of SCall54 %v violated", params)
@@ -519,7 +519,7 @@ Monitor
   		m.Log = append(m.Log, entry{action: "SCall54", params: params})
   		return nil
   	case SCall55:
-  
+  		// no params check
   		// no logical preconditions
   		if !(m.PC["St2"] == 0) {
   			return fmt.Errorf("control precondition of SCall55 %v violated", params)
@@ -527,7 +527,7 @@ Monitor
   		m.Log = append(m.Log, entry{action: "SCall55", params: params})
   		return nil
   	case SCall56:
-  
+  		// no params check
   		// no logical preconditions
   		if !(m.PC["St3"] == 0) {
   			return fmt.Errorf("control precondition of SCall56 %v violated", params)
@@ -535,7 +535,7 @@ Monitor
   		m.Log = append(m.Log, entry{action: "SCall56", params: params})
   		return nil
   	case SCall57:
-  
+  		// no params check
   		// no logical preconditions
   		if !(m.PC["St4"] == 0) {
   			return fmt.Errorf("control precondition of SCall57 %v violated", params)

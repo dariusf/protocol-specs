@@ -713,7 +713,7 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
   in
   let params_check params =
     match params with
-    | [] -> ""
+    | [] -> "// no params check"
     | _ ->
       flags.uses_errors <- true;
       let l = List.length params in
@@ -746,7 +746,7 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
     IMap.bindings action_nodes
     |> List.map (fun (id, act) ->
            let name = Actions.node_name pname (id, act) in
-           let pres =
+           let lpre =
              match act.lpre with
              | [] -> "// no logical preconditions"
              | _ ->
@@ -759,20 +759,18 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
                         (compile_expr parties p) name)
                |> String.concat "\n"
            in
-           let body =
-             Format.sprintf
-               {|%s
-               %s
-               if ! (%s) {
-                 return fmt.Errorf("control precondition of %s %%v violated", params)
-               }
-               m.Log = append(m.Log, entry{action: "%s", params: params})
-               return nil|}
-               (params_check act.params) pres
-               (fence_to_precondition act act.cpre)
-               name name
-           in
-           Format.sprintf "case %s:\n%s" name body)
+           Format.sprintf
+             {|case %s:
+             %s
+             %s
+             if ! (%s) {
+               return fmt.Errorf("control precondition of %s %%v violated", params)
+             }
+             m.Log = append(m.Log, entry{action: "%s", params: params})
+             return nil|}
+             name (params_check act.params) lpre
+             (fence_to_precondition act act.cpre)
+             name name)
     |> String.concat "\n"
   in
   let postconditions =
