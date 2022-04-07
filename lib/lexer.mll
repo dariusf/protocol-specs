@@ -73,6 +73,7 @@ rule token = parse
   | "[" { LBRACKET }
   | "]" { RBRACKET }
   | "?" { QUESTION }
+  | "!" { BANG }
   | "<>" { DIAMOND }
   (* conflict with empty list; consider using always *)
   | "[]" { BOX }

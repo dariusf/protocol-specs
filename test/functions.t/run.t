@@ -12,7 +12,7 @@ Recursion example
     $f()
   )
   (forall c in C
-     c-> : m);
+     c? m);
   $f()
 
   $ protocol print fns.spec --project C
@@ -20,20 +20,20 @@ Recursion example
     $f()
   )
   (forall p in P
-     ->p : m);
+     p! m);
   $f()
 
   $ protocol print fns.spec --project P --actions
   digraph G {
     1 [label="PChangeA1\n{Pmain = 1}\na = 1\n{Pmain = 1}\n"];
-    4 [label="PReceiveM4\n{start}\nc→ : m\n{Pmain = 1}\n"];
+    4 [label="PReceiveM4\n{start}\nc? m\n{Pmain = 1}\n"];
     4 -> 1;
     1 -> 1;
   }
 
   $ protocol print fns.spec --project C --actions
   digraph G {
-    3 [label="CSendM3\n{start}\n→p : m\n{Cmain = 1}\n"];
+    3 [label="CSendM3\n{start}\np! m\n{Cmain = 1}\n"];
   }
 
 $ protocol tla fns.spec

@@ -257,9 +257,10 @@ let render_protocol_ :
     | SendOnly { to_; msg = Message { typ; args }; _ } ->
       concat
         [
-          arrow latex;
           render_expr to_;
-          enclose space space colon;
+          spaced bang;
+          (* enclose space space bang; *)
+          (* (match args with [] -> Fun.id | _ -> enclose space space) bang; *)
           string typ;
           (match args with
           | [] -> empty
@@ -275,8 +276,9 @@ let render_protocol_ :
       concat
         [
           render_expr from;
-          arrow latex;
-          enclose space space colon;
+          spaced (string "?");
+          (* enclose space space (string "?"); *)
+          (* (match args with [] -> Fun.id | _ -> enclose space space) (string "?"); *)
           string typ;
           (match args with
           | [] -> empty

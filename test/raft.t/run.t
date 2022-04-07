@@ -110,7 +110,7 @@ Client projection
   $ protocol print --project C raft.spec
   protocol client_requests() (
     (forall s in S
-       ->s : req(v=value));
+       s! req(v=value));
     value = value + 1;
     $client_requests()
   )
@@ -142,7 +142,7 @@ Client actions
 
   $ protocol print --actions --project C raft.spec
   digraph G {
-    5 [label="CSendReq5\n{Cmain = 5}\n→s : req(v=value)\n{Ct5(s:S) = 6}\n"];
+    5 [label="CSendReq5\n{Cmain = 5}\ns! req(v=value)\n{Ct5(s:S) = 6}\n"];
     7 [label="CChangeValue7\n{∀ s:S. Ct5(s:S) = 6}\nvalue = value + 1\n{Cmain = 5}\n"];
     16 [label="CCall16\n{start}\n$client_requests()\n{Ct3 = 5}\n"];
     16 -> 5;
@@ -155,7 +155,7 @@ Server projection
   $ protocol print --project S raft.spec
   protocol client_requests() (
     (forall c in C
-       c-> : req(v);
+       c? req(v);
        (role == 'leader' =>*
           log = append(log, [<<term: current_term, value: v>>])));
     $client_requests()
@@ -167,11 +167,11 @@ Server projection
           _prev_log_term = (_prev_log_index > 0) ? (log[_prev_log_index]['term']) : (0);
           _last_entry = min({length(log), next_index[t]});
           _entries = slice(log, next_index[t], _last_entry);
-          ->t : append_entries(term=term, prev_log_index=_prev_log_index, prev_log_term=_prev_log_term, entries=_entries, commit_index=min({commit_index, _last_entry})))
+          t! append_entries(term=term, prev_log_index=_prev_log_index, prev_log_term=_prev_log_term, entries=_entries, commit_index=min({commit_index, _last_entry})))
      ||
      forall s in (S \ {self})
        role == 'leader' =>*
-         s-> : append_entries(term, prev_log_index, prev_log_term, entries, commit_index));
+         s? append_entries(term, prev_log_index, prev_log_term, entries, commit_index));
     $replicate()
   )
   protocol restart() (
@@ -190,10 +190,10 @@ Server projection
        votes_responded = {};
        votes_granted = {};
        (forall t in (S \ {self})
-          ->t : request_vote(term=current_term, last_log_term=(length(log) == 0) ? (0) : (last(log)['term']), last_log_index=length(log));
+          t! request_vote(term=current_term, last_log_term=(length(log) == 0) ? (0) : (last(log)['term']), last_log_index=length(log));
           (term <= current_term =>
              _grant =>
-               t-> : request_vote_resp(term, vote_granted);
+               t? request_vote_resp(term, vote_granted);
                (term == current_term =>
                   votes_responded = union(votes_responded, {t});
                   (vote_granted =>
@@ -206,13 +206,13 @@ Server projection
     ||
     forall s in (S \ {self})
       role == 'candidate' =>*
-        (s-> : request_vote(term, last_log_term, last_log_index);
+        (s? request_vote(term, last_log_term, last_log_index);
          _log_ok = last_log_term > (length(log) == 0) ? (0) : (last(log)['term']) | last_log_term == (length(log) == 0) ? (0) : (last(log)['term']) & last_log_index >= length(log);
          _grant = term == current_term & _log_ok & (voted_for == [self] | voted_for == [ ]);
          (term <= current_term =>
             _grant =>
               voted_for = [self];
-              ->s : request_vote_resp(term=current_term, vote_granted=_grant);
+              s! request_vote_resp(term=current_term, vote_granted=_grant);
               (term == current_term =>
                  vote_granted =>
                    $start_election()))
@@ -256,19 +256,19 @@ Server actions
     2 [label="SDummy2\n{Smain = 2}\nskip\n{Smain = 2}\n"];
     3 [label="SChangeRole3\n{Smain = 3}\nrole = 'follower';\nvotes_responded = {};\nvotes_granted = {};\nnext_index = ${{k: 1 for k, v in S}};\nmatch_index = ${{k: 0 for k, v in S}}\n{Smain = 3}\n"];
     4 [label="SDummy4\n{Smain = 4}\nskip\n{Smain = 4}\n"];
-    5 [label="SReceiveReq5\n{Smain = 5}\nc→ : req(v)\n{St5(c:C) = 6}\n"];
+    5 [label="SReceiveReq5\n{Smain = 5}\nc? req(v)\n{St5(c:C) = 6}\n"];
     7 [label="SChangeLog7\n{St5(c:C) = 6}\nlog = append(log, [<<term: current_term, value: v>>])\n{Smain = 5}\n"];
     9 [label="SChangePrevLogIndex9\n{Smain = 4}\n_prev_log_index = next_index[t] - 1;\n_prev_log_term = (_prev_log_index > 0) ? (log[_prev_log_index]['term']) : (0);\n_last_entry = min({length(log), next_index[t]});\n_entries = slice(log, next_index[t], _last_entry)\n{St8(t:S) = 12}\n"];
-    13 [label="SSendAppendEntries13\n{St8(t:S) = 12}\n→t : append_entries(term=term, prev_log_index=_prev_log_index, prev_log_term=_prev_log_term, entries=_entries, commit_index=min({commit_index, _last_entry}))\n{St8(t:S) = 13}\n"];
-    14 [label="SReceiveAppendEntries14\n{Smain = 4}\ns→ : append_entries(term, prev_log_index, prev_log_term, entries, commit_index)\n{St9(s:S) = 14}\n"];
+    13 [label="SSendAppendEntries13\n{St8(t:S) = 12}\nt! append_entries(term=term, prev_log_index=_prev_log_index, prev_log_term=_prev_log_term, entries=_entries, commit_index=min({commit_index, _last_entry}))\n{St8(t:S) = 13}\n"];
+    14 [label="SReceiveAppendEntries14\n{Smain = 4}\ns? append_entries(term, prev_log_index, prev_log_term, entries, commit_index)\n{St9(s:S) = 14}\n"];
     15 [label="SCall15\n{All(∀ t:S{self}. St8(t:S) = 13, All(∀ s:S{self}. St9(s:S) = 14, All()))}\n$replicate()\n{Smain = 4}\n"];
     22 [label="SChangeRole22\n{Smain = 2}\nrole = role;\ncurrent_term = current_term + 1;\nvoted_for = [ ];\nvotes_responded = {};\nvotes_granted = {}\n{St10 = 26}\n"];
-    27 [label="SSendRequestVote27\n{St10 = 26}\n→t : request_vote(term=current_term, last_log_term=(length(log) == 0) ? (0) : (last(log)['term']), last_log_index=length(log))\n{St12(t:S) = 27}\n"];
-    28 [label="SReceiveRequestVoteResp28\n{St12(t:S) = 27}\nt→ : request_vote_resp(term, vote_granted)\n{St12(t:S) = 28}\n"];
+    27 [label="SSendRequestVote27\n{St10 = 26}\nt! request_vote(term=current_term, last_log_term=(length(log) == 0) ? (0) : (last(log)['term']), last_log_index=length(log))\n{St12(t:S) = 27}\n"];
+    28 [label="SReceiveRequestVoteResp28\n{St12(t:S) = 27}\nt? request_vote_resp(term, vote_granted)\n{St12(t:S) = 28}\n"];
     29 [label="SChangeVotesResponded29\n{St12(t:S) = 28}\nvotes_responded = union(votes_responded, {t});\nvotes_granted = union(votes_granted, {t});\nrole = 'leader';\nnext_index = ${{k: length(log) for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{St12(t:S) = 2}\n"];
-    35 [label="SReceiveRequestVote35\n{Smain = 2}\ns→ : request_vote(term, last_log_term, last_log_index)\n{St14(s:S) = 35}\n"];
+    35 [label="SReceiveRequestVote35\n{Smain = 2}\ns? request_vote(term, last_log_term, last_log_index)\n{St14(s:S) = 35}\n"];
     36 [label="SChangeLogOk36\n{St14(s:S) = 35}\n_log_ok = last_log_term > (length(log) == 0) ? (0) : (last(log)['term']) | last_log_term == (length(log) == 0) ? (0) : (last(log)['term']) & last_log_index >= length(log);\n_grant = term == current_term & _log_ok & (voted_for == [self] | voted_for == [ ]);\nvoted_for = [self]\n{St14(s:S) = 38}\n"];
-    39 [label="SSendRequestVoteResp39\n{St14(s:S) = 38}\n→s : request_vote_resp(term=current_term, vote_granted=_grant)\n{St14(s:S) = 2}\n"];
+    39 [label="SSendRequestVoteResp39\n{St14(s:S) = 38}\ns! request_vote_resp(term=current_term, vote_granted=_grant)\n{St14(s:S) = 2}\n"];
     41 [label="SCall41\n{Smain = 2}\n$start_election()\n{St16(t:S, s:S) = 2}\n"];
     44 [label="SChangeRole44\n{start}\nrole = 'follower';\ncurrent_term = 1;\nvoted_for = [ ];\nvotes_responded = {};\nvotes_granted = {};\nlog = [ ];\ncommit_index = 0;\nnext_index = ${{k: 1 for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{St0 = 1}\n"];
     54 [label="SCall54\n{start}\n$restart()\n{St1 = 3}\n"];

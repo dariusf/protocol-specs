@@ -52,6 +52,7 @@ let show_token t =
   | LBRACKET -> "LBRACKET"
   | RBRACKET -> "RBRACKET"
   | QUESTION -> "QUESTION"
+  | BANG -> "BANG"
   | GE -> "GE"
   | GT -> "GT"
   | LE -> "LE"

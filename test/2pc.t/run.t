@@ -62,34 +62,34 @@ The classic two-phase commit protocol.
 
   $ protocol print 2pc.spec --project C
   (forall p in P
-     ->p : prepare;
-     (p-> : prepared
+     p! prepare;
+     (p? prepared
       \/
-      p-> : abort;
+      p? abort;
       has_aborted = true));
   (has_aborted =>*
      (forall p in P
-        ->p : abort;
-        p-> : abort_ack;
+        p! abort;
+        p? abort_ack;
         aborted = union(aborted, {p}))
    \/
    !(has_aborted) =>*
      (forall p in P
-        ->p : commit;
-        p-> : commit_ack;
+        p! commit;
+        p? commit_ack;
         committed = union(committed, {p})))
 
   $ protocol print 2pc.spec --project P
   forall c in C
-    c-> : prepare;
-    (->c : prepared
+    c? prepare;
+    (c! prepared
      \/
-     ->c : abort);
-    (c-> : abort;
-     ->c : abort_ack
+     c! abort);
+    (c? abort;
+     c! abort_ack
      \/
-     c-> : commit;
-     ->c : commit_ack)
+     c? commit;
+     c! commit_ack)
 
   $ protocol print 2pc.spec > 2pc1.spec && protocol print 2pc1.spec | protocol print > 2pc2.spec && diff -uw 2pc1.spec 2pc2.spec
 
@@ -97,13 +97,13 @@ The classic two-phase commit protocol.
 
   $ protocol print 2pc.spec --project P --actions
   digraph G {
-    1 [label="PReceivePrepare1\n{start}\nc→ : prepare\n{Pt0(c:C) = 1}\n"];
-    2 [label="PSendPrepared2\n{Pt0(c:C) = 1}\n→c : prepared\n{Pt0(c:C) = 2}\n"];
-    3 [label="PSendAbort3\n{Pt0(c:C) = 1}\n→c : abort\n{Pt0(c:C) = 3}\n"];
-    4 [label="PReceiveAbort4\n{Any(Pt0(c:C) = 2, Pt0(c:C) = 3)}\nc→ : abort\n{Pt0(c:C) = 4}\n"];
-    5 [label="PSendAbortAck5\n{Pt0(c:C) = 4}\n→c : abort_ack\n{Pt0(c:C) = 5}\n"];
-    6 [label="PReceiveCommit6\n{Any(Pt0(c:C) = 2, Pt0(c:C) = 3)}\nc→ : commit\n{Pt0(c:C) = 6}\n"];
-    7 [label="PSendCommitAck7\n{Pt0(c:C) = 6}\n→c : commit_ack\n{Pt0(c:C) = 7}\n"];
+    1 [label="PReceivePrepare1\n{start}\nc? prepare\n{Pt0(c:C) = 1}\n"];
+    2 [label="PSendPrepared2\n{Pt0(c:C) = 1}\nc! prepared\n{Pt0(c:C) = 2}\n"];
+    3 [label="PSendAbort3\n{Pt0(c:C) = 1}\nc! abort\n{Pt0(c:C) = 3}\n"];
+    4 [label="PReceiveAbort4\n{Any(Pt0(c:C) = 2, Pt0(c:C) = 3)}\nc? abort\n{Pt0(c:C) = 4}\n"];
+    5 [label="PSendAbortAck5\n{Pt0(c:C) = 4}\nc! abort_ack\n{Pt0(c:C) = 5}\n"];
+    6 [label="PReceiveCommit6\n{Any(Pt0(c:C) = 2, Pt0(c:C) = 3)}\nc? commit\n{Pt0(c:C) = 6}\n"];
+    7 [label="PSendCommitAck7\n{Pt0(c:C) = 6}\nc! commit_ack\n{Pt0(c:C) = 7}\n"];
     6 -> 7;
     4 -> 5;
     3 -> 6;
@@ -116,15 +116,15 @@ The classic two-phase commit protocol.
 
   $ protocol print 2pc.spec --project C --actions
   digraph G {
-    1 [label="CSendPrepare1\n{start}\n→p : prepare\n{Ct0(p:P) = 1}\n"];
-    2 [label="CReceivePrepared2\n{Ct0(p:P) = 1}\np→ : prepared\n{Ct0(p:P) = 2}\n"];
-    3 [label="CReceiveAbort3\n{Ct0(p:P) = 1}\np→ : abort\n{Ct0(p:P) = 3}\n"];
+    1 [label="CSendPrepare1\n{start}\np! prepare\n{Ct0(p:P) = 1}\n"];
+    2 [label="CReceivePrepared2\n{Ct0(p:P) = 1}\np? prepared\n{Ct0(p:P) = 2}\n"];
+    3 [label="CReceiveAbort3\n{Ct0(p:P) = 1}\np? abort\n{Ct0(p:P) = 3}\n"];
     4 [label="CChangeHasAborted4\n{Ct0(p:P) = 3}\nhas_aborted = true\n{Ct0(p:P) = 4}\n"];
-    5 [label="CSendAbort5\n{∀ p:P. Any(Ct0(p:P) = 2, Ct0(p:P) = 4)}\n→p : abort\n{Ct2(p:P) = 5}\n"];
-    6 [label="CReceiveAbortAck6\n{Ct2(p:P) = 5}\np→ : abort_ack\n{Ct2(p:P) = 6}\n"];
+    5 [label="CSendAbort5\n{∀ p:P. Any(Ct0(p:P) = 2, Ct0(p:P) = 4)}\np! abort\n{Ct2(p:P) = 5}\n"];
+    6 [label="CReceiveAbortAck6\n{Ct2(p:P) = 5}\np? abort_ack\n{Ct2(p:P) = 6}\n"];
     7 [label="CChangeAborted7\n{Ct2(p:P) = 6}\naborted = union(aborted, {p})\n{Ct2(p:P) = 7}\n"];
-    8 [label="CSendCommit8\n{∀ p:P. Any(Ct0(p:P) = 2, Ct0(p:P) = 4)}\n→p : commit\n{Ct1(p:P) = 8}\n"];
-    9 [label="CReceiveCommitAck9\n{Ct1(p:P) = 8}\np→ : commit_ack\n{Ct1(p:P) = 9}\n"];
+    8 [label="CSendCommit8\n{∀ p:P. Any(Ct0(p:P) = 2, Ct0(p:P) = 4)}\np! commit\n{Ct1(p:P) = 8}\n"];
+    9 [label="CReceiveCommitAck9\n{Ct1(p:P) = 8}\np? commit_ack\n{Ct1(p:P) = 9}\n"];
     10 [label="CChangeCommitted10\n{Ct1(p:P) = 9}\ncommitted = union(committed, {p})\n{Ct1(p:P) = 10}\n"];
     9 -> 10;
     8 -> 9;

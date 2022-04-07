@@ -33,7 +33,7 @@ Fuse tail
   >     p.a = 1
   > EOF
   digraph G {
-    1 [label="PSendM1\n{start}\n→c : m\n{Pt0(c:C) = 1}\n"];
+    1 [label="PSendM1\n{start}\nc! m\n{Pt0(c:C) = 1}\n"];
     2 [label="PChangeB2\n{Pt0(c:C) = 1}\nb = 2;\na = 1\n{Pt0(c:C) = 3}\n"];
     1 -> 2;
   }
@@ -51,7 +51,7 @@ Fuse head
   > EOF
   digraph G {
     1 [label="PChangeB1\n{start}\nb = 2;\na = 1\n{Pt0(c:C) = 2}\n"];
-    3 [label="PSendM3\n{Pt0(c:C) = 2}\n→c : m\n{Pt0(c:C) = 3}\n"];
+    3 [label="PSendM3\n{Pt0(c:C) = 2}\nc! m\n{Pt0(c:C) = 3}\n"];
     1 -> 3;
   }
 
@@ -68,8 +68,8 @@ Communication grain (P)
   >     c->p: m
   > EOF
   digraph G {
-    1 [label="PChangeA1\n{start}\na = 1;\n→c : m\n{Pt0(c:C) = 2}\n"];
-    3 [label="PReceiveM3\n{Pt0(c:C) = 2}\nc→ : m\n{Pt0(c:C) = 3}\n"];
+    1 [label="PChangeA1\n{start}\na = 1;\nc! m\n{Pt0(c:C) = 2}\n"];
+    3 [label="PReceiveM3\n{Pt0(c:C) = 2}\nc? m\n{Pt0(c:C) = 3}\n"];
     1 -> 3;
   }
 
@@ -86,8 +86,8 @@ Communication grain (C)
   >     c->p: m
   > EOF
   digraph G {
-    1 [label="CReceiveM1\n{start}\np→ : m\n{Ct0(p:P) = 1}\n"];
-    2 [label="CChangeB2\n{Ct0(p:P) = 1}\nb = 1;\n→p : m\n{Ct0(p:P) = 3}\n"];
+    1 [label="CReceiveM1\n{start}\np? m\n{Ct0(p:P) = 1}\n"];
+    2 [label="CChangeB2\n{Ct0(p:P) = 1}\nb = 1;\np! m\n{Ct0(p:P) = 3}\n"];
     1 -> 2;
   }
 
@@ -121,8 +121,8 @@ Multiple parties
   >     c.m = 1
   > EOF
   digraph G {
-    1 [label="PReceiveM1\n{start}\nc→ : m\n{Pt0(c:C) = 1}\n"];
-    2 [label="PSendN2\n{Pt0(c:C) = 1}\n→c : n\n{Pt0(c:C) = 2}\n"];
+    1 [label="PReceiveM1\n{start}\nc? m\n{Pt0(c:C) = 1}\n"];
+    2 [label="PSendN2\n{Pt0(c:C) = 1}\nc! n\n{Pt0(c:C) = 2}\n"];
     1 -> 2;
   }
 

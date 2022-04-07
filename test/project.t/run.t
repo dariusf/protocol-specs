@@ -24,8 +24,8 @@ Simplest multiparty examples
   >     p->c: n
   > EOF
   forall p in P
-    ->p : m;
-    p-> : n
+    p! m;
+    p? n
 
   $ protocol print --project P <<EOF
   > party p in P ()
@@ -36,8 +36,8 @@ Simplest multiparty examples
   >     p->c: n
   > EOF
   forall c in C
-    c-> : m;
-    ->c : n
+    c? m;
+    c! n
 
 Dynamic party set (i.e. types are used to compute projection)
 
@@ -50,7 +50,7 @@ Dynamic party set (i.e. types are used to compute projection)
   >     c->p: m
   > EOF
   forall c in C
-    c-> : m
+    c? m
 
 A seq involving a particular party (C), where there's a chain of messages in the middle that does not go through or end at C.
 
@@ -66,19 +66,19 @@ The chain disappears entirely from C.
 
   $ protocol print --project C basic.spec
   forall p in P
-    ->p : m;
+    p! m;
     a = 1
 
   $ protocol print --project P basic.spec
   forall c in C
-    c-> : m;
+    c? m;
     (forall d in D
-       ->d : n)
+       d! n)
 
   $ protocol print --project D basic.spec
   forall c in C
     forall p in P
-      p-> : n
+      p? n
 
 A chain of messages that goes through C but does not end at it.
 
@@ -95,26 +95,26 @@ A chain of messages that goes through C but does not end at it.
 
   $ protocol print --project C three.spec
   forall p in P
-    ->p : m1;
+    p! m1;
     (forall d in D
-       d-> : m3;
-       ->p : m4);
+       d? m3;
+       p! m4);
     a = 1
 
   $ protocol print --project P three.spec
   forall c in C
-    c-> : m1;
+    c? m1;
     (forall d in D
-       ->d : m2;
-       c-> : m4;
-       ->d : m5)
+       d! m2;
+       c? m4;
+       d! m5)
 
   $ protocol print --project D three.spec
   forall p in P
     forall c in C
-      p-> : m2;
-      ->c : m3;
-      p-> : m5
+      p? m2;
+      c! m3;
+      p? m5
 
 A chain of messages that ends at C.
 
@@ -129,22 +129,22 @@ A chain of messages that ends at C.
 
   $ protocol print --project C ex1.spec
   forall p in P
-    ->p : m;
+    p! m;
     (forall d in D
-       d-> : msg);
+       d? msg);
     a = 1
 
   $ protocol print --project P ex1.spec
   forall c in C
-    c-> : m;
+    c? m;
     (forall d in D
-       ->d : n(c=c))
+       d! n(c=c))
 
   $ protocol print --project D ex1.spec
   forall c in C
     forall p in P
-      p-> : n(c);
-      ->c : msg
+      p? n(c);
+      c! msg
 
 Multiple uses of the same party set, aka self-sends within a role.
 
@@ -164,11 +164,11 @@ Only on the receiving end do we set the a to 1.
   >     c.b = 2
   > EOF
   forall d in (C \ {self})
-    ->d : m;
+    d! m;
     b = 2
   ||
   forall c in (C \ {self})
-    c-> : m;
+    c? m;
     a = 1
 
 Sending to ourselves as well. Now there will be 3 sends and 3 receives per party.
@@ -181,17 +181,17 @@ Sending to ourselves as well. Now there will be 3 sends and 3 receives per party
   >     d.a = 1;
   >     c.b = 2
   > EOF
-  ->self : m;
-  self-> : m;
+  self! m;
+  self? m;
   a = 1;
   b = 2
   ||
   forall d in (C \ {self})
-    ->d : m;
+    d! m;
     b = 2
   ||
   forall c in (C \ {self})
-    c-> : m;
+    c? m;
     a = 1
 
 Explicit self-send
@@ -203,13 +203,13 @@ Explicit self-send
   >   forall d in (C \ {c})
   >     c->d: m
   > EOF
-  ->self : m;
-  self-> : m;
+  self! m;
+  self? m;
   (forall d in (C \ {self})
-     ->d : m)
+     d! m)
   ||
   forall c in (C \ {self})
-    c-> : m
+    c? m
 
 Literal self-send
 
@@ -218,8 +218,8 @@ Literal self-send
   > forall c in C
   >   c->c: m
   > EOF
-  ->self : m;
-  self-> : m
+  self! m;
+  self? m
 
 Unintuitive example. If |C| = 1, only one message is received from P (in the first thread).
 If |C| = 2, both threads receive messages.
@@ -233,11 +233,11 @@ If |C| = 2, both threads receive messages.
   >       p->d: m
   > EOF
   forall p in P
-    p-> : m
+    p? m
   ||
   forall c in (C \ {self})
     forall p in P
-      p-> : m
+      p? m
 
   $ protocol print --project P - <<EOF
   > party p in P ()
@@ -249,7 +249,7 @@ If |C| = 2, both threads receive messages.
   > EOF
   forall c in C
     forall d in C
-      ->d : m
+      d! m
 
 More standard variations
 
@@ -261,7 +261,7 @@ More standard variations
   >     p->d: m
   > EOF
   forall p in P
-    p-> : m
+    p? m
 
   $ protocol print --project C - <<EOF
   > party p in P ()
@@ -273,7 +273,7 @@ More standard variations
   > EOF
   forall c in (C \ {self})
     forall p in P
-      p-> : m
+      p? m
 
 More than two self-sends
 
@@ -284,24 +284,24 @@ More than two self-sends
   >     forall e in C
   >       e->d: m
   > EOF
-  ->self : m;
-  self-> : m
+  self! m;
+  self? m
   ||
   forall e in (C \ {self})
-    e-> : m
+    e? m
   ||
   forall d in (C \ {self})
-    ->d : m
+    d! m
   ||
   forall c in (C \ {self})
-    (->self : m;
-     self-> : m
+    (self! m;
+     self? m
      ||
      forall e in (C \ {self})
-       e-> : m
+       e? m
      ||
      forall d in (C \ {self})
-       ->d : m)
+       d! m)
 
 Self-send with conditions. Shows that we also need to consider if the owner of an expression is self when projecting.
 
@@ -316,11 +316,11 @@ Self-send with conditions. Shows that we also need to consider if the owner of a
   > EOF
   forall d in (C \ {self})
     leader =>*
-      ->d : m
+      d! m
   ||
   forall c in (C \ {self})
     leader =>*
-      c-> : m
+      c? m
 
 What does this mean, if this is set non-uniformly?
 
@@ -356,9 +356,9 @@ Case where the same expression uses expressions from the different parties, but 
   a = true;
   (forall d in (C \ {self})
      a & b =>*
-       ->d : m)
+       d! m)
   ||
   forall c in (C \ {self})
     b = true;
     (a & b =>*
-       c-> : m)
+       c? m)
