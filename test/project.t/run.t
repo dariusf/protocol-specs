@@ -146,9 +146,14 @@ A chain of messages that ends at C.
       p-> : n(c);
       ->c : msg
 
-Multiple uses of the same party set.
+Multiple uses of the same party set, aka self-sends within a role.
 
-Classic example from the paper
+Classic example from the paper.
+
+Given a set of 3 parties, there will be 2 sends and 2 receives per party.
+
+In parallel, send to everyone but us, and receive from everyone but us.
+Only on the receiving end do we set the a to 1.
 
   $ protocol print --project C - <<EOF
   > party c in C ()
@@ -166,7 +171,7 @@ Classic example from the paper
     c-> : m;
     a = 1
 
-Including self-send
+Sending to ourselves as well. Now there will be 3 sends and 3 receives per party.
 
   $ protocol print --project C - <<EOF
   > party c in C ()
@@ -297,3 +302,63 @@ More than two self-sends
      ||
      forall d in (C \ {self})
        ->d : m)
+
+Self-send with conditions. Shows that we also need to consider if the owner of an expression is self when projecting.
+
+  $ protocol print --project C - <<EOF
+  > party c in C (
+  >   c.leader = false
+  > )
+  > forall c in C
+  >   forall d in (C \\ {c})
+  >     c.leader =>*
+  >       c->d: m
+  > EOF
+  forall d in (C \ {self})
+    leader =>*
+      ->d : m
+  ||
+  forall c in (C \ {self})
+    leader =>*
+      c-> : m
+
+What does this mean, if this is set non-uniformly?
+
+  $ protocol print --project C - <<EOF
+  > party c in C (
+  >   c.a = false;
+  >   c.b = false
+  > )
+  > forall c in C
+  >   c.a = true;
+  >   forall d in (C \\ {c})
+  >     d.b = true
+  > EOF
+  a = true
+  ||
+  forall c in (C \ {self})
+    b = true
+
+Case where the same expression uses expressions from the different parties, but same set. Do we split the expression?
+
+  $ protocol print --project C - <<EOF
+  > party c in C (
+  >   c.a = false;
+  >   c.b = false
+  > )
+  > forall c in C
+  >   c.a = true;
+  >   forall d in (C \\ {c})
+  >     d.b = true;
+  >     c.a and c.b =>*
+  >       c->d: m
+  > EOF
+  a = true;
+  (forall d in (C \ {self})
+     a & b =>*
+       ->d : m)
+  ||
+  forall c in (C \ {self})
+    b = true;
+    (a & b =>*
+       c-> : m)
