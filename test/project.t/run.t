@@ -146,6 +146,41 @@ A chain of messages that ends at C.
       p? n(c);
       c! msg
 
+This projects and typechecks, but likely isn't what was meant.
+
+  $ protocol print --types <<EOF
+  > party c in C (c.leader = true)
+  > party p in P ()
+  > forall p in P
+  >   forall c in C
+  >     c.leader =>*
+  >       p->c: m
+  forall (p : party P;global) in (P : map(party P, bool);global)
+    forall (c : party C;global) in (C : map(party C, bool);global)
+      (c.leader : bool;C) =>*
+        (p : party P;global)->(c : party C;global) : m
+
+  $ protocol print --project P <<EOF
+  > party c in C (c.leader = true)
+  > party p in P ()
+  > forall p in P
+  >   forall c in C
+  >     c.leader =>*
+  >       p->c: m
+  forall c in C
+    c! m
+
+  $ protocol print --project C <<EOF
+  > party c in C (c.leader = true)
+  > party p in P ()
+  > forall p in P
+  >   forall c in C
+  >     c.leader =>*
+  >       p->c: m
+  forall p in P
+    leader =>*
+      p? m
+
 Multiple uses of the same party set, aka self-sends within a role.
 
 Classic example from the paper.

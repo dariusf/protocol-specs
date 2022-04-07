@@ -122,9 +122,14 @@ This fails because we cannot infer a type for a...
   (forall (c : party C;global) in (C : map(party C, bool);global)
      (c.a : map(party C, bool);C) = union((c.a : map(party C, bool);C), {(c : party C;global)}))
 
-party c in C (c.a = 1)
-party p in P ()
-forall p in P
-forall c in C
-c->p: m(x=c.a);
-b = x
+  $ protocol print --types <<EOF
+  > party c in C (c.a = 1)
+  > party p in P ()
+  > forall p in P
+  >   forall c in C
+  >     c->p: m(x=c.a);
+  >     b = x
+  forall (p : party P;global) in (P : map(party P, bool);global)
+    forall (c : party C;global) in (C : map(party C, bool);global)
+      (c : party C;global)->(p : party P;global) : m((x : int;P)=(c.a : int;C));
+      (p.b : int;P) = (p.x : int;P)
