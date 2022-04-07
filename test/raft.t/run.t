@@ -248,7 +248,7 @@ Server actions
     4 [label="SDummy4\n{Smain = 4}\nskip\n{Smain = 4}\n"];
     5 [label="SReceiveReq5\n{Smain = 5}\nc? req(v)\n{St5(c:C) = 6}\n"];
     7 [label="SChangeLog7\n{St5(c:C) = 6}\nlog = append(log, [<<term: current_term, value: v>>])\n{Smain = 5}\n"];
-    9 [label="SChangePrevLogIndex9\n{Smain = 4}\n_prev_log_index = next_index[t] - 1;\n_prev_log_term = (_prev_log_index > 0) ? (log[_prev_log_index]['term']) : (0);\n_last_entry = min({length(log), next_index[t]});\n_entries = slice(log, next_index[t], _last_entry)\n{St8(t:S) = 12}\n"];
+    9 [label="SChange_PrevLogIndex9\n{Smain = 4}\n_prev_log_index = next_index[t] - 1;\n_prev_log_term = (_prev_log_index > 0) ? (log[_prev_log_index]['term']) : (0);\n_last_entry = min({length(log), next_index[t]});\n_entries = slice(log, next_index[t], _last_entry)\n{St8(t:S) = 12}\n"];
     13 [label="SSendAppendEntries13\n{St8(t:S) = 12}\nt! append_entries(term=term, prev_log_index=_prev_log_index, prev_log_term=_prev_log_term, entries=_entries, commit_index=min({commit_index, _last_entry}))\n{St8(t:S) = 13}\n"];
     14 [label="SReceiveAppendEntries14\n{Smain = 4}\ns? append_entries(term, prev_log_index, prev_log_term, entries, commit_index)\n{St9(s:S) = 14}\n"];
     15 [label="SCall15\n{All(∀ t:S{self}. St8(t:S) = 13, ∀ s:S{self}. St9(s:S) = 14)}\n$replicate()\n{Smain = 4}\n"];
@@ -257,7 +257,7 @@ Server actions
     28 [label="SReceiveRequestVoteResp28\n{St12(t:S) = 27}\nt? request_vote_resp(term, vote_granted)\n{St12(t:S) = 28}\n"];
     29 [label="SChangeVotesResponded29\n{St12(t:S) = 28}\nvotes_responded = union(votes_responded, {t});\nvotes_granted = union(votes_granted, {t});\nrole = 'leader';\nnext_index = ${{k: length(log) for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{St12(t:S) = 2}\n"];
     35 [label="SReceiveRequestVote35\n{Smain = 2}\ns? request_vote(term, last_log_term, last_log_index)\n{St14(s:S) = 35}\n"];
-    36 [label="SChangeLogOk36\n{St14(s:S) = 35}\n_log_ok = last_log_term > (length(log) == 0) ? (0) : (last(log)['term']) | last_log_term == (length(log) == 0) ? (0) : (last(log)['term']) & last_log_index >= length(log);\n_grant = term == current_term & _log_ok & (voted_for == [self] | voted_for == [ ]);\nvoted_for = [self]\n{St14(s:S) = 38}\n"];
+    36 [label="SChange_LogOk36\n{St14(s:S) = 35}\n_log_ok = last_log_term > (length(log) == 0) ? (0) : (last(log)['term']) | last_log_term == (length(log) == 0) ? (0) : (last(log)['term']) & last_log_index >= length(log);\n_grant = term == current_term & _log_ok & (voted_for == [self] | voted_for == [ ]);\nvoted_for = [self]\n{St14(s:S) = 38}\n"];
     39 [label="SSendRequestVoteResp39\n{St14(s:S) = 38}\ns! request_vote_resp(term=current_term, vote_granted=_grant)\n{St14(s:S) = 2}\n"];
     41 [label="SCall41\n{Smain = 2}\n$start_election()\n{St16(t:S, s:S) = 2}\n"];
     44 [label="SChangeRole44\n{start}\nrole = 'follower';\ncurrent_term = 1;\nvoted_for = [ ];\nvotes_responded = {};\nvotes_granted = {};\nlog = [ ];\ncommit_index = 0;\nnext_index = ${{k: 1 for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{St0 = 1}\n"];
@@ -386,15 +386,15 @@ Monitor
   		}
   		m.Log = append(m.Log, entry{action: "SChangeLog7", params: params})
   		return nil
-  	case SChangePrevLogIndex9:
+  	case SChange_PrevLogIndex9:
   		if len(params) != 1 {
   			return errors.New("expected 1 params")
   		}
   		// no logical preconditions
   		if !(m.PC["Smain"] == 4) {
-  			return fmt.Errorf("control precondition of SChangePrevLogIndex9 %v violated", params)
+  			return fmt.Errorf("control precondition of SChange_PrevLogIndex9 %v violated", params)
   		}
-  		m.Log = append(m.Log, entry{action: "SChangePrevLogIndex9", params: params})
+  		m.Log = append(m.Log, entry{action: "SChange_PrevLogIndex9", params: params})
   		return nil
   	case SSendAppendEntries13:
   		if len(params) != 1 {
@@ -474,13 +474,13 @@ Monitor
   		}
   		m.Log = append(m.Log, entry{action: "SReceiveRequestVote35", params: params})
   		return nil
-  	case SChangeLogOk36:
+  	case SChange_LogOk36:
   
   		// no logical preconditions
   		if !(m.PC["St14_"+(params[0] /* s : S */)] == 35) {
-  			return fmt.Errorf("control precondition of SChangeLogOk36 %v violated", params)
+  			return fmt.Errorf("control precondition of SChange_LogOk36 %v violated", params)
   		}
-  		m.Log = append(m.Log, entry{action: "SChangeLogOk36", params: params})
+  		m.Log = append(m.Log, entry{action: "SChange_LogOk36", params: params})
   		return nil
   	case SSendRequestVoteResp39:
   		if len(params) != 1 {

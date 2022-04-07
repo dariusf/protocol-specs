@@ -283,7 +283,7 @@ let monitor grain file =
         List.assoc_opt ~eq:String.equal pname ltl_fml
         |> Option.get_or ~default:[]
       in
-      Ltl_go.translate_party_ltl env i pname ltl pr action_nodes
+      Ltl_go.translate_party_ltl env i pname ltl action_nodes
         (List.map (fun p -> p.repr |> var_name) parties))
     parties
 

@@ -717,10 +717,17 @@ let assigned_variables (e : tprotocol) =
     object
       inherit [_] reduce_protocol_list
 
-      method! visit_Assign _env v _e =
+      method! visit_Assign () v _e =
         let info = v.meta.info in
         let (V (_, v)) = must_be_var_t v in
         [(v, info)]
+
+      method! visit_msg_destruct _vv () (MessageD { args; _ }) =
+        List.map
+          (fun a ->
+            let (V (_, v)) = must_be_var_t a in
+            (v, a.meta.info))
+          args
     end
   in
   vp#visit__protocol () e

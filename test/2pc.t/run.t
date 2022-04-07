@@ -405,16 +405,16 @@ The classic two-phase commit protocol.
   package rvc
   
   import (
-  	//"errors" // for LTL monitors
+  	"errors"
   	"fmt"
   	"sync"
   	"time"
   )
   
   type Global struct {
-  	HasAborted bool
   	Aborted    map[string]bool
   	Committed  map[string]bool
+  	HasAborted bool
   }
   
   type Action int

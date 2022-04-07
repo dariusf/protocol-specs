@@ -140,10 +140,31 @@ module SSet = struct
 end
 
 let snake_to_camel s =
-  s |> String.lowercase_ascii |> String.capitalize_ascii
-  |> Str.global_substitute (Str.regexp {|_\([a-z]\)|}) (fun s ->
-         Str.matched_group 1 s |> String.lowercase_ascii
-         |> String.capitalize_ascii)
+  let prefix = ref "" in
+  let s =
+    Str.global_substitute (Str.regexp {|^\(_*\)|})
+      (fun s ->
+        prefix := Str.matched_group 1 s;
+        "")
+      s
+  in
+  let s =
+    s |> String.lowercase_ascii |> String.capitalize_ascii
+    |> Str.global_substitute (Str.regexp {|_\([a-z]\)|}) (fun s ->
+           Str.matched_group 1 s |> String.uppercase_ascii)
+  in
+  !prefix ^ s
+
+let%expect_test "name" =
+  let test = print_endline in
+  snake_to_camel "a_b_c" |> test;
+  snake_to_camel "aa_bb_cc" |> test;
+  snake_to_camel "_aaa_bb" |> test;
+  [%expect {|
+    ABC
+    AaBbCc
+    _AaaBb
+         |}]
 
 (* quite terrible, but cannot return unit *)
 let assert_ cond fmt =

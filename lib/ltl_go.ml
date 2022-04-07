@@ -6,6 +6,20 @@ open Log.Make (struct
   let name = "monitor"
 end)
 
+type flags = {
+  mutable uses_reflect : bool;
+  mutable uses_errors : bool;
+}
+
+let initial_flags = { uses_reflect = false; uses_errors = false }
+
+(* copy, we can't share the mutable object *)
+let flags = { uses_reflect = false; uses_errors = false }
+
+let restore_flags () =
+  flags.uses_reflect <- initial_flags.uses_reflect;
+  flags.uses_errors <- initial_flags.uses_errors
+
 module G = struct
   include Graph.Persistent.Digraph.Concrete (struct
     type t = string
@@ -84,7 +98,6 @@ let template_monitor ~pname ~extra_imports ~global_contents ~action_defs
     {|package rv%{pname}
 
 import (
-	//"errors" // for LTL monitors
 	"fmt"
 	"sync"
 	"time"
@@ -463,8 +476,6 @@ let rec compile_typ env t =
   | TyFn (_, _) -> nyi "compile type fn" (* seems hard *)
   | TyRecord _ -> "interface{}" (* TODO struct *)
 
-let uses_reflect = ref false
-
 let compile_expr parties te =
   let rec comp te =
     match te.expr with
@@ -487,10 +498,10 @@ let compile_expr parties te =
     | App (f, args) ->
       let args = List.map comp args in
       if String.equal f "!=" then (
-        uses_reflect := true;
+        flags.uses_reflect <- true;
         Format.sprintf "%s(%s)" "!reflect.DeepEqual" (String.concat ", " args))
       else if String.equal f "==" then (
-        uses_reflect := true;
+        flags.uses_reflect <- true;
         Format.sprintf "%s(%s)" "reflect.DeepEqual" (String.concat ", " args))
       else if List.length args = 2 && not (is_alpha f.[0]) then
         let f1 = match f with "|" -> "||" | _ -> f in
@@ -598,6 +609,7 @@ let generate_ltl_monitor ltl_i env parties pname ltl =
           | "green" -> {|l.succeeded = true
           return nil|}
           | "red" ->
+            flags.uses_errors <- true;
             {|l.failed = true
           return errors.New("property falsified")|}
           | "yellow" -> "return nil"
@@ -652,7 +664,7 @@ let generate_ltl_monitor ltl_i env parties pname ltl =
 
 let should_generate_ltl_monitor = false
 
-let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
+let translate_party_ltl env ltl_i pname ltl action_nodes parties =
   (* TODO use pname to qualify stuff *)
   let ltl_monitors =
     if should_generate_ltl_monitor then
@@ -674,7 +686,12 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
   let ltl_monitor_step =
     ltl_monitors |> List.map (fun (_, _, _, _, s) -> s) |> String.concat "\n"
   in
-  let assigned = Actions.assigned_variables tprotocol in
+  let assigned =
+    IMap.bindings action_nodes
+    |> List.concat_map Actions.(fun (_, ac) -> assigned_variables ac.protocol)
+    |> List.sort_uniq ~cmp:(fun (a, _) (b, _) -> String.compare a b)
+  in
+  log "assigned variables: %a" (List.pp String.pp) (List.map fst assigned);
 
   let pc = "PC" in
   (* start filling in the template *)
@@ -698,6 +715,7 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
     match params with
     | [] -> ""
     | _ ->
+      flags.uses_errors <- true;
       let l = List.length params in
       Format.sprintf
         {|if len(params) != %d { return errors.New("expected %d params") }|} l l
@@ -786,20 +804,26 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
            Format.sprintf "%s %s" (state_var_name v) (compile_typ env info.typ))
     |> String.concat "\n"
   in
-  let extra_imports = if !uses_reflect then "\"reflect\"" else "" in
+  let extra_imports =
+    String.concat "\n"
+    @@ List.concat
+         [
+           (if flags.uses_reflect then ["\"reflect\""] else []);
+           (if flags.uses_errors then ["\"errors\""] else []);
+         ]
+  in
   template_monitor
     ~pname:(String.lowercase_ascii pname)
     ~extra_imports ~global_contents ~action_defs ~preconditions ~postconditions
     ~ltl_monitor_defs ~ltl_monitor_fields ~ltl_monitor_assignments
     ~ltl_monitor_init ~ltl_monitor_step ()
 
-let translate_party_ltl env i pname ltl tprotocol action_nodes parties =
+let translate_party_ltl env i pname ltl action_nodes parties =
   (* reset state *)
-  uses_reflect := false;
+  restore_flags ();
   log "generating monitor for party %s" pname;
   if not (IMap.is_empty action_nodes) then
     let code =
-      translate_party_ltl env i pname ltl tprotocol action_nodes parties
-      |> invoke_gofmt
+      translate_party_ltl env i pname ltl action_nodes parties |> invoke_gofmt
     in
     write_to_file ~filename:(Format.sprintf "monitor%s.go" pname) code
