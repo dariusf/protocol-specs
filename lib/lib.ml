@@ -50,8 +50,6 @@ let project_all_parties parties env tprotocol : (tprotocol * env) SMap.t =
     |> transpose
     (* this transposing business is required because of the interface of Project.project *)
   in
-  Format.printf "projected %d@." (List.length projected);
-  Format.printf "envs %d@." (List.length envs);
   let results =
     List.map2
       (fun p e ->

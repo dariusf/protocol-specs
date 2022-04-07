@@ -651,7 +651,10 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
            (fun i (v, s) ->
              if List.mem_assoc ~eq:String.equal v bound then
                Format.sprintf "%s" v
-             else Format.sprintf "params[%d] /* %s : %s */" i v s)
+             else
+               (* TODO invalid go code *)
+               let ps = Format.asprintf "%a" Print.pp_party_set s in
+               Format.asprintf "params[%d] /* %s : %s */" i v ps)
            t.params
         |> String.concat "+")
   in
@@ -676,8 +679,10 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
         | AnyOf fs -> List.map (aux bound) fs |> String.concat " || "
         | AllOf fs -> List.map (aux bound) fs |> String.concat " && "
         | Forall (v, s, z) ->
+          (* TODO invalid go code *)
+          let ps = Format.asprintf "%a" Print.pp_party_set s in
           Format.sprintf
-            "allSet(m.vars[\"%s\"], func(%s string) bool { return %s })" s v
+            "allSet(m.vars[\"%s\"], func(%s string) bool { return %s })" ps v
             (aux ((v, s) :: bound) z)
         | Cond (tid, i) ->
           Format.sprintf "m.%s[%s] == %d" pc (tid_to_string bound tid) i

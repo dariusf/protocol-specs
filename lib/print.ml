@@ -407,6 +407,11 @@ let pp_typ ~env = to_pp (fun t -> render_typ ~env t)
 let pp_ownership ~env = to_pp (fun t -> render_own ~env t)
 let pp_spec_decl = to_pp render_spec_decl
 
+let pp_party_set fmt t =
+  match t with
+  | PSet s -> Format.fprintf fmt "%s" s
+  | PSetLessSelf s -> Format.fprintf fmt "%s  {self}" s
+
 let pp_tid fmt t =
   Format.fprintf fmt "%s%s" t.name
     (match t.params with
@@ -414,4 +419,6 @@ let pp_tid fmt t =
     | ts ->
       Format.sprintf "(%s)"
         (String.concat ", "
-           (List.map (fun (t, s) -> Format.sprintf "%s:%s" t s) ts)))
+           (List.map
+              (fun (t, s) -> Format.asprintf "%s:%a" t pp_party_set s)
+              ts)))

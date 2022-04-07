@@ -293,9 +293,14 @@ include Protocol
 type protocol = (loc, expr, expr) _protocol
 [@@deriving show { with_path = false }, eq]
 
+type party_set =
+  | PSet of string
+  | PSetLessSelf of string
+[@@deriving show { with_path = false }, eq]
+
 type tid = {
   name : string;
-  params : (string * string) list;
+  params : (string * party_set) list;
 }
 [@@deriving show { with_path = false }, eq]
 

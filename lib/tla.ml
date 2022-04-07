@@ -433,7 +433,9 @@ let fence_to_pc tid f =
       (* rename the variable in case it conflicts with that of the quantifier in scope *)
       let v1 = v ^ "i" in
       let bound = (v, v1) :: bound in
-      Forall ([(v1, Term s)], aux bound b)
+      Forall
+        ( [(v1, match s with PSet s -> Term s | PSetLessSelf s -> nyi "%s" s)],
+          aux bound b )
   in
   aux [] f
 
@@ -533,7 +535,13 @@ let single_party_to_tla all_vars env nodes pname protocol =
              | [] -> body
              | _ ->
                Exists
-                 (action.params |> List.map (fun (v, s) -> (v, Term s)), body)
+                 ( action.params
+                   |> List.map (fun (v, s) ->
+                          ( v,
+                            match s with
+                            | PSet s -> Term s
+                            | PSetLessSelf s -> nyi "%s" s )),
+                   body )
            in
            Exists ([("self", Term pname)], body))
   in
@@ -596,7 +604,13 @@ let to_tla env party_sizes actions =
              | _ ->
                let params =
                  t.params |> List.map snd
-                 |> List.map (fun p -> SMap.find p party_sets)
+                 |> List.map (fun p ->
+                        let p =
+                          match p with
+                          | PSet s -> s
+                          | PSetLessSelf s -> nyi "%s" s
+                        in
+                        SMap.find p party_sets)
                in
                let params = [t.name] :: params in
                params |> List.cartesian_product

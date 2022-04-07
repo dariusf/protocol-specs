@@ -80,7 +80,7 @@ type fence_cond =
   | ThreadStart
   | AnyOf of fence_cond list
   | AllOf of fence_cond list
-  | Forall of string * string * fence_cond
+  | Forall of string * party_set * fence_cond
   | Cond of tid * int
 [@@deriving show { with_path = false }]
 
@@ -93,13 +93,14 @@ let rec render_fence f =
   | AllOf fs ->
     fs |> List.map render_fence |> String.concat ", "
     |> Format.sprintf "All(%s)"
-  | Forall (s, v, b) -> Format.sprintf "∀ %s:%s. %s" s v (render_fence b)
+  | Forall (s, v, b) ->
+    Format.sprintf "∀ %s:%a. %s" s Print.pp_party_set v (render_fence b)
   | Cond (tid, pc) -> Format.sprintf "%a = %d" Print.pp_tid tid pc
 
 type node = {
   lpre : texpr list;
   protocol : tprotocol;
-  params : (string * string) list;
+  params : (string * party_set) list;
   cpre : fence_cond;
   cpost : fence_cond;
 }
@@ -120,7 +121,7 @@ type state = {
 
 let split_actions_simple :
     texpr list ->
-    (string * string) list ->
+    (string * party_set) list ->
     (string * int) list ->
     tprotocol ->
     state =
@@ -130,7 +131,13 @@ let split_actions_simple :
     match t.p with
     | Forall (v, s, body) ->
       let (V (_, v1)) = must_be_var_t v in
-      let (V (_, s1)) = must_be_var_t s in
+      (* let (V (_, s1)) = must_be_var_t s in *)
+      let s1 =
+        match s.expr with
+        | Var (V (_, s1)) -> PSet s1
+        | App ("\\", [{ expr = Var (V (_, s1)); _ }; _]) -> PSetLessSelf s1
+        | _ -> failwith "cannot interpret set"
+      in
       let st = aux lpre ((v1, s1) :: params) body in
       { st with post = Forall (v1, s1, st.post) }
     | Imply (cond, p) | BlockingImply (cond, p) -> aux (cond :: lpre) params p
@@ -389,8 +396,7 @@ let to_graphviz pname g m =
              | _ ->
                Format.sprintf "params: %a\\n"
                  (List.pp
-                    (Pair.pp ~sep:":" Format.pp_print_string
-                       Format.pp_print_string))
+                    (Pair.pp ~sep:":" Format.pp_print_string pp_party_set))
                  params
            in
            let succinct = true in
@@ -449,8 +455,7 @@ let label_threads env party (p : tprotocol) : tprotocol =
       | Forall (v, s, b) ->
         (* forall at this point (cpost-projection) causes concurrency *)
         let (V (_, v1)) = must_be_var_t v in
-        (* TODO *)
-        let (V (_, s1)) = must_be_var_t s in
+        (* let (V (_, s1)) = must_be_var_t s in *)
         (* let s_pname =
              match s.meta.info.own with
              | Party p ->
@@ -459,14 +464,18 @@ let label_threads env party (p : tprotocol) : tprotocol =
                party
            in *)
         let s_pname =
-          match s.meta.info.typ with
+          match Infer.concretize env s.meta.info.typ with
           | TyMap (TyParty p, TyBool) ->
             (IMap.find (UF.value p) env.parties).repr |> var_name
-          | _ -> fail ~loc:s.meta.loc "%s should be a party set" s1
+          | _ ->
+            fail ~loc:s.meta.loc "%a should be a party set instead of a %a"
+              Print.pp_texpr_untyped s (* (Print.pp_typ ~env) *)
+              pp_typ s.meta.info.typ
         in
         (* let tp = fresh_thread_id ~prefix:v1 () in *)
         let tp = fresh_thread_id party in
-        Forall (v, s, aux { name = tp; params = (v1, s_pname) :: tid.params } b)
+        Forall
+          (v, s, aux { name = tp; params = (v1, PSet s_pname) :: tid.params } b)
       | Seq s -> Seq (List.map (aux tid) s)
       | Disj (a, b) -> Disj (aux tid a, aux tid b)
       | SendOnly _ | ReceiveOnly _ | Assign _ | Call _ ->
