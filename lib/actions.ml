@@ -115,8 +115,6 @@ type state = {
   actions : node IMap.t;
   (* the postcondition of the returned node (and the precondition of its successor) *)
   post : fence_cond;
-  (* nodes to revisit (and fuse) *)
-  revisit : (int list * int list) list;
 }
 
 let split_actions_simple :
@@ -163,22 +161,8 @@ let split_actions_simple :
 
       let st =
         foldl1
-          (fun {
-                 start = st;
-                 end_ = et;
-                 graph = gt;
-                 actions = mt;
-                 post = ft;
-                 revisit = r1;
-               }
-               {
-                 start = sc;
-                 end_ = ec;
-                 graph = gc;
-                 actions = mc;
-                 post = fc;
-                 revisit = r2;
-               } ->
+          (fun { start = st; end_ = et; graph = gt; actions = mt; post = ft }
+               { start = sc; end_ = ec; graph = gc; actions = mc; post = fc } ->
             let g1 = G.concat_graphs_with ~ending:et ~starting:sc gt gc in
             {
               start = st;
@@ -194,11 +178,10 @@ let split_actions_simple :
                          else n));
               (* move to the next one *)
               post = fc;
-              revisit = r1 @ r2;
             })
           actions
       in
-      { st with revisit = (st.start, st.end_) :: st.revisit }
+      st
     | SendOnly _ | ReceiveOnly _ | Assign (_, _) ->
       begin
         match t with
@@ -233,7 +216,6 @@ let split_actions_simple :
             graph = g;
             actions = m;
             post = unq_fence;
-            revisit = [];
           }
         | _ -> bug "unexpected"
       end
@@ -256,34 +238,13 @@ let split_actions_simple :
       let m = IMap.singleton id action in
 
       let g = G.add_edge (G.add_vertex G.empty id) id dest_id in
-      {
-        start = [id];
-        end_ = [id];
-        graph = g;
-        actions = m;
-        post = cpost;
-        revisit = [([id], [dest_id])];
-      }
+      { start = [id]; end_ = [id]; graph = g; actions = m; post = cpost }
     | Par ps ->
       let actions = List.map (aux lpre params) ps in
       let st =
         List.fold_right
-          (fun {
-                 start = sc;
-                 end_ = ec;
-                 graph = gc;
-                 actions = mc;
-                 post = fc;
-                 revisit = r1;
-               }
-               {
-                 start = st;
-                 end_ = et;
-                 graph = gt;
-                 actions = mt;
-                 post = ft;
-                 revisit = r2;
-               } ->
+          (fun { start = sc; end_ = ec; graph = gc; actions = mc; post = fc }
+               { start = st; end_ = et; graph = gt; actions = mt; post = ft } ->
             (* take disjoint union of the two graphs *)
             {
               start = sc @ st;
@@ -291,7 +252,6 @@ let split_actions_simple :
               graph = G.merge_graphs gc gt;
               actions = IMap.disjoint_union mc mt;
               post = AllOf [fc; ft];
-              revisit = r1 @ r2;
             })
           actions
           {
@@ -300,30 +260,15 @@ let split_actions_simple :
             graph = G.empty;
             actions = IMap.empty;
             post = AllOf [];
-            revisit = [];
           }
       in
       st
     | Disj (a, b) ->
       (* TODO mutually exclusive constraints *)
-      let {
-        start = as_;
-        end_ = ae;
-        graph = ag;
-        actions = am;
-        post = af;
-        revisit = r1;
-      } =
+      let { start = as_; end_ = ae; graph = ag; actions = am; post = af } =
         aux lpre params a
       in
-      let {
-        start = bs;
-        end_ = be;
-        graph = bg;
-        actions = bm;
-        post = bf;
-        revisit = r2;
-      } =
+      let { start = bs; end_ = be; graph = bg; actions = bm; post = bf } =
         aux lpre params b
       in
       {
@@ -332,7 +277,6 @@ let split_actions_simple :
         graph = G.merge_graphs ag bg;
         actions = IMap.disjoint_union am bm;
         post = AnyOf [af; bf];
-        revisit = r1 @ r2;
       }
     | Exists (_, _, _) -> nyi "find actions exists"
     | Comment (_, _, _) -> bug "find actions comment"
@@ -343,7 +287,6 @@ let split_actions_simple :
         graph = G.empty;
         actions = IMap.empty;
         post = ThreadStart;
-        revisit = [];
       }
     | Send _ -> bug "find actions send"
   in
@@ -588,12 +531,13 @@ let fuse n1 n2 graph actions =
     in
     (graph, actions)
 
-(* more declarative version which iterates to a fixed point. O(E^2)
+(** More declarative version which iterates to a fixed point.
 
-   graph rewriting approach: find all candidate edges.
-   for each one, if we transform it, invalidate subsequent involved edges.
-   repeat this until there are no more candidate edges, or no edges are transformed. *)
-let postprocess_graph grain _revisit graph actions =
+    Graph rewriting approach: find all candidate edges.
+    For each one, if we transform it, invalidate subsequent involved edges.
+    Repeat this until there are no more candidate edges, or no edges are transformed.
+    The number of times an edge can appear as a candidate is bounded by the number of edges, so O(E^2). *)
+let postprocess_graph grain graph actions =
   log "grain: %a" pp_grain grain;
   let candidate_edges g =
     (* to begin with, there's no good way to fuse things like a and b given a->b, a->c, as we would have to enter/exit the merged action halfway. we use the conservative condition that a and b must have exactly one succ/pred (which are b and a respectively). this has the side effect of preventing some unsoundness when merging cycles, e.g. a->b, b->b; we would have to merge the preconditions of a and b in the final node, something we sidestep. *)
@@ -726,14 +670,7 @@ let split_into_actions :
     let n = List.map (fun s -> s.actions) (st :: List.map snd fns) in
     List.fold_right (fun c t -> IMap.disjoint_union c t) n IMap.empty
   in
-  let revisit =
-    st.revisit @ (fns |> List.map snd |> List.concat_map (fun f -> f.revisit))
-  in
-
-  log "revisit: %a"
-    (List.pp (Pair.pp (List.pp Int.pp) (List.pp Int.pp)))
-    revisit;
-  let graph, actions = postprocess_graph grain revisit graph actions in
+  let graph, actions = postprocess_graph grain graph actions in
   (graph, actions)
 
 let collect_message_types (p : tprotocol) =
