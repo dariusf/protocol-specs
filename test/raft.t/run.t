@@ -295,28 +295,12 @@ Client actions
 
   $ protocol print --actions --project C raft.spec
   digraph G {
-    1 [label="CDummy1\n{Cmain = 1}\nskip\n{Cmain = 1}\n"];
-    2 [label="CDummy2\n{Cmain = 2}\nskip\n{Ct7(t:S, s:S) = 2}\n"];
-    3 [label="CDummy3\n{Cmain = 3}\nskip\n{Cmain = 3}\n"];
-    4 [label="CDummy4\n{Cmain = 4}\nskip\n{Cmain = 4}\n"];
     5 [label="CSendReq5\n{Cmain = 5}\n→s : req(v=value)\n{Ct5(s:S) = 6}\n"];
     7 [label="CChangeValue7\n{∀ s:S. Ct5(s:S) = 6}\nvalue = value + 1\n{Cmain = 5}\n"];
-    13 [label="CCall13\n{start}\n$timeout()\n{Ct0 = 1}\n"];
-    14 [label="CCall14\n{start}\n$restart()\n{Ct1 = 3}\n"];
-    15 [label="CCall15\n{start}\n$start_election()\n{Ct2 = 2}\n"];
     16 [label="CCall16\n{start}\n$client_requests()\n{Ct3 = 5}\n"];
-    17 [label="CCall17\n{start}\n$replicate()\n{Ct4 = 4}\n"];
-    17 -> 4;
     16 -> 5;
-    15 -> 2;
-    14 -> 3;
-    13 -> 1;
     7 -> 5;
     5 -> 7;
-    4 -> 4;
-    3 -> 3;
-    2 -> 2;
-    1 -> 1;
   }
 
 Parsing and printing. Note that this doesn't test functions (yet).

@@ -537,7 +537,7 @@ let fuse n1 n2 graph actions =
     For each one, if we transform it, invalidate subsequent involved edges.
     Repeat this until there are no more candidate edges, or no edges are transformed.
     The number of times an edge can appear as a candidate is bounded by the number of edges, so O(E^2). *)
-let postprocess_graph grain graph actions =
+let fuse_edges grain graph actions =
   log "grain: %a" pp_grain grain;
   let candidate_edges g =
     (* to begin with, there's no good way to fuse things like a and b given a->b, a->c, as we would have to enter/exit the merged action halfway. we use the conservative condition that a and b must have exactly one succ/pred (which are b and a respectively). this has the side effect of preventing some unsoundness when merging cycles, e.g. a->b, b->b; we would have to merge the preconditions of a and b in the final node, something we sidestep. *)
@@ -577,6 +577,33 @@ let postprocess_graph grain graph actions =
       end
   in
   loop false (candidate_edges graph) (graph, actions)
+
+let remove_vertices vs graph actions =
+  ( List.fold_right (Fun.flip G.remove_vertex) vs graph,
+    List.fold_right IMap.remove vs actions )
+
+let misc_pruning graph actions =
+  (* find and remove no-op self loops, which occur when a subprotocol is projected but does nothing on a particular party *)
+  let no_op_self_loops =
+    actions |> IMap.bindings
+    |> List.filter_map (fun (k, v) ->
+           match v.protocol.p with
+           | Emp when List.equal Int.equal [k] (G.succ graph k) -> Some k
+           | _ -> None)
+  in
+  log "self loops removed %a" (List.pp Int.pp) no_op_self_loops;
+  let graph, actions = remove_vertices no_op_self_loops graph actions in
+  (* remove call nodes which aren't linked to anything, as a result of the previous transformation *)
+  let useless_calls =
+    actions |> IMap.bindings
+    |> List.filter_map (fun (k, v) ->
+           match v.protocol.p with
+           | Call _ when List.is_empty (G.succ graph k) -> Some k
+           | _ -> None)
+  in
+  log "useless calls removed %a" (List.pp Int.pp) useless_calls;
+  let graph, actions = remove_vertices useless_calls graph actions in
+  (graph, actions)
 
 let split_into_actions :
     grain -> string -> env -> tprotocol -> G.t * node IMap.t =
@@ -670,7 +697,8 @@ let split_into_actions :
     let n = List.map (fun s -> s.actions) (st :: List.map snd fns) in
     List.fold_right (fun c t -> IMap.disjoint_union c t) n IMap.empty
   in
-  let graph, actions = postprocess_graph grain graph actions in
+  let graph, actions = fuse_edges grain graph actions in
+  let graph, actions = misc_pruning graph actions in
   (graph, actions)
 
 let collect_message_types (p : tprotocol) =

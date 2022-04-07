@@ -1,6 +1,4 @@
-Incomplete recursion example
-
-Projection for functions has to be solved before --actions will work
+Recursion example
 
   $ protocol print fns.spec
   (forall p in P
@@ -35,10 +33,7 @@ Projection for functions has to be solved before --actions will work
 
   $ protocol print fns.spec --project C --actions
   digraph G {
-    1 [label="CDummy1\n{Cmain = 1}\nskip\n{Cmain = 1}\n"];
     3 [label="CSendM3\n{start}\n→p : m\n{Cmain = 1}\n"];
-    3 -> 1;
-    1 -> 1;
   }
 
 $ protocol tla fns.spec
