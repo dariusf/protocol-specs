@@ -35,13 +35,13 @@ Types
   )
   protocol replicate() (
     (forall s in S
-       s.role == 'leader' =>*
-         (forall t in (S \ {s})
-            s._prev_log_index = s.next_index[t] - 1;
-            s._prev_log_term = (s._prev_log_index > 0) ? (s.log[s._prev_log_index]['term']) : (0);
-            s._last_entry = min({length(s.log), s.next_index[t]});
-            s._entries = slice(s.log, s.next_index[t], s._last_entry);
-            s->t : append_entries(term=s.term, prev_log_index=s._prev_log_index, prev_log_term=s._prev_log_term, entries=s._entries, commit_index=min({s.commit_index, s._last_entry}))));
+       forall t in (S \ {s})
+         s.role == 'leader' =>*
+           s._prev_log_index = s.next_index[t] - 1;
+           s._prev_log_term = (s._prev_log_index > 0) ? (s.log[s._prev_log_index]['term']) : (0);
+           s._last_entry = min({length(s.log), s.next_index[t]});
+           s._entries = slice(s.log, s.next_index[t], s._last_entry);
+           s->t : append_entries(term=s.term, prev_log_index=s._prev_log_index, prev_log_term=s._prev_log_term, entries=s._entries, commit_index=min({s.commit_index, s._last_entry})));
     $replicate()
   )
   protocol restart() (
@@ -161,13 +161,13 @@ Server projection
     $client_requests()
   )
   protocol replicate() (
-    (role == 'leader' =>*
-       (forall t in (S \ {self})
-          _prev_log_index = next_index[t] - 1;
-          _prev_log_term = (_prev_log_index > 0) ? (log[_prev_log_index]['term']) : (0);
-          _last_entry = min({length(log), next_index[t]});
-          _entries = slice(log, next_index[t], _last_entry);
-          t! append_entries(term=term, prev_log_index=_prev_log_index, prev_log_term=_prev_log_term, entries=_entries, commit_index=min({commit_index, _last_entry})))
+    (forall t in (S \ {self})
+       role == 'leader' =>*
+         _prev_log_index = next_index[t] - 1;
+         _prev_log_term = (_prev_log_index > 0) ? (log[_prev_log_index]['term']) : (0);
+         _last_entry = min({length(log), next_index[t]});
+         _entries = slice(log, next_index[t], _last_entry);
+         t! append_entries(term=term, prev_log_index=_prev_log_index, prev_log_term=_prev_log_term, entries=_entries, commit_index=min({commit_index, _last_entry}))
      ||
      forall s in (S \ {self})
        s? append_entries(term, prev_log_index, prev_log_term, entries, commit_index));

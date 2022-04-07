@@ -128,8 +128,8 @@ protocol restart() (
 
 protocol replicate() (
   (forall s in S
-    s.role == 'leader' =>*
-      forall t in (S \ {s})
+    forall t in (S \ {s})
+      s.role == 'leader' =>*
         // TODO should a send take a message value?
         //let prev_log_index = s.next_index[t] - 1 in
         //let prev_log_term = prev_log_index > 0 and s.log[prev_log_index]['term'] or 0 in
