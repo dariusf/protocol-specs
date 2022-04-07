@@ -36,6 +36,79 @@ let parse_string s =
 let require_project_party p =
   Option.get_exn_or "a party must be chosen using --project" p
 
+let project_all_parties parties env tprotocol : (tprotocol * env) SMap.t =
+  (* p -> [p_a, p_b, ...] *)
+  let projected = Project.project parties env tprotocol in
+  let envs =
+    (* ps -> [ [p_a_1, p_a_2, ...], [p_b_1, p_b_2, ...], ...]
+       -> [[p_a_1, p_b_1, ...], [p_a_2, p_b_2, ...], ...]
+    *)
+    env.subprotocols |> SMap.bindings
+    |> List.map (fun (_, sp) -> sp)
+    |> List.map (fun sp ->
+           List.map (fun pa -> (sp, pa)) (Project.project parties env sp.tp))
+    |> transpose
+    (* this transposing business is required because of the interface of Project.project *)
+  in
+  Format.printf "projected %d@." (List.length projected);
+  Format.printf "envs %d@." (List.length envs);
+  let results =
+    List.map2
+      (fun p e ->
+        ( p,
+          {
+            env with
+            subprotocols =
+              List.map (fun (sp, p) -> (sp.fname, { sp with tp = p })) e
+              |> SMap.of_list;
+          } ))
+      projected envs
+    |> List.map2 (fun n r -> (var_name n.repr, r)) parties
+    |> SMap.of_list
+  in
+  results
+
+(* (*
+     List.map2 (fun party pr -> (party.repr |> var_name, pr)) parties projected
+     |> SMap.of_list *)
+   parties |> List.map (fun party ->
+     let projected = Project.project parties env tprotocol |> SMap.find party in
+     let env =
+       {
+         env with
+         subprotocols =
+           env.subprotocols
+           |> SMap.map (fun sub ->
+                  {
+                    sub with
+                    tp =
+                      project_all_parties parties env sub.tp
+                      |> SMap.find party;
+                  });
+       }
+     in
+     ) *)
+
+let project_one_party parties project_party tprotocol env =
+  project_all_parties parties env tprotocol |> SMap.find project_party
+(* let tp =
+   in
+   let env =
+     {
+       env with
+       subprotocols =
+         env.subprotocols
+         |> SMap.map (fun sub ->
+                {
+                  sub with
+                  tp =
+                    project_all_parties parties env sub.tp
+                    |> SMap.find project_party;
+                });
+     }
+   in
+   (tp, env) *)
+
 let typecheck spec =
   (* load the initial environment *)
   let party_decls =
@@ -80,11 +153,6 @@ let typecheck spec =
   in
   (env, tp, parties, party_sizes)
 
-let project parties env tprotocol =
-  let projected = Project.project parties env tprotocol in
-  List.map2 (fun party pr -> (party.repr |> var_name, pr)) parties projected
-  |> SMap.of_list
-
 let print ~project_party ~ast ~types ~actions ~latex ~grain inp =
   let spec =
     match inp with
@@ -106,26 +174,12 @@ let print ~project_party ~ast ~types ~actions ~latex ~grain inp =
     (* print typed version *)
     let env, tprotocol, parties, _party_sizes = typecheck spec in
     (* if there is a party to project on, operate on its protocol from here on. also project the protocols in the environment *)
-    let env, tprotocol =
+    let tprotocol, env =
       match project_party with
-      | None -> (env, tprotocol)
-      | _ ->
+      | None -> (tprotocol, env)
+      | Some _ ->
         let project_party = require_project_party project_party in
-        let tp = project parties env tprotocol |> SMap.find project_party in
-        let env =
-          {
-            env with
-            subprotocols =
-              env.subprotocols
-              |> SMap.map (fun sub ->
-                     {
-                       sub with
-                       tp =
-                         project parties env sub.tp |> SMap.find project_party;
-                     });
-          }
-        in
-        (env, tp)
+        project_one_party parties project_party tprotocol env
     in
     if ast then tprotocol |> show_tprotocol |> print_endline
     else if actions then
@@ -156,11 +210,11 @@ let tla spec_name grain file =
   (* let parties, party_sizes = require_parties parties in *)
   let spec = parse file in
   let env, tprotocol, parties, party_sizes = typecheck spec in
-  let all = project parties env tprotocol in
+  let all = project_all_parties parties env tprotocol in
 
   let actions =
     all
-    |> SMap.mapi (fun party p ->
+    |> SMap.mapi (fun party (p, env) ->
            let graph, nodes =
              Actions.split_into_actions (parse_grain grain) party env p
            in
@@ -187,7 +241,7 @@ let monitor grain file =
   let env, tprotocol, parties, _party_sizes = typecheck spec in
 
   (* project *)
-  let all = project parties env tprotocol in
+  let all = project_all_parties parties env tprotocol in
 
   (* infer ltl types *)
   (* this should work because variable bindings stay in the environment after type checking is done, unlike quantified variables and local bindings, but those are never used in properties *)
@@ -218,7 +272,7 @@ let monitor grain file =
   in
   List.iteri
     (fun i { repr = V (_, pname) } ->
-      let pr = SMap.find pname all in
+      let pr, env = SMap.find pname all in
       let _, action_nodes =
         Actions.split_into_actions (parse_grain grain) pname env pr
       in

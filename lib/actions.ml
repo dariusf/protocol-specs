@@ -449,6 +449,7 @@ let label_threads env party (p : tprotocol) : tprotocol =
       | Forall (v, s, b) ->
         (* forall at this point (cpost-projection) causes concurrency *)
         let (V (_, v1)) = must_be_var_t v in
+        (* TODO *)
         let (V (_, s1)) = must_be_var_t s in
         (* let s_pname =
              match s.meta.info.own with
@@ -474,7 +475,9 @@ let label_threads env party (p : tprotocol) : tprotocol =
       | Imply (c, b) -> Imply (c, aux tid b)
       | BlockingImply (c, b) -> BlockingImply (c, aux tid b)
       | Exists (v, s, b) -> Exists (v, s, aux tid b)
-      | Send _ -> bug "send should be removed by this point"
+      | Send _ ->
+        bug "send should be removed by this point %a" Print.pp_tprotocol_untyped
+          p
       | Emp -> Emp
       | Comment (_, _, _) -> bug "comment should not appear"
     in
