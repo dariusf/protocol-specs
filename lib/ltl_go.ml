@@ -2,6 +2,10 @@ open Common
 open Ast
 open Containers
 
+open Log.Make (struct
+  let name = "monitor"
+end)
+
 module G = struct
   include Graph.Persistent.Digraph.Concrete (struct
     type t = string
@@ -80,7 +84,7 @@ let template_monitor ~pname ~extra_imports ~global_contents ~action_defs
     {|package rv%{pname}
 
 import (
-	"errors"
+	//"errors" // for LTL monitors
 	"fmt"
 	"sync"
 	"time"
@@ -334,14 +338,17 @@ let invoke_ltl2mon s =
     (* Format.printf "stderr %s@." res#stderr; *)
     res#stdout
 
-let debug = false
+let debug = true
 
 let invoke_gofmt s =
   (* TODO check if gofmt is present, and distinguish that from the case where we produce syntactically invalid Go code *)
   let res = CCUnix.call_full ~stdin:(`Str s) "gofmt" in
-  if res#errcode = 0 then res#stdout
+  if res#errcode = 0 then begin
+    log "gofmt succeeded";
+    res#stdout
+  end
   else (
-    if debug then print_endline res#stderr;
+    if debug then log "gofmt failed: %s" res#stderr;
     s)
 
 let parse_graphviz_output s =
@@ -458,42 +465,70 @@ let rec compile_typ env t =
 
 let uses_reflect = ref false
 
-let rec compile parties te =
-  match te.expr with
-  | Int i -> string_of_int i
-  | Bool b -> string_of_bool b
-  | String s -> Format.sprintf {|"%s"|} s
-  | Set es ->
-    let values =
-      List.map (compile parties) es
-      |> List.map (fun e -> Format.sprintf "\"%s\": bool," e)
-      |> String.concat ""
-    in
-    Format.sprintf "map[string]bool{%s}" values
-  | List _ -> nyi "compile list"
-  | Map _ -> nyi "compile map"
-  | Ite _ -> nyi "compile ite"
-  | MapComp _ -> nyi "compile map comp"
-  | MapProj _ -> nyi "compile map proj"
-  | Let _ -> nyi "compile let"
-  | App (f, args) ->
-    let args = List.map (compile parties) args in
-    if String.equal f "!=" then (
-      uses_reflect := true;
-      Format.sprintf "%s(%s)" "!reflect.DeepEqual" (String.concat ", " args))
-    else if String.equal f "==" then (
-      uses_reflect := true;
-      Format.sprintf "%s(%s)" "reflect.DeepEqual" (String.concat ", " args))
-    else if List.length args = 2 && not (is_alpha f.[0]) then
-      let f1 = match f with "|" -> "||" | _ -> f in
-      Format.sprintf "(%s %s %s)" (List.nth args 0) f1 (List.nth args 1)
-    else
-      let f1 = match f with "size" -> "len" | _ -> f in
-      Format.sprintf "%s(%s)" f1 (String.concat ", " args)
-  | Var (V (_, v)) when List.mem ~eq:String.equal v parties ->
-    Format.sprintf "l.vars[\"%s\"]" (state_var_name v)
-  | Var (V (_, v)) -> Format.sprintf "g.%s" (state_var_name v)
-  | Record _ -> nyi "compile record"
+let compile_expr parties te =
+  let rec comp te =
+    match te.expr with
+    | Int i -> string_of_int i
+    | Bool b -> string_of_bool b
+    | String s -> Format.sprintf {|"%s"|} s
+    | Set es ->
+      let values =
+        List.map comp es
+        |> List.map (fun e -> Format.sprintf "\"%s\": bool," e)
+        |> String.concat ""
+      in
+      Format.sprintf "map[string]bool{%s}" values
+    | List _ -> nyi "compile list"
+    | Map _ -> nyi "compile map"
+    | Ite _ -> nyi "compile ite"
+    | MapComp _ -> nyi "compile map comp"
+    | MapProj _ -> nyi "compile map proj"
+    | Let _ -> nyi "compile let"
+    | App (f, args) ->
+      let args = List.map comp args in
+      if String.equal f "!=" then (
+        uses_reflect := true;
+        Format.sprintf "%s(%s)" "!reflect.DeepEqual" (String.concat ", " args))
+      else if String.equal f "==" then (
+        uses_reflect := true;
+        Format.sprintf "%s(%s)" "reflect.DeepEqual" (String.concat ", " args))
+      else if List.length args = 2 && not (is_alpha f.[0]) then
+        let f1 = match f with "|" -> "||" | _ -> f in
+        Format.sprintf "(%s %s %s)" (List.nth args 0) f1 (List.nth args 1)
+      else
+        let f1 = match f with "size" -> "len" | _ -> f in
+        Format.sprintf "%s(%s)" f1 (String.concat ", " args)
+    | Var (V (_, v)) when List.mem ~eq:String.equal v parties ->
+      Format.sprintf "l.vars[\"%s\"]" (state_var_name v)
+    | Var (V (_, v)) -> Format.sprintf "g.%s" (state_var_name v)
+    | Record _ -> nyi "compile record"
+  in
+  comp te
+
+let compile_protocol tp =
+  (* let s = Format.asprintf in *)
+  let rec comp tp =
+    match tp.p with
+    | Emp -> []
+    | Seq ps -> List.concat_map comp ps
+    | Call _ -> nyi "Call"
+    | Assign ({ expr = Var (V (_, _v)); _ }, _) -> nyi "Assign var"
+    | Assign ({ expr = MapProj _; _ }, _) -> nyi "Assign proj"
+    | SendOnly _ -> nyi "SendOnly"
+    | ReceiveOnly _ -> nyi "ReceiveOnly"
+    (* not expected *)
+    | Exists (_, _, _) -> nyi "Exists"
+    | Imply _ -> nyi "Imply should have been translated away"
+    | BlockingImply (_, _) ->
+      nyi "BlockingImply should have been translated away"
+    | Forall (_, _, _) -> nyi "Forall should have been translated away"
+    | Assign (_, _) -> bug "unexpected Assign expr"
+    | Send _ -> nyi "Send should have been translated away"
+    | Comment _ -> nyi "Comment"
+    | Par _ -> bug "Par should have been translated away"
+    | Disj _ -> bug "Disj should have been translated away"
+  in
+  comp tp |> String.concat "\n"
 
 let check_monitorability env ltl node_colors =
   if
@@ -542,7 +577,7 @@ let generate_ltl_monitor ltl_i env parties pname ltl =
     |> List.map (fun (v, te) ->
            Format.sprintf
              "func (l *LTLMonitor%d) %s(g Global) bool {\nreturn %s\n}" ltl_i v
-             (compile parties te))
+             (compile_expr parties te))
     |> String.concat "\n"
   in
   let generate_ifs eligible_edges vars props =
@@ -645,7 +680,7 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
   (* start filling in the template *)
   let tid_to_string bound (t : tid) =
     match t.params with
-    | [] -> t.name
+    | [] -> Format.sprintf "\"%s\"" t.name
     | _ ->
       Format.sprintf "\"%s_\" + (%s)" t.name
         (List.mapi
@@ -703,7 +738,7 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
                         {|if g != nil && !(%s) {
               return fmt.Errorf("logical precondition of %%s, %%v violated", "%s", params)
             }|}
-                        (compile parties p) name)
+                        (compile_expr parties p) name)
                |> String.concat "\n"
            in
            let body =
@@ -759,6 +794,9 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
     ~ltl_monitor_init ~ltl_monitor_step ()
 
 let translate_party_ltl env i pname ltl tprotocol action_nodes parties =
+  (* reset state *)
+  uses_reflect := false;
+  log "generating monitor for party %s" pname;
   if not (IMap.is_empty action_nodes) then
     let code =
       translate_party_ltl env i pname ltl tprotocol action_nodes parties

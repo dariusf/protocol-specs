@@ -125,7 +125,7 @@ let split_actions_simple :
     state =
  fun lpre params fn_entrypoints (tprotocol : tprotocol) ->
   let rec aux lpre params t =
-    log "split simple: %a" Print.pp_tprotocol_untyped t;
+    log "split simple\n%a" Print.pp_tprotocol_untyped t;
     match t.p with
     | Forall (v, s, body) ->
       let (V (_, v1)) = must_be_var_t v in
@@ -141,24 +141,23 @@ let split_actions_simple :
     | Imply (cond, p) | BlockingImply (cond, p) -> aux (cond :: lpre) params p
     | Seq ps ->
       (* convert them all, then stitch them together after *)
-      let ps1 =
+      let states =
         (* empty precondition *)
         List.map (fun p -> aux [] params p) ps
       in
 
       (* only the first in a seq gets a logical precondition, because it may invalidate it, and we don't check for that atm *)
-      let ps1 =
+      let states =
         List.mapi
           (fun i p ->
-            if i = 0 then
+            match i with
+            | 0 ->
               { p with actions = IMap.map (fun v -> { v with lpre }) p.actions }
-            else p)
-          ps1
+            | _ -> p)
+          states
       in
 
       (* the fence cond is what the SUCCESSOR of a node has to wait for *)
-      let actions = ps1 in
-
       let st =
         foldl1
           (fun { start = st; end_ = et; graph = gt; actions = mt; post = ft }
@@ -171,15 +170,14 @@ let split_actions_simple :
               actions =
                 IMap.disjoint_union mt
                   (mc
-                  (* change precondition to match predecessor's. instead we're changing post to match successor's *)
+                  (* change precondition to match predecessor's *)
                   |> IMap.mapi (fun id n ->
                          if List.mem ~eq:Int.equal id sc then
                            { n with cpre = ft }
                          else n));
-              (* move to the next one *)
               post = fc;
             })
-          actions
+          states
       in
       st
     | SendOnly _ | ReceiveOnly _ | Assign (_, _) ->
@@ -242,7 +240,7 @@ let split_actions_simple :
     | Par ps ->
       let actions = List.map (aux lpre params) ps in
       let st =
-        List.fold_right
+        foldl1
           (fun { start = sc; end_ = ec; graph = gc; actions = mc; post = fc }
                { start = st; end_ = et; graph = gt; actions = mt; post = ft } ->
             (* take disjoint union of the two graphs *)
@@ -254,13 +252,6 @@ let split_actions_simple :
               post = AllOf [fc; ft];
             })
           actions
-          {
-            start = [];
-            end_ = [];
-            graph = G.empty;
-            actions = IMap.empty;
-            post = AllOf [];
-          }
       in
       st
     | Disj (a, b) ->
@@ -325,7 +316,7 @@ let to_graphviz pname g m =
     |> List.map (fun (id, node) ->
            let { lpre; params; protocol; cpre; cpost } = node in
            let name = node_name pname (id, node) in
-           let pre =
+           let lpre =
              match lpre with
              | [] -> ""
              | _ ->
@@ -355,7 +346,7 @@ let to_graphviz pname g m =
                  let to_string = Format.asprintf "%a" Print.pp_tid
                end in
                [%string
-                 {|%{id#Int} [label="%{name}\ntid: %{protocol.pmeta.tid#Tid}\n%{cpre}%{cpost}%{pre}%{params}%{protocol#Protocol}"];|}])
+                 {|%{id#Int} [label="%{name}\ntid: %{protocol.pmeta.tid#Tid}\n%{cpre}%{cpost}%{lpre}%{params}%{protocol#Protocol}"];|}])
              |> String.replace ~sub:"->" ~by:"→"
              |> strip_whitespace |> ( ^ ) maybe_indent
            end)

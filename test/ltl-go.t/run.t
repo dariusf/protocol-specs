@@ -15,7 +15,7 @@
   		if g != nil && !(g.B > 0) {
   			return fmt.Errorf("logical precondition of %s, %v violated", "CChangeB1", params)
   		}
-  		if !(m.PC[Cmain] == 0) {
+  		if !(m.PC["Cmain"] == 0) {
   			return fmt.Errorf("control precondition of CChangeB1 %v violated", params)
   		}
   		m.Log = append(m.Log, entry{action: "CChangeB1", params: params})
@@ -30,7 +30,7 @@
   	switch action {
   	case CChangeB1:
   
-  		m.PC[Cmain] = 1
+  		m.PC["Cmain"] = 1
   	default:
   		panic("invalid action")
   	}
@@ -51,7 +51,7 @@
   	case CChangeA1:
   
   		// no logical preconditions
-  		if !(m.PC[Cmain] == 0) {
+  		if !(m.PC["Cmain"] == 0) {
   			return fmt.Errorf("control precondition of CChangeA1 %v violated", params)
   		}
   		m.Log = append(m.Log, entry{action: "CChangeA1", params: params})
@@ -66,7 +66,7 @@
   	switch action {
   	case CChangeA1:
   
-  		m.PC[Cmain] = 1
+  		m.PC["Cmain"] = 1
   	default:
   		panic("invalid action")
   	}

@@ -405,7 +405,7 @@ The classic two-phase commit protocol.
   package rvc
   
   import (
-  	"errors"
+  	//"errors" // for LTL monitors
   	"fmt"
   	"sync"
   	"time"
