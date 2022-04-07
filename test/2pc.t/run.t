@@ -470,7 +470,7 @@ The classic two-phase commit protocol.
   		if len(params) != 1 {
   			return errors.New("expected 1 params")
   		}
-  		// no preconditions
+  		// no logical preconditions
   		if !(m.PC["Ct0_"+(params[0] /* p : P */)] == 0) {
   			return fmt.Errorf("control precondition of CSendPrepare1 %v violated", params)
   		}
@@ -480,7 +480,7 @@ The classic two-phase commit protocol.
   		if len(params) != 1 {
   			return errors.New("expected 1 params")
   		}
-  		// no preconditions
+  		// no logical preconditions
   		if !(m.PC["Ct0_"+(params[0] /* p : P */)] == 1) {
   			return fmt.Errorf("control precondition of CReceivePrepared2 %v violated", params)
   		}
@@ -490,7 +490,7 @@ The classic two-phase commit protocol.
   		if len(params) != 1 {
   			return errors.New("expected 1 params")
   		}
-  		// no preconditions
+  		// no logical preconditions
   		if !(m.PC["Ct0_"+(params[0] /* p : P */)] == 1) {
   			return fmt.Errorf("control precondition of CReceiveAbort3 %v violated", params)
   		}
@@ -498,7 +498,7 @@ The classic two-phase commit protocol.
   		return nil
   	case CChangeHasAborted4:
   
-  		// no preconditions
+  		// no logical preconditions
   		if !(m.PC["Ct0_"+(params[0] /* p : P */)] == 3) {
   			return fmt.Errorf("control precondition of CChangeHasAborted4 %v violated", params)
   		}
@@ -520,7 +520,7 @@ The classic two-phase commit protocol.
   		if len(params) != 1 {
   			return errors.New("expected 1 params")
   		}
-  		// no preconditions
+  		// no logical preconditions
   		if !(m.PC["Ct2_"+(params[0] /* p : P */)] == 5) {
   			return fmt.Errorf("control precondition of CReceiveAbortAck6 %v violated", params)
   		}
@@ -530,7 +530,7 @@ The classic two-phase commit protocol.
   		if len(params) != 1 {
   			return errors.New("expected 1 params")
   		}
-  		// no preconditions
+  		// no logical preconditions
   		if !(m.PC["Ct2_"+(params[0] /* p : P */)] == 6) {
   			return fmt.Errorf("control precondition of CChangeAborted7 %v violated", params)
   		}
@@ -552,7 +552,7 @@ The classic two-phase commit protocol.
   		if len(params) != 1 {
   			return errors.New("expected 1 params")
   		}
-  		// no preconditions
+  		// no logical preconditions
   		if !(m.PC["Ct1_"+(params[0] /* p : P */)] == 8) {
   			return fmt.Errorf("control precondition of CReceiveCommitAck9 %v violated", params)
   		}
@@ -562,7 +562,7 @@ The classic two-phase commit protocol.
   		if len(params) != 1 {
   			return errors.New("expected 1 params")
   		}
-  		// no preconditions
+  		// no logical preconditions
   		if !(m.PC["Ct1_"+(params[0] /* p : P */)] == 9) {
   			return fmt.Errorf("control precondition of CChangeCommitted10 %v violated", params)
   		}

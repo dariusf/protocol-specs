@@ -695,7 +695,7 @@ let translate_party_ltl env ltl_i pname ltl tprotocol action_nodes parties =
            let name = Actions.node_name pname (id, act) in
            let pres =
              match act.lpre with
-             | [] -> "// no preconditions"
+             | [] -> "// no logical preconditions"
              | _ ->
                act.lpre
                |> List.map (fun p ->
