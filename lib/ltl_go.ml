@@ -210,28 +210,7 @@ func (m *Monitor) Reset() {
 	// lock ok
 }
 
-func (m *Monitor) Step(g Global, act Action, params ...string) error {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	defer m.trackTime(time.Now())
-
-	if err := m.precondition(&g, act, params...); err != nil {
-		return err
-	}
-
-	m.previous = g
-
-	if err := m.applyPostcondition(act, params...); err != nil {
-		return err
-	}
-
-	// LTL monitors
-
-	%{ltl_monitor_step}
-
-	return nil
-}
-
+// A for Action. Given an action and its parameters, performs a transition.
 func (m *Monitor) StepA(act Action, params ...string) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
@@ -248,12 +227,36 @@ func (m *Monitor) StepA(act Action, params ...string) error {
 	return nil
 }
 
+// S for State. Checks that given abstract state is allowed.
 func (m *Monitor) StepS(g Global) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	defer m.trackTime(time.Now())
 
 	m.previous = g
+
+	// LTL monitors
+
+	%{ltl_monitor_step}
+
+	return nil
+}
+
+// Combination of StepA and StepS
+func (m *Monitor) Step(g Global, act Action, params ...string) error {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	defer m.trackTime(time.Now())
+
+	if err := m.precondition(&g, act, params...); err != nil {
+		return err
+	}
+
+	m.previous = g
+
+	if err := m.applyPostcondition(act, params...); err != nil {
+		return err
+	}
 
 	// LTL monitors
 
