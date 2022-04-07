@@ -105,6 +105,51 @@ Types
   ||
   $replicate()
 
+Client projection
+
+  $ protocol print --project C raft.spec
+  protocol client_requests() (
+    (forall s in S
+       ->s : req(v=value));
+    value = value + 1;
+    $client_requests()
+  )
+  protocol replicate() (
+    $replicate()
+  )
+  protocol restart() (
+    $restart()
+  )
+  protocol start_election() (
+    forall s in S
+      forall t in (S \ {s})
+        $start_election()
+  )
+  protocol timeout() (
+    $timeout()
+  )
+  $timeout()
+  ||
+  $restart()
+  ||
+  $start_election()
+  ||
+  $client_requests()
+  ||
+  $replicate()
+
+Client actions
+
+  $ protocol print --actions --project C raft.spec
+  digraph G {
+    5 [label="CSendReq5\n{Cmain = 5}\n→s : req(v=value)\n{Ct5(s:S) = 6}\n"];
+    7 [label="CChangeValue7\n{∀ s:S. Ct5(s:S) = 6}\nvalue = value + 1\n{Cmain = 5}\n"];
+    16 [label="CCall16\n{start}\n$client_requests()\n{Ct3 = 5}\n"];
+    16 -> 5;
+    7 -> 5;
+    5 -> 7;
+  }
+
 Server projection
 
   $ protocol print --project S raft.spec
@@ -203,39 +248,6 @@ Server projection
   ||
   $replicate()
 
-Client projection
-
-  $ protocol print --project C raft.spec
-  protocol client_requests() (
-    (forall s in S
-       ->s : req(v=value));
-    value = value + 1;
-    $client_requests()
-  )
-  protocol replicate() (
-    $replicate()
-  )
-  protocol restart() (
-    $restart()
-  )
-  protocol start_election() (
-    forall s in S
-      forall t in (S \ {s})
-        $start_election()
-  )
-  protocol timeout() (
-    $timeout()
-  )
-  $timeout()
-  ||
-  $restart()
-  ||
-  $start_election()
-  ||
-  $client_requests()
-  ||
-  $replicate()
-
 Server actions
 
   $ protocol print --actions --project S raft.spec
@@ -289,18 +301,6 @@ Server actions
     2 -> 35;
     2 -> 22;
     1 -> 1;
-  }
-
-Client actions
-
-  $ protocol print --actions --project C raft.spec
-  digraph G {
-    5 [label="CSendReq5\n{Cmain = 5}\n→s : req(v=value)\n{Ct5(s:S) = 6}\n"];
-    7 [label="CChangeValue7\n{∀ s:S. Ct5(s:S) = 6}\nvalue = value + 1\n{Cmain = 5}\n"];
-    16 [label="CCall16\n{start}\n$client_requests()\n{Ct3 = 5}\n"];
-    16 -> 5;
-    7 -> 5;
-    5 -> 7;
   }
 
 Parsing and printing. Note that this doesn't test functions (yet).

@@ -162,4 +162,4 @@ protocol replicate() (
 );
 
 // "threads" can cooperate via shared memory, or directly via sequencing
-$timeout() || $restart || $start_election || $client_requests() || $replicate()
+$timeout || $restart || $start_election || $client_requests || $replicate
