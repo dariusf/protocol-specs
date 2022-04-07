@@ -9,16 +9,19 @@ end)
 type flags = {
   mutable uses_reflect : bool;
   mutable uses_errors : bool;
+  mutable declared_types : (string * string) list;
 }
 
-let initial_flags = { uses_reflect = false; uses_errors = false }
+let initial_flags =
+  { uses_reflect = false; uses_errors = false; declared_types = [] }
 
 (* copy, we can't share the mutable object *)
-let flags = { uses_reflect = false; uses_errors = false }
+let flags = { uses_reflect = false; uses_errors = false; declared_types = [] }
 
 let restore_flags () =
   flags.uses_reflect <- initial_flags.uses_reflect;
-  flags.uses_errors <- initial_flags.uses_errors
+  flags.uses_errors <- initial_flags.uses_errors;
+  flags.declared_types <- initial_flags.declared_types
 
 module G = struct
   include Graph.Persistent.Digraph.Concrete (struct
@@ -78,7 +81,6 @@ func (l *LTLMonitor%{i}) StepLTL%{i}(g Global) error {
 		return errors.New("property falsified")
 	}
 
-
 	// evaluate all the props
 	%{prop_vars}
 
@@ -93,7 +95,8 @@ func (l *LTLMonitor%{i}) StepLTL%{i}(g Global) error {
 
 let template_monitor ~pname ~extra_imports ~global_contents ~action_defs
     ~preconditions ~postconditions ~ltl_monitor_defs ~ltl_monitor_fields
-    ~ltl_monitor_assignments ~ltl_monitor_init ~ltl_monitor_step () =
+    ~ltl_monitor_assignments ~ltl_monitor_init ~ltl_monitor_step
+    ~protocol_effects ~declared_types () =
   [%string
     {|package rv%{pname}
 
@@ -104,8 +107,15 @@ import (
 	%{extra_imports}
 )
 
+// The type of abstract state which the user must construct via a refinement mapping. We also maintain a copy of this to compare against.
 type Global struct {
 %{global_contents}
+}
+
+%{declared_types}
+
+var state = Global{
+  // initialize
 }
 
 type Action int
@@ -113,7 +123,29 @@ const (
 %{action_defs}
 )
 
-func all(s []string, f func(string) bool) bool {
+// from __future__ import any
+type any interface{}
+
+func ite(c bool, t func() any, e func() any) any {
+	if c {
+		return t()
+	} else {
+		return e()
+	}
+}
+
+func mapComp(f func(any, any) (any, any), inp map[any]any, pred func(any, any) bool) map[any]any {
+	res := make(map[any]any)
+	for k, v := range inp {
+		if pred == nil || pred(k, v) {
+			k1, v1 := f(k, v)
+			res[k1] = v1
+		}
+	}
+	return res
+}
+
+func allSlice(s []string, f func(string) bool) bool {
 	b := true
 	for _, v := range s {
 		b = b && f(v)
@@ -129,7 +161,7 @@ func allSet(s map[string]bool, f func(string) bool) bool {
 	return b
 }
 
-func any(s []string, f func(string) bool) bool {
+func anySlice(s []string, f func(string) bool) bool {
 	b := false
 	for _, v := range s {
 		b = b || f(v)
@@ -153,7 +185,15 @@ func (m *Monitor) precondition(g *Global, action Action, params ...string) error
 	}
 }
 
-func (m *Monitor) applyPostcondition(action Action, params ...string) error {
+func (m *Monitor) applyProtocolEffect(g *Global, action Action, params ...string) error {
+	switch action {
+		%{protocol_effects}
+		default:
+			panic("invalid action")
+	}
+}
+
+func (m *Monitor) applyControlPostcondition(action Action, params ...string) error {
 	switch action {
 		%{postconditions}
 		default:
@@ -220,7 +260,7 @@ func (m *Monitor) StepA(act Action, params ...string) error {
 		return err
 	}
 
-	if err := m.applyPostcondition(act, params...); err != nil {
+	if err := m.applyControlPostcondition(act, params...); err != nil {
 		return err
 	}
 
@@ -254,7 +294,7 @@ func (m *Monitor) Step(g Global, act Action, params ...string) error {
 
 	m.previous = g
 
-	if err := m.applyPostcondition(act, params...); err != nil {
+	if err := m.applyControlPostcondition(act, params...); err != nil {
 		return err
 	}
 
@@ -463,8 +503,6 @@ digraph G {
       ("S_1_Y", "S_0_R"); ("S_0_R", "S_0_R")]
   |}]
 
-let state_var_name s = snake_to_camel s
-
 let rec compile_typ env t =
   match t with
   | TyParty _ ->
@@ -479,7 +517,9 @@ let rec compile_typ env t =
   | TyFn (_, _) -> nyi "compile type fn" (* seems hard *)
   | TyRecord _ -> "interface{}" (* TODO struct *)
 
-let compile_expr parties te =
+let s = Format.asprintf
+
+let compile_expr env parties te =
   let rec comp te =
     match te.expr with
     | Int i -> string_of_int i
@@ -492,11 +532,43 @@ let compile_expr parties te =
         |> String.concat ""
       in
       Format.sprintf "map[string]bool{%s}" values
-    | List _ -> nyi "compile list"
-    | Map _ -> nyi "compile map"
-    | Ite _ -> nyi "compile ite"
-    | MapComp _ -> nyi "compile map comp"
-    | MapProj _ -> nyi "compile map proj"
+    | List xs ->
+      let typ =
+        match Infer.concretize env te.meta.info.typ with
+        | TyMap (TyInt, a) -> compile_typ env a
+        | _ -> bug "cannot treat as list type"
+      in
+      let contents = List.map comp xs |> String.concat ", " in
+      s "[]%s{%s}" typ contents
+    | Map kvs ->
+      let k_typ, v_typ =
+        match Infer.concretize env te.meta.info.typ with
+        | TyMap (k, v) -> (compile_typ env k, compile_typ env v)
+        | _ -> bug "cannot treat this type as map"
+      in
+      let contents =
+        List.map (fun (k, v) -> s "\"%s\": %s" k (comp v)) kvs
+        |> String.concat ", "
+      in
+      s "map[%s]%s{%s}" k_typ v_typ contents
+    | Ite (c, e1, e2) ->
+      s "(ite(%s, func() any { return %s }, func() any { return %s })).(%s)"
+        (comp c) (comp e1) (comp e2)
+        (compile_typ env te.meta.info.typ)
+    | MapComp mc ->
+      s
+        "(mapComp(func(k any, v any) (any, any) { return %s, %s }, %s, \
+         func(any, any) bool { return %s })).(%s)"
+        (comp mc.map_key) (comp mc.map_val) (comp mc.inp)
+        (match mc.pred with None -> "true" | Some p -> comp p)
+        (compile_typ env te.meta.info.typ)
+    | MapProj (e, i) ->
+      begin
+        match (Infer.concretize env e.meta.info.typ, i) with
+        | TyRecord _, { expr = String i; _ } -> s "%s.%s /*record*/" (comp e) i
+        | TyMap _, _ -> s "%s[%s] /*map*/" (comp e) (comp i)
+        | _ -> bug "cannot index into other types"
+      end
     | Let _ -> nyi "compile let"
     | App (f, args) ->
       let args = List.map comp args in
@@ -513,30 +585,81 @@ let compile_expr parties te =
         let f1 = match f with "size" -> "len" | _ -> f in
         Format.sprintf "%s(%s)" f1 (String.concat ", " args)
     | Var (V (_, v)) when List.mem ~eq:String.equal v parties ->
-      Format.sprintf "l.vars[\"%s\"]" (state_var_name v)
-    | Var (V (_, v)) -> Format.sprintf "g.%s" (state_var_name v)
-    | Record _ -> nyi "compile record"
+      Format.sprintf "l.vars[\"%s\"]" (snake_to_camel v)
+    | Var (V (_, v)) -> Format.sprintf "g.%s" (snake_to_camel v)
+    | Record kvs ->
+      let record_name =
+        kvs |> List.map fst
+        |> List.sort_uniq ~cmp:String.compare
+        |> String.concat "_"
+      in
+      let fields =
+        kvs
+        |> List.map (fun (k, v) -> s "%s: %s" k (comp v))
+        |> String.concat ", "
+      in
+      let field_types =
+        kvs
+        |> List.map (fun (k, v) ->
+               s "%s %s" k
+                 (compile_typ env (Infer.concretize env v.meta.info.typ)))
+        |> String.concat "\n"
+      in
+      flags.declared_types <- (record_name, field_types) :: flags.declared_types;
+      s "%s{%s}" record_name fields
   in
   comp te
 
-let compile_protocol tp =
-  (* let s = Format.asprintf in *)
-  let rec comp tp =
+let compile_protocol env parties tp =
+  let rec comp (tp : tprotocol) =
     match tp.p with
-    | Emp -> []
+    | Emp -> ["// skip"]
     | Seq ps -> List.concat_map comp ps
-    | Call _ -> nyi "Call"
-    | Assign ({ expr = Var (V (_, _v)); _ }, _) -> nyi "Assign var"
-    | Assign ({ expr = MapProj _; _ }, _) -> nyi "Assign proj"
-    | SendOnly _ -> nyi "SendOnly"
-    | ReceiveOnly _ -> nyi "ReceiveOnly"
+    | Call { f; _ } ->
+      (* maybe this should be optimized away *)
+      ["// call " ^ f]
+    | Assign ({ expr = Var (V (_, v)); _ }, e) ->
+      [s "g.%s = %s" (snake_to_camel v) (compile_expr env parties e)]
+    | Assign (e, e1) ->
+      [s "g.%s = %s" (compile_expr env parties e) (compile_expr env parties e1)]
+    | SendOnly { to_; msg = Message { typ; args } } ->
+      let to_ = var_name (Infer.Cast.must_be_var_t to_) in
+      let fields =
+        [("typ", typ); ("to", to_)]
+        @ List.map
+            (fun (fn, fv) ->
+              let fn = var_name (Infer.Cast.must_be_var_t fn) in
+              (fn, compile_expr env parties fv))
+            args
+      in
+      let fields =
+        fields
+        |> List.map (fun (k, v) -> s "\"%s\": %s" k v)
+        |> String.concat ","
+      in
+      [s "g.History1 = map[string]any{%s}" fields]
+    | ReceiveOnly { from; msg = MessageD { typ; args } } ->
+      let from = var_name (Infer.Cast.must_be_var_t from) in
+      let fields =
+        [("typ", typ); ("from", from)]
+        @ List.map
+            (fun fn ->
+              let fn = var_name (Infer.Cast.must_be_var_t fn) in
+              (fn, "true"))
+            args
+      in
+      let fields =
+        fields
+        |> List.map (fun (k, v) -> s "\"%s\": %s" k v)
+        |> String.concat ","
+      in
+      [s "g.History1 = map[string]any{%s}" fields]
     (* not expected *)
     | Exists (_, _, _) -> nyi "Exists"
     | Imply _ -> nyi "Imply should have been translated away"
     | BlockingImply (_, _) ->
       nyi "BlockingImply should have been translated away"
     | Forall (_, _, _) -> nyi "Forall should have been translated away"
-    | Assign (_, _) -> bug "unexpected Assign expr"
     | Send _ -> nyi "Send should have been translated away"
     | Comment _ -> nyi "Comment"
     | Par _ -> bug "Par should have been translated away"
@@ -591,7 +714,7 @@ let generate_ltl_monitor ltl_i env parties pname ltl =
     |> List.map (fun (v, te) ->
            Format.sprintf
              "func (l *LTLMonitor%d) %s(g Global) bool {\nreturn %s\n}" ltl_i v
-             (compile_expr parties te))
+             (compile_expr env parties te))
     |> String.concat "\n"
   in
   let generate_ifs eligible_edges vars props =
@@ -759,7 +882,8 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
                         {|if g != nil && !(%s) {
               return fmt.Errorf("logical precondition of %%s, %%v violated", "%s", params)
             }|}
-                        (compile_expr parties p) name)
+                        (compile_expr env parties p)
+                        name)
                |> String.concat "\n"
            in
            Format.sprintf
@@ -789,6 +913,18 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
              (params_check act.params) pc (tid_to_string [] tid) id)
     |> String.concat "\n"
   in
+  let protocol_effects =
+    let open Actions in
+    IMap.bindings action_nodes
+    |> List.map (fun (id, act) ->
+           (* let tid = act.protocol.pmeta.tid in *)
+           Format.sprintf
+             {|case %s:
+           %s|}
+             (Actions.node_name pname (id, act)) (* (params_check act.params) *)
+             (compile_protocol env parties act.protocol))
+    |> String.concat "\n"
+  in
   let action_defs =
     match IMap.bindings action_nodes with
     | [] -> bug "no actions"
@@ -800,10 +936,14 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
         |> String.concat "\n")
   in
   let global_contents =
-    assigned
-    |> List.map (fun (v, info) ->
-           Format.sprintf "%s %s" (state_var_name v) (compile_typ env info.typ))
-    |> String.concat "\n"
+    let vars =
+      assigned
+      |> List.map (fun (v, info) ->
+             Format.sprintf "%s %s" (snake_to_camel v)
+               (compile_typ env info.typ))
+    in
+    let vars = "History1 map[string]any" :: vars in
+    vars |> String.concat "\n"
   in
   let extra_imports =
     String.concat "\n"
@@ -813,11 +953,16 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
            (if flags.uses_errors then ["\"errors\""] else []);
          ]
   in
+  let declared_types =
+    flags.declared_types
+    |> List.map (fun (name, def) -> s "type %s struct {\n%s\n}" name def)
+    |> String.concat "\n"
+  in
   template_monitor
     ~pname:(String.lowercase_ascii pname)
     ~extra_imports ~global_contents ~action_defs ~preconditions ~postconditions
     ~ltl_monitor_defs ~ltl_monitor_fields ~ltl_monitor_assignments
-    ~ltl_monitor_init ~ltl_monitor_step ()
+    ~ltl_monitor_init ~ltl_monitor_step ~protocol_effects ~declared_types ()
 
 let translate_party_ltl env i pname ltl action_nodes parties =
   (* reset state *)

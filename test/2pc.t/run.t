@@ -511,8 +511,8 @@ The classic two-phase commit protocol.
   	}
   }
 
-  $ sed -n '/func.*applyPostcondition/,/^}/p' monitorC.go
-  func (m *Monitor) applyPostcondition(action Action, params ...string) error {
+  $ sed -n '/func.*applyControlPostcondition/,/^}/p' monitorC.go
+  func (m *Monitor) applyControlPostcondition(action Action, params ...string) error {
   	switch action {
   	case CSendPrepare1:
   		if len(params) != 1 {
@@ -646,8 +646,8 @@ The classic two-phase commit protocol.
   	}
   }
 
-  $ sed -n '/func.*applyPostcondition/,/^}/p' monitorP.go
-  func (m *Monitor) applyPostcondition(action Action, params ...string) error {
+  $ sed -n '/func.*applyControlPostcondition/,/^}/p' monitorP.go
+  func (m *Monitor) applyControlPostcondition(action Action, params ...string) error {
   	switch action {
   	case PReceivePrepare11:
   		if len(params) != 1 {

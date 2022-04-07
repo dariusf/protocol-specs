@@ -25,8 +25,8 @@
   	}
   }
 
-  $ sed -n '/func.*applyPostcondition/,/^}/p' monitorC.go
-  func (m *Monitor) applyPostcondition(action Action, params ...string) error {
+  $ sed -n '/func.*applyControlPostcondition/,/^}/p' monitorC.go
+  func (m *Monitor) applyControlPostcondition(action Action, params ...string) error {
   	switch action {
   	case CChangeB1:
   		// no params check
@@ -61,8 +61,8 @@
   	}
   }
 
-  $ sed -n '/func.*applyPostcondition/,/^}/p' monitorC.go
-  func (m *Monitor) applyPostcondition(action Action, params ...string) error {
+  $ sed -n '/func.*applyControlPostcondition/,/^}/p' monitorC.go
+  func (m *Monitor) applyControlPostcondition(action Action, params ...string) error {
   	switch action {
   	case CChangeA1:
   		// no params check
