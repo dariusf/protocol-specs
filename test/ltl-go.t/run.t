@@ -13,6 +13,7 @@
   $ ls
   actions.txt
   monitorC.go
+  project.txt
   types.txt
 
   $ cat monitorC.go

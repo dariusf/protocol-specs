@@ -5,11 +5,19 @@ open Normalize
 open Infer.Cast
 (* module Tracing = Ppx_debug.Tracing *)
 
+open Log.Make (struct
+  let name = "project"
+end)
+
 let owned_by env party v =
   match v.meta.info.own with
   | Global -> true
   | Party w ->
     String.equal party ((IMap.find (UF.value w) env.parties).repr |> var_name)
+
+let qualifier_bound v =
+  let (V (p, _)) = must_be_var_t v in
+  match p with None | Some (Party "self") -> true | _ -> false
 
 let vars_in e =
   let ve =
@@ -22,6 +30,38 @@ let vars_in e =
     end
   in
   ve#visit__expr () e
+
+let has_single_owner expr =
+  vars_in expr
+  |> (fun vs ->
+       log "vars in %a: %a" Print.pp_texpr_untyped expr
+         (List.pp Print.pp_texpr_untyped)
+         vs;
+       vs)
+  |> List.filter_map
+       (* using type, which distinguishes party set *)
+       (* (fun v ->
+              match v.meta.info.own with
+              | Global -> None
+              | Party w ->
+                Some ((IMap.find (UF.value w) env.parties).repr |> var_name)) *)
+       (* using syntax, which distinguishes party *)
+       (fun v ->
+         let (V (p, _)) = must_be_var_t v in
+         match p with
+         | None -> None (* assume global *)
+         | Some (Party "self") -> Some "self"
+         | o -> Option.map (fun (Party p : party) -> p) o)
+  |> (fun vs ->
+       log "qualifiers: %a" (List.pp String.pp) vs;
+       vs)
+  |> List.sort_uniq ~cmp:String.compare
+  |> List.length <= 1
+
+let check_single_owner te =
+  if not (has_single_owner te) then
+    fail ~loc:te.meta.loc "%a must have a single location"
+      Print.pp_texpr_untyped te
 
 let substitute ~v ~by (p : tprotocol) : tprotocol =
   let vp =
@@ -53,13 +93,10 @@ let rec project_protocol : string -> env -> tprotocol -> tprotocol =
  fun party env pr ->
   match pr.p with
   | Emp -> { pr with p = Emp }
-  | Assign (v, _) ->
+  | Assign (v, e) ->
+    check_single_owner e;
     (* we also have to look at these, as they are mandatory when dealing with self-sends *)
-    let qualifier_bound =
-      let (V (p, _)) = must_be_var_t v in
-      match p with None | Some (Party "self") -> true | _ -> false
-    in
-    let p = if owned_by env party v && qualifier_bound then pr.p else Emp in
+    let p = if owned_by env party v && qualifier_bound v then pr.p else Emp in
     { pr with p }
   | Send { from; to_; msg } ->
     let f = from |> must_be_var_t |> var_name in
@@ -79,18 +116,27 @@ let rec project_protocol : string -> env -> tprotocol -> tprotocol =
     { pr with p }
   | Call _ -> pr
   | Imply (c, body) ->
+    check_single_owner c;
     let body1 = project_protocol party env body in
     let p =
-      if List.for_all (owned_by env party) (vars_in c) then Imply (c, body1)
+      if
+        List.for_all
+          (fun v -> owned_by env party v && qualifier_bound v)
+          (vars_in c)
+      then Imply (c, body1)
       else (* note that this is the body of the conditional, not emp *)
         body1.p
     in
     { pr with p }
   | BlockingImply (c, body) ->
+    check_single_owner c;
     let body1 = project_protocol party env body in
     let p =
-      if List.for_all (owned_by env party) (vars_in c) then
-        BlockingImply (c, body1)
+      if
+        List.for_all
+          (fun v -> owned_by env party v && qualifier_bound v)
+          (vars_in c)
+      then BlockingImply (c, body1)
       else body1.p
     in
     { pr with p }

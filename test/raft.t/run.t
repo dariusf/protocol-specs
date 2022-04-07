@@ -170,8 +170,7 @@ Server projection
           t! append_entries(term=term, prev_log_index=_prev_log_index, prev_log_term=_prev_log_term, entries=_entries, commit_index=min({commit_index, _last_entry})))
      ||
      forall s in (S \ {self})
-       role == 'leader' =>*
-         s? append_entries(term, prev_log_index, prev_log_term, entries, commit_index));
+       s? append_entries(term, prev_log_index, prev_log_term, entries, commit_index));
     $replicate()
   )
   protocol restart() (
@@ -191,38 +190,29 @@ Server projection
        votes_granted = {};
        (forall t in (S \ {self})
           t! request_vote(term=current_term, last_log_term=(length(log) == 0) ? (0) : (last(log)['term']), last_log_index=length(log));
-          (term <= current_term =>
-             _grant =>
-               t? request_vote_resp(term, vote_granted);
-               (term == current_term =>
-                  votes_responded = union(votes_responded, {t});
-                  (vote_granted =>
-                     votes_granted = union(votes_granted, {t});
-                     (card(votes_granted) > size(S) / 2 + 1 =>
-                        role = 'leader';
-                        next_index = ${{k: length(log) for k, _ in S}};
-                        match_index = ${{k: 0 for k, _ in S}});
-                     $start_election())))))
+          t? request_vote_resp(term, vote_granted);
+          (term == current_term =>
+             votes_responded = union(votes_responded, {t});
+             (vote_granted =>
+                votes_granted = union(votes_granted, {t});
+                (card(votes_granted) > size(S) / 2 + 1 =>
+                   role = 'leader';
+                   next_index = ${{k: length(log) for k, _ in S}};
+                   match_index = ${{k: 0 for k, _ in S}});
+                $start_election()))))
     ||
     forall s in (S \ {self})
-      role == 'candidate' =>*
-        (s? request_vote(term, last_log_term, last_log_index);
-         _log_ok = last_log_term > (length(log) == 0) ? (0) : (last(log)['term']) | last_log_term == (length(log) == 0) ? (0) : (last(log)['term']) & last_log_index >= length(log);
-         _grant = term == current_term & _log_ok & (voted_for == [self] | voted_for == [ ]);
-         (term <= current_term =>
-            _grant =>
-              voted_for = [self];
-              s! request_vote_resp(term=current_term, vote_granted=_grant);
-              (term == current_term =>
-                 vote_granted =>
-                   $start_election()))
-         ||
-         forall t in (S \ {self, s})
-           term <= current_term =>
-             _grant =>
-               term == current_term =>
-                 vote_granted =>
-                   $start_election())
+      (s? request_vote(term, last_log_term, last_log_index);
+       _log_ok = last_log_term > (length(log) == 0) ? (0) : (last(log)['term']) | last_log_term == (length(log) == 0) ? (0) : (last(log)['term']) & last_log_index >= length(log);
+       _grant = term == current_term & _log_ok & (voted_for == [self] | voted_for == [ ]);
+       (term <= current_term =>
+          _grant =>
+            voted_for = [self];
+            s! request_vote_resp(term=current_term, vote_granted=_grant);
+            $start_election())
+       ||
+       forall t in (S \ {self, s})
+         $start_election())
   )
   protocol timeout() (
     (member(role, {'follower', 'candidate'}) =>*

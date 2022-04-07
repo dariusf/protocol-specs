@@ -52,7 +52,7 @@ Dynamic party set (i.e. types are used to compute projection)
   forall c in C
     c? m
 
-A seq involving a particular party (C), where there's a chain of messages in the middle that does not go through or end at C.
+A seq involving a particular party C, where there's a chain of messages in the middle that does not go through or end at C.
 
   $ protocol print basic.spec
   forall c in C
@@ -319,10 +319,25 @@ Self-send with conditions. Shows that we also need to consider if the owner of a
       d! m
   ||
   forall c in (C \ {self})
-    leader =>*
-      c? m
+    c? m
 
-What does this mean, if this is set non-uniformly?
+Why are the following cases different?
+
+  $ protocol print --project C - <<EOF
+  > party c in C (
+  >   c.a = false;
+  >   c.b = false
+  > )
+  > forall c in C
+  >   forall d in (C \\ {c})
+  >     c.a = true;
+  >     d.b = true
+  > EOF
+  forall d in (C \ {self})
+    a = true
+  ||
+  forall c in (C \ {self})
+    b = true
 
   $ protocol print --project C - <<EOF
   > party c in C (
@@ -339,26 +354,19 @@ What does this mean, if this is set non-uniformly?
   forall c in (C \ {self})
     b = true
 
-Case where the same expression uses expressions from the different parties, but same set. Do we split the expression?
+Conditional using expressions from the different parties, but same set. We could split the expression, but it doesn't seem meaningful to do so, as 1. if they're from the same set, this is useless, and 2. if they're from different sets, this can't be checked.
 
   $ protocol print --project C - <<EOF
   > party c in C (
-  >   c.a = false;
-  >   c.b = false
+  >   c.a = true;
+  >   c.b = true
   > )
   > forall c in C
-  >   c.a = true;
+  >   c.a = false;
   >   forall d in (C \\ {c})
-  >     d.b = true;
-  >     c.a and c.b =>*
+  >     d.b = false;
+  >     c.a and d.b =>*
   >       c->d: m
   > EOF
-  a = true;
-  (forall d in (C \ {self})
-     a & b =>*
-       d! m)
-  ||
-  forall c in (C \ {self})
-    b = true;
-    (a & b =>*
-       c? m)
+  error at line 9, col 4:
+  self.a & d.b must have a single location

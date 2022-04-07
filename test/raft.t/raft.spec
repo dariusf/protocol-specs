@@ -1,4 +1,6 @@
 
+// In Search of an Understandable Consensus Algorithm (2014)
+
 party s in S (
   s.role = 'follower';
   s.current_term = 1;
