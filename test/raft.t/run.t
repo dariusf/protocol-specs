@@ -456,6 +456,7 @@ Monitor
   		if len(params) != 1 {
   			return errors.New("expected 1 params")
   		}
+  
   		if g != nil && !(reflect.DeepEqual(g.Term, g.CurrentTerm)) {
   			return fmt.Errorf("logical precondition of %s, %v violated", "SChangeVotesResponded29", params)
   		}

@@ -10,18 +10,35 @@ type flags = {
   mutable uses_reflect : bool;
   mutable uses_errors : bool;
   mutable declared_types : (string * string) list;
+  mutable fresh_local : int;
 }
 
 let initial_flags =
-  { uses_reflect = false; uses_errors = false; declared_types = [] }
+  {
+    uses_reflect = false;
+    uses_errors = false;
+    declared_types = [];
+    fresh_local = 0;
+  }
 
 (* copy, we can't share the mutable object *)
-let flags = { uses_reflect = false; uses_errors = false; declared_types = [] }
+let flags =
+  {
+    uses_reflect = false;
+    uses_errors = false;
+    declared_types = [];
+    fresh_local = 0;
+  }
 
 let restore_flags () =
   flags.uses_reflect <- initial_flags.uses_reflect;
   flags.uses_errors <- initial_flags.uses_errors;
   flags.declared_types <- initial_flags.declared_types
+
+let fresh_variable () =
+  let r = flags.fresh_local in
+  flags.fresh_local <- flags.fresh_local + 1;
+  Format.sprintf "v%d" r
 
 module G = struct
   include Graph.Persistent.Digraph.Concrete (struct
@@ -125,25 +142,6 @@ const (
 
 // from __future__ import any
 type any interface{}
-
-func ite(c bool, t func() any, e func() any) any {
-	if c {
-		return t()
-	} else {
-		return e()
-	}
-}
-
-func mapComp(f func(any, any) (any, any), inp map[any]any, pred func(any, any) bool) map[any]any {
-	res := make(map[any]any)
-	for k, v := range inp {
-		if pred == nil || pred(k, v) {
-			k1, v1 := f(k, v)
-			res[k1] = v1
-		}
-	}
-	return res
-}
 
 func allSlice(s []string, f func(string) bool) bool {
 	b := true
@@ -517,96 +515,162 @@ let rec compile_typ env t =
   | TyFn (_, _) -> nyi "compile type fn" (* seems hard *)
   | TyRecord _ -> "interface{}" (* TODO struct *)
 
-let s = Format.asprintf
-
-let compile_expr env parties te =
-  let rec comp te =
+let compile_expr : env -> string list -> texpr -> string list * string =
+ fun env parties te ->
+  let rec comp : texpr -> string list * string =
+   fun te ->
     match te.expr with
-    | Int i -> string_of_int i
-    | Bool b -> string_of_bool b
-    | String s -> Format.sprintf {|"%s"|} s
+    | Int i -> ([], string_of_int i)
+    | Bool b -> ([], string_of_bool b)
+    | String s -> ([], Format.sprintf {|"%s"|} s)
     | Set es ->
-      let values =
-        List.map comp es
+      let stmts, values = List.map comp es |> List.split in
+      let contents =
+        values
         |> List.map (fun e -> Format.sprintf "\"%s\": bool," e)
         |> String.concat ""
       in
-      Format.sprintf "map[string]bool{%s}" values
+      (List.concat stmts, Format.sprintf "map[string]bool{%s}" contents)
     | List xs ->
       let typ =
         match Infer.concretize env te.meta.info.typ with
         | TyMap (TyInt, a) -> compile_typ env a
         | _ -> bug "cannot treat as list type"
       in
-      let contents = List.map comp xs |> String.concat ", " in
-      s "[]%s{%s}" typ contents
+      let stmts, contents = List.map comp xs |> List.split in
+      let contents = contents |> String.concat ", " in
+      (List.concat stmts, Format.sprintf "[]%s{%s}" typ contents)
     | Map kvs ->
       let k_typ, v_typ =
         match Infer.concretize env te.meta.info.typ with
         | TyMap (k, v) -> (compile_typ env k, compile_typ env v)
         | _ -> bug "cannot treat this type as map"
       in
+      let stmts, contents =
+        List.map
+          (fun (k, v) ->
+            let sv, v = comp v in
+            (sv, (k, v)))
+          kvs
+        |> List.split
+      in
       let contents =
-        List.map (fun (k, v) -> s "\"%s\": %s" k (comp v)) kvs
+        contents
+        |> List.map (fun (k, v) -> Format.sprintf "\"%s\": %s" k v)
         |> String.concat ", "
       in
-      s "map[%s]%s{%s}" k_typ v_typ contents
+      (List.concat stmts, Format.sprintf "map[%s]%s{%s}" k_typ v_typ contents)
     | Ite (c, e1, e2) ->
-      s "(ite(%s, func() any { return %s }, func() any { return %s })).(%s)"
-        (comp c) (comp e1) (comp e2)
-        (compile_typ env te.meta.info.typ)
+      let sc, c = comp c in
+      let se, e1 = comp e1 in
+      let se1, e2 = comp e2 in
+      let v = fresh_variable () in
+      let ite =
+        [
+          Format.sprintf "var %s %s" v
+            (compile_typ env (Infer.concretize env te.meta.info.typ));
+          Format.sprintf "if %s {" c;
+          Format.sprintf "%s = %s" v e1;
+          "} else {";
+          Format.sprintf "%s = %s" v e2;
+          "}";
+        ]
+      in
+      (List.concat [sc; se; se1; ite], v)
     | MapComp mc ->
-      s
-        "(mapComp(func(k any, v any) (any, any) { return %s, %s }, %s, \
-         func(any, any) bool { return %s })).(%s)"
-        (comp mc.map_key) (comp mc.map_val) (comp mc.inp)
-        (match mc.pred with None -> "true" | Some p -> comp p)
-        (compile_typ env te.meta.info.typ)
+      let tk =
+        compile_typ env (Infer.concretize env mc.map_key.meta.info.typ)
+      in
+      let tv =
+        compile_typ env (Infer.concretize env mc.map_val.meta.info.typ)
+      in
+      let sk, mk = comp mc.map_key in
+      let sv, mv = comp mc.map_val in
+      let si, inp = comp mc.inp in
+      let res = fresh_variable () in
+      let k1 = fresh_variable () in
+      let v1 = fresh_variable () in
+      let sp, pred = match mc.pred with None -> ([], "") | Some p -> comp p in
+      let bind_key = var_name mc.bind_key in
+      let bind_val = var_name mc.bind_val in
+      let mapcomp =
+        List.concat
+          [
+            [
+              Format.sprintf "%s := map[%s]%s{}" res tk tv;
+              Format.sprintf "for %s, %s := range (%s) {" bind_key bind_val inp;
+            ];
+            (match mc.pred with
+            | None -> []
+            | Some _ -> [Format.sprintf "if %s {" pred]);
+            [
+              Format.sprintf "%s, %s := (%s), (%s)" k1 v1 mk mv;
+              Format.sprintf "%s[%s] = %s" res k1 v1;
+            ];
+            (match mc.pred with None -> [] | Some _ -> ["}"]);
+            ["}"];
+          ]
+      in
+      (List.concat [sk; sv; si; sp; mapcomp], res)
     | MapProj (e, i) ->
       begin
         match (Infer.concretize env e.meta.info.typ, i) with
-        | TyRecord _, { expr = String i; _ } -> s "%s.%s /*record*/" (comp e) i
-        | TyMap _, _ -> s "%s[%s] /*map*/" (comp e) (comp i)
+        | TyRecord _, { expr = String i; _ } ->
+          let se, e = comp e in
+          (se, Format.sprintf "%s./*record*/%s" e i)
+        | TyMap _, _ ->
+          let se, e = comp e in
+          let si, i = comp i in
+          (List.concat [se; si], Format.sprintf "%s/*map*/[%s]" e i)
         | _ -> bug "cannot index into other types"
       end
     | Let _ -> nyi "compile let"
     | App (f, args) ->
-      let args = List.map comp args in
-      if String.equal f "!=" then (
-        flags.uses_reflect <- true;
-        Format.sprintf "%s(%s)" "!reflect.DeepEqual" (String.concat ", " args))
-      else if String.equal f "==" then (
-        flags.uses_reflect <- true;
-        Format.sprintf "%s(%s)" "reflect.DeepEqual" (String.concat ", " args))
-      else if List.length args = 2 && not (is_alpha f.[0]) then
-        let f1 = match f with "|" -> "||" | _ -> f in
-        Format.sprintf "(%s %s %s)" (List.nth args 0) f1 (List.nth args 1)
-      else
-        let f1 = match f with "size" -> "len" | _ -> f in
-        Format.sprintf "%s(%s)" f1 (String.concat ", " args)
+      let stmts, args = List.map comp args |> List.split in
+      ( List.concat stmts,
+        if String.equal f "!=" then (
+          flags.uses_reflect <- true;
+          Format.sprintf "%s(%s)" "!reflect.DeepEqual" (String.concat ", " args))
+        else if String.equal f "==" then (
+          flags.uses_reflect <- true;
+          Format.sprintf "%s(%s)" "reflect.DeepEqual" (String.concat ", " args))
+        else if List.length args = 2 && not (is_alpha f.[0]) then
+          let f1 = match f with "|" -> "||" | _ -> f in
+          Format.sprintf "(%s %s %s)" (List.nth args 0) f1 (List.nth args 1)
+        else
+          let f1 = match f with "size" -> "len" | _ -> f in
+          Format.sprintf "%s(%s)" f1 (String.concat ", " args) )
     | Var (V (_, v)) when List.mem ~eq:String.equal v parties ->
-      Format.sprintf "l.vars[\"%s\"]" (snake_to_camel v)
-    | Var (V (_, v)) -> Format.sprintf "g.%s" (snake_to_camel v)
+      ([], Format.sprintf "l.vars[\"%s\"]" (snake_to_camel v))
+    | Var (V (_, v)) -> ([], Format.sprintf "g.%s" (snake_to_camel v))
     | Record kvs ->
       let record_name =
         kvs |> List.map fst
         |> List.sort_uniq ~cmp:String.compare
         |> String.concat "_"
       in
+      let stmts, kvs1 =
+        List.map
+          (fun (k, v) ->
+            let s, v = comp v in
+            (s, (k, v)))
+          kvs
+        |> List.split
+      in
       let fields =
-        kvs
-        |> List.map (fun (k, v) -> s "%s: %s" k (comp v))
+        kvs1
+        |> List.map (fun (k, v) -> Format.sprintf "%s: %s" k v)
         |> String.concat ", "
       in
       let field_types =
         kvs
         |> List.map (fun (k, v) ->
-               s "%s %s" k
+               Format.sprintf "%s %s" k
                  (compile_typ env (Infer.concretize env v.meta.info.typ)))
         |> String.concat "\n"
       in
       flags.declared_types <- (record_name, field_types) :: flags.declared_types;
-      s "%s{%s}" record_name fields
+      (List.concat stmts, Format.sprintf "%s{%s}" record_name fields)
   in
   comp te
 
@@ -619,25 +683,31 @@ let compile_protocol env parties tp =
       (* maybe this should be optimized away *)
       ["// call " ^ f]
     | Assign ({ expr = Var (V (_, v)); _ }, e) ->
-      [s "g.%s = %s" (snake_to_camel v) (compile_expr env parties e)]
+      let stmts, e = compile_expr env parties e in
+      stmts @ [Format.sprintf "g.%s = %s" (snake_to_camel v) e]
     | Assign (e, e1) ->
-      [s "g.%s = %s" (compile_expr env parties e) (compile_expr env parties e1)]
+      let se, e = compile_expr env parties e in
+      let se1, e1 = compile_expr env parties e1 in
+      se @ se1 @ [Format.sprintf "g.%s = %s" e e1]
     | SendOnly { to_; msg = Message { typ; args } } ->
       let to_ = var_name (Infer.Cast.must_be_var_t to_) in
-      let fields =
-        [("typ", typ); ("to", to_)]
-        @ List.map
-            (fun (fn, fv) ->
-              let fn = var_name (Infer.Cast.must_be_var_t fn) in
-              (fn, compile_expr env parties fv))
-            args
+      let stmts, args =
+        List.map
+          (fun (fn, fv) ->
+            let fn = var_name (Infer.Cast.must_be_var_t fn) in
+            let sfv, fv = compile_expr env parties fv in
+            (sfv, (fn, fv)))
+          args
+        |> List.split
       in
+      let fields = [("typ", typ); ("to", to_)] @ args in
       let fields =
         fields
-        |> List.map (fun (k, v) -> s "\"%s\": %s" k v)
+        |> List.map (fun (k, v) -> Format.sprintf "\"%s\": %s" k v)
         |> String.concat ","
       in
-      [s "g.History1 = map[string]any{%s}" fields]
+      List.concat stmts
+      @ [Format.sprintf "g.History1 = map[string]any{%s}" fields]
     | ReceiveOnly { from; msg = MessageD { typ; args } } ->
       let from = var_name (Infer.Cast.must_be_var_t from) in
       let fields =
@@ -650,10 +720,10 @@ let compile_protocol env parties tp =
       in
       let fields =
         fields
-        |> List.map (fun (k, v) -> s "\"%s\": %s" k v)
+        |> List.map (fun (k, v) -> Format.sprintf "\"%s\": %s" k v)
         |> String.concat ","
       in
-      [s "g.History1 = map[string]any{%s}" fields]
+      [Format.sprintf "g.History1 = map[string]any{%s}" fields]
     (* not expected *)
     | Exists (_, _, _) -> nyi "Exists"
     | Imply _ -> nyi "Imply should have been translated away"
@@ -712,9 +782,12 @@ let generate_ltl_monitor ltl_i env parties pname ltl =
   let prop_fns =
     bindings |> SMap.bindings
     |> List.map (fun (v, te) ->
+           let stmt, te = compile_expr env parties te in
            Format.sprintf
-             "func (l *LTLMonitor%d) %s(g Global) bool {\nreturn %s\n}" ltl_i v
-             (compile_expr env parties te))
+             "func (l *LTLMonitor%d) %s(g Global) bool {\n%sreturn %s\n}" ltl_i
+             v
+             (stmt |> String.concat "\n")
+             te)
     |> String.concat "\n"
   in
   let generate_ifs eligible_edges vars props =
@@ -878,12 +951,14 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
              | _ ->
                act.lpre
                |> List.map (fun p ->
+                      let stmts, p = compile_expr env parties p in
                       Format.sprintf
-                        {|if g != nil && !(%s) {
+                        {|%s
+                        if g != nil && !(%s) {
               return fmt.Errorf("logical precondition of %%s, %%v violated", "%s", params)
             }|}
-                        (compile_expr env parties p)
-                        name)
+                        (stmts |> String.concat "\n")
+                        p name)
                |> String.concat "\n"
            in
            Format.sprintf
@@ -955,7 +1030,8 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
   in
   let declared_types =
     flags.declared_types
-    |> List.map (fun (name, def) -> s "type %s struct {\n%s\n}" name def)
+    |> List.map (fun (name, def) ->
+           Format.sprintf "type %s struct {\n%s\n}" name def)
     |> String.concat "\n"
   in
   template_monitor

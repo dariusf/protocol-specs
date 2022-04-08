@@ -446,6 +446,7 @@ The classic two-phase commit protocol.
   		if len(params) != 1 {
   			return errors.New("expected 1 params")
   		}
+  
   		if g != nil && !(g.HasAborted) {
   			return fmt.Errorf("logical precondition of %s, %v violated", "CSendAbort5", params)
   		}
@@ -478,6 +479,7 @@ The classic two-phase commit protocol.
   		if len(params) != 1 {
   			return errors.New("expected 1 params")
   		}
+  
   		if g != nil && !(!(g.HasAborted)) {
   			return fmt.Errorf("logical precondition of %s, %v violated", "CSendCommit8", params)
   		}

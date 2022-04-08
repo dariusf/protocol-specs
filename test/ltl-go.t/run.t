@@ -12,6 +12,7 @@
   	switch action {
   	case CChangeB1:
   		// no params check
+  
   		if g != nil && !(g.B > 0) {
   			return fmt.Errorf("logical precondition of %s, %v violated", "CChangeB1", params)
   		}
