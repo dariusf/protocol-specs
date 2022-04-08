@@ -125,7 +125,8 @@ let split_actions_simple :
     state =
  fun lpre params fn_entrypoints (tprotocol : tprotocol) ->
   let rec aux lpre params t =
-    log "split simple\n%a" Print.pp_tprotocol_untyped t;
+    log "split simple\n%a %a" (List.pp String.pp) (List.map fst params)
+      Print.pp_tprotocol_untyped t;
     match t.p with
     | Forall (v, s, body) ->
       let (V (_, v1)) = must_be_var_t v in
@@ -195,6 +196,9 @@ let split_actions_simple :
                    List.mem ~eq:String.equal pa
                      (used_names t |> List.uniq ~eq:String.equal))
           in
+          log "params for expr %d: %a | params %a | used %a" id
+            Print.pp_tprotocol_untyped t (List.pp String.pp)
+            (List.map fst params) (List.pp String.pp) (List.map fst used_params);
 
           let unq_fence = Cond (thread, id) in
           let node =
@@ -494,6 +498,7 @@ let fuse n1 n2 graph actions =
              Some
                {
                  a1 with
+                 params = a1.params @ a2.params;
                  cpost = a2.cpost;
                  protocol = merge_protocols a1.protocol a2.protocol;
                })
@@ -713,6 +718,20 @@ let collect_message_types (p : tprotocol) =
   aux p |> List.uniq ~eq:String.equal
 
 let assigned_variables (e : tprotocol) =
+  let vp =
+    object
+      inherit [_] reduce_protocol_list
+
+      method! visit_Assign () v _e =
+        let info = v.meta.info in
+        let (V (_, v)) = must_be_var_t v in
+        [(v, info)]
+    end
+  in
+  vp#visit__protocol () e
+  |> List.uniq ~eq:(fun (a, _) (b, _) -> String.equal a b)
+
+let abstract_state_variables (e : tprotocol) =
   let vp =
     object
       inherit [_] reduce_protocol_list

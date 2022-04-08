@@ -35,6 +35,13 @@ let restore_flags () =
   flags.uses_errors <- initial_flags.uses_errors;
   flags.declared_types <- initial_flags.declared_types
 
+let declare_type record_name field_types =
+  if
+    Option.is_none
+      (List.assoc_opt ~eq:String.equal record_name flags.declared_types)
+  then
+    flags.declared_types <- (record_name, field_types) :: flags.declared_types
+
 let fresh_variable () =
   let r = flags.fresh_local in
   flags.fresh_local <- flags.fresh_local + 1;
@@ -501,6 +508,9 @@ digraph G {
       ("S_1_Y", "S_0_R"); ("S_0_R", "S_0_R")]
   |}]
 
+let record_name_of kvs =
+  kvs |> List.map fst |> List.sort_uniq ~cmp:String.compare |> String.concat "_"
+
 let rec compile_typ env t =
   match t with
   | TyParty _ ->
@@ -510,171 +520,309 @@ let rec compile_typ env t =
   | TyInt -> "int"
   | TyBool -> "bool"
   | TyString -> "string"
+  (* generate slices *)
+  | TyMap (TyInt, v) -> Format.asprintf "[]%s" (compile_typ env v)
+  (* sets are maps *)
+  | TyMap (k, TyBool) -> Format.asprintf "map[%s]bool" (compile_typ env k)
+  (* regular maps *)
   | TyMap (k, v) ->
     Format.asprintf "map[%s]%s" (compile_typ env k) (compile_typ env v)
   | TyFn (_, _) -> nyi "compile type fn" (* seems hard *)
-  | TyRecord _ -> "interface{}" (* TODO struct *)
+  | TyRecord kvs ->
+    let record_name = record_name_of kvs in
+    record_name
 
-let compile_expr : env -> string list -> texpr -> string list * string =
- fun env parties te ->
-  let rec comp : texpr -> string list * string =
-   fun te ->
-    match te.expr with
-    | Int i -> ([], string_of_int i)
-    | Bool b -> ([], string_of_bool b)
-    | String s -> ([], Format.sprintf {|"%s"|} s)
-    | Set es ->
-      let stmts, values = List.map comp es |> List.split in
-      let contents =
-        values
-        |> List.map (fun e -> Format.sprintf "\"%s\": bool," e)
-        |> String.concat ""
-      in
-      (List.concat stmts, Format.sprintf "map[string]bool{%s}" contents)
-    | List xs ->
-      let typ =
-        match Infer.concretize env te.meta.info.typ with
-        | TyMap (TyInt, a) -> compile_typ env a
-        | _ -> bug "cannot treat as list type"
-      in
-      let stmts, contents = List.map comp xs |> List.split in
-      let contents = contents |> String.concat ", " in
-      (List.concat stmts, Format.sprintf "[]%s{%s}" typ contents)
-    | Map kvs ->
-      let k_typ, v_typ =
-        match Infer.concretize env te.meta.info.typ with
-        | TyMap (k, v) -> (compile_typ env k, compile_typ env v)
-        | _ -> bug "cannot treat this type as map"
-      in
-      let stmts, contents =
-        List.map
-          (fun (k, v) ->
-            let sv, v = comp v in
-            (sv, (k, v)))
-          kvs
-        |> List.split
-      in
-      let contents =
-        contents
-        |> List.map (fun (k, v) -> Format.sprintf "\"%s\": %s" k v)
-        |> String.concat ", "
-      in
-      (List.concat stmts, Format.sprintf "map[%s]%s{%s}" k_typ v_typ contents)
-    | Ite (c, e1, e2) ->
-      let sc, c = comp c in
-      let se, e1 = comp e1 in
-      let se1, e2 = comp e2 in
-      let v = fresh_variable () in
-      let ite =
-        [
-          Format.sprintf "var %s %s" v
-            (compile_typ env (Infer.concretize env te.meta.info.typ));
-          Format.sprintf "if %s {" c;
-          Format.sprintf "%s = %s" v e1;
-          "} else {";
-          Format.sprintf "%s = %s" v e2;
-          "}";
-        ]
-      in
-      (List.concat [sc; se; se1; ite], v)
-    | MapComp mc ->
-      let tk =
-        compile_typ env (Infer.concretize env mc.map_key.meta.info.typ)
-      in
-      let tv =
-        compile_typ env (Infer.concretize env mc.map_val.meta.info.typ)
-      in
-      let sk, mk = comp mc.map_key in
-      let sv, mv = comp mc.map_val in
-      let si, inp = comp mc.inp in
-      let res = fresh_variable () in
-      let k1 = fresh_variable () in
-      let v1 = fresh_variable () in
-      let sp, pred = match mc.pred with None -> ([], "") | Some p -> comp p in
-      let bind_key = var_name mc.bind_key in
-      let bind_val = var_name mc.bind_val in
-      let mapcomp =
-        List.concat
+let compile_expr :
+    (string * party_set) list ->
+    env ->
+    string list ->
+    texpr ->
+    string list * string =
+  let bound = ref [] in
+  fun params env parties te ->
+    let rec comp : texpr -> string list * string =
+     fun te ->
+      match te.expr with
+      | Int i -> ([], string_of_int i)
+      | Bool b -> ([], string_of_bool b)
+      | String s -> ([], Format.sprintf {|"%s"|} s)
+      | Set es ->
+        let stmts, values = List.map comp es |> List.split in
+        let contents =
+          values
+          |> List.map (fun e -> Format.sprintf "%s: true," e)
+          |> String.concat ""
+        in
+        let typ =
+          match Infer.concretize env te.meta.info.typ with
+          | TyMap (a, TyBool) -> compile_typ env a
+          | _ -> bug "cannot treat as set type"
+        in
+        (List.concat stmts, Format.sprintf "map[%s]bool{%s}" typ contents)
+      | List xs ->
+        let typ =
+          match Infer.concretize env te.meta.info.typ with
+          | TyMap (TyInt, a) -> compile_typ env a
+          | _ -> bug "cannot treat as list type"
+        in
+        let stmts, contents = List.map comp xs |> List.split in
+        let list_literal = true in
+        begin
+          match list_literal with
+          | true ->
+            let contents = contents |> String.concat ", " in
+            (List.concat stmts, Format.sprintf "[]%s{%s}" typ contents)
+          | false ->
+            (* compile to a map literal... *)
+            let contents =
+              List.mapi (fun i c -> Format.sprintf "%d: %s" i c) contents
+              |> String.concat ", "
+            in
+            (List.concat stmts, Format.sprintf "map[int]%s{%s}" typ contents)
+        end
+      | Map kvs ->
+        let k_typ, v_typ =
+          match Infer.concretize env te.meta.info.typ with
+          | TyMap (k, v) -> (compile_typ env k, compile_typ env v)
+          | _ -> bug "cannot treat this type as map"
+        in
+        let stmts, contents =
+          List.map
+            (fun (k, v) ->
+              let sv, v = comp v in
+              (sv, (k, v)))
+            kvs
+          |> List.split
+        in
+        let contents =
+          contents
+          |> List.map (fun (k, v) -> Format.sprintf "\"%s\": %s" k v)
+          |> String.concat ", "
+        in
+        (List.concat stmts, Format.sprintf "map[%s]%s{%s}" k_typ v_typ contents)
+      | Ite (c, e1, e2) ->
+        let sc, c = comp c in
+        let se, e1 = comp e1 in
+        let se1, e2 = comp e2 in
+        let v = fresh_variable () in
+        let ite =
           [
-            [
-              Format.sprintf "%s := map[%s]%s{}" res tk tv;
-              Format.sprintf "for %s, %s := range (%s) {" bind_key bind_val inp;
-            ];
-            (match mc.pred with
-            | None -> []
-            | Some _ -> [Format.sprintf "if %s {" pred]);
-            [
-              Format.sprintf "%s, %s := (%s), (%s)" k1 v1 mk mv;
-              Format.sprintf "%s[%s] = %s" res k1 v1;
-            ];
-            (match mc.pred with None -> [] | Some _ -> ["}"]);
-            ["}"];
+            "// ite";
+            Format.sprintf "var %s %s" v
+              (compile_typ env (Infer.concretize env te.meta.info.typ));
+            Format.sprintf "if %s {" c;
+            Format.sprintf "%s = %s" v e1;
+            "} else {";
+            Format.sprintf "%s = %s" v e2;
+            "}";
           ]
-      in
-      (List.concat [sk; sv; si; sp; mapcomp], res)
-    | MapProj (e, i) ->
-      begin
-        match (Infer.concretize env e.meta.info.typ, i) with
-        | TyRecord _, { expr = String i; _ } ->
-          let se, e = comp e in
-          (se, Format.sprintf "%s./*record*/%s" e i)
-        | TyMap _, _ ->
-          let se, e = comp e in
-          let si, i = comp i in
-          (List.concat [se; si], Format.sprintf "%s/*map*/[%s]" e i)
-        | _ -> bug "cannot index into other types"
-      end
-    | Let _ -> nyi "compile let"
-    | App (f, args) ->
-      let stmts, args = List.map comp args |> List.split in
-      ( List.concat stmts,
-        if String.equal f "!=" then (
-          flags.uses_reflect <- true;
-          Format.sprintf "%s(%s)" "!reflect.DeepEqual" (String.concat ", " args))
-        else if String.equal f "==" then (
-          flags.uses_reflect <- true;
-          Format.sprintf "%s(%s)" "reflect.DeepEqual" (String.concat ", " args))
-        else if List.length args = 2 && not (is_alpha f.[0]) then
-          let f1 = match f with "|" -> "||" | _ -> f in
-          Format.sprintf "(%s %s %s)" (List.nth args 0) f1 (List.nth args 1)
-        else
-          let f1 = match f with "size" -> "len" | _ -> f in
-          Format.sprintf "%s(%s)" f1 (String.concat ", " args) )
-    | Var (V (_, v)) when List.mem ~eq:String.equal v parties ->
-      ([], Format.sprintf "l.vars[\"%s\"]" (snake_to_camel v))
-    | Var (V (_, v)) -> ([], Format.sprintf "g.%s" (snake_to_camel v))
-    | Record kvs ->
-      let record_name =
-        kvs |> List.map fst
-        |> List.sort_uniq ~cmp:String.compare
-        |> String.concat "_"
-      in
-      let stmts, kvs1 =
-        List.map
-          (fun (k, v) ->
-            let s, v = comp v in
-            (s, (k, v)))
+        in
+        (List.concat [sc; se; se1; ite], v)
+      | MapComp mc ->
+        let tk =
+          compile_typ env (Infer.concretize env mc.map_key.meta.info.typ)
+        in
+        let tv =
+          compile_typ env (Infer.concretize env mc.map_val.meta.info.typ)
+        in
+        let bind_key = var_name mc.bind_key in
+        let bind_val = var_name mc.bind_val in
+        let b = !bound in
+        bound := bind_key :: bind_val :: !bound;
+        let sk, mk = comp mc.map_key in
+        let sv, mv = comp mc.map_val in
+        bound := b;
+        let si, inp = comp mc.inp in
+        let res = fresh_variable () in
+        let k1 = fresh_variable () in
+        let v1 = fresh_variable () in
+        let sp, pred =
+          match mc.pred with None -> ([], "") | Some p -> comp p
+        in
+        let mapcomp =
+          List.concat
+            [
+              [
+                "// map comprehension";
+                Format.sprintf "%s := map[%s]%s{}" res tk tv;
+                Format.sprintf "for %s, %s := range (%s) {" bind_key bind_val
+                  inp;
+              ];
+              (match mc.pred with
+              | None -> []
+              | Some _ -> [Format.sprintf "if %s {" pred]);
+              [
+                Format.sprintf "%s, %s := (%s), (%s)" k1 v1 mk mv;
+                Format.sprintf "%s[%s] = %s" res k1 v1;
+              ];
+              (match mc.pred with None -> [] | Some _ -> ["}"]);
+              ["}"];
+            ]
+        in
+        (List.concat [sk; sv; si; sp; mapcomp], res)
+      | MapProj (e, i) ->
+        begin
+          match (Infer.concretize env e.meta.info.typ, i) with
+          | TyRecord _, { expr = String i; _ } ->
+            let se, e = comp e in
+            (se, Format.sprintf "%s./*record*/%s" e i)
+          | TyMap _, _ ->
+            let se, e = comp e in
+            let si, i = comp i in
+            (List.concat [se; si], Format.sprintf "%s/*map*/[%s]" e i)
+          | _ -> bug "cannot index into other types"
+        end
+      | Let _ -> nyi "compile let"
+      | App (f, args1) ->
+        let stmts, args = List.map comp args1 |> List.split in
+        begin
+          match f with
+          | "!=" ->
+            flags.uses_reflect <- true;
+            ( List.concat stmts,
+              Format.sprintf "%s(%s)" "!reflect.DeepEqual"
+                (String.concat ", " args) )
+          | "==" ->
+            flags.uses_reflect <- true;
+            ( List.concat stmts,
+              Format.sprintf "%s(%s)" "reflect.DeepEqual"
+                (String.concat ", " args) )
+          | "union" ->
+            (* union of sets represented as maps *)
+            let m = fresh_variable () in
+            let a1 = List.nth args 0 in
+            let a2 = List.nth args 1 in
+            let tk, tv =
+              match Infer.concretize env (List.hd args1).meta.info.typ with
+              | TyMap (k, v) -> (compile_typ env k, compile_typ env v)
+              | _ -> bug "invalid map type"
+            in
+            let union =
+              [
+                "// set union";
+                Format.sprintf "%s := map[%s]%s{}" m tk tv;
+                Format.sprintf "for k, _ := range %s {" a1;
+                Format.sprintf "%s[k] = true" m;
+                "}";
+                Format.sprintf "for k, _ := range %s {" a2;
+                Format.sprintf "%s[k] = true" m;
+                "}";
+              ]
+            in
+            (List.concat stmts @ union, m)
+          | "min" ->
+            let v = fresh_variable () in
+            let a1 = List.nth args 0 in
+            let mi =
+              [
+                "// set min";
+                Format.sprintf "%s := int(^uint(0)>>1) // max int" v;
+                Format.sprintf "for k, _ := range %s {" a1;
+                Format.sprintf "if k < %s {" v;
+                Format.sprintf "%s = k" v;
+                "}";
+                "}";
+              ]
+            in
+            (List.concat stmts @ mi, v)
+          | "last" ->
+            let a = List.nth args 0 in
+            (List.concat stmts, Format.sprintf "%s[len(%s)-1]" a a)
+          | "slice" ->
+            let a = List.nth args 0 in
+            let u = List.nth args 1 in
+            let l = List.nth args 2 in
+            (List.concat stmts, Format.sprintf "%s[%s:%s]" a u l)
+          | "append" when false ->
+            (* appending two maps, which can't be implemented generically *)
+            let v = fresh_variable () in
+            let m = fresh_variable () in
+            let a1 = List.nth args 0 in
+            let a2 = List.nth args 1 in
+            let tk, tv =
+              match Infer.concretize env (List.hd args1).meta.info.typ with
+              | TyMap (k, v) -> (compile_typ env k, compile_typ env v)
+              | _ -> bug "invalid map type"
+            in
+            let app =
+              [
+                "// map append";
+                Format.sprintf "%s := map[%s]%s{}" m tk tv;
+                Format.sprintf "%s := len(%s)" v a1;
+                Format.sprintf "for k, v := range %s {" a1;
+                Format.sprintf "%s[%s] = v" m v;
+                "}";
+                Format.sprintf "for k, v := range %s {" a2;
+                Format.sprintf "%s[%s+k] = v" m v;
+                "}";
+              ]
+            in
+            (List.concat stmts @ app, m)
+          | "append" ->
+            let a = List.nth args 0 in
+            let b = List.nth args 1 in
+            (List.concat stmts, Format.sprintf "append(%s, %s...)" a b)
+          | _ when List.length args = 2 && not (is_alpha f.[0]) ->
+            (* operators *)
+            ( List.concat stmts,
+              let f1 = match f with "|" -> "||" | "&" -> "&&" | _ -> f in
+              Format.sprintf "(%s %s %s)" (List.nth args 0) f1 (List.nth args 1)
+            )
+          | _ ->
+            (* simple renamings *)
+            let f1 = match f with "size" | "length" -> "len" | _ -> f in
+            ( List.concat stmts,
+              Format.sprintf "%s(%s)" f1 (String.concat ", " args) )
+        end
+      | Var (V (_, v)) when List.mem ~eq:String.equal v (List.map fst params) ->
+        log "var params %s %a" v (List.pp String.pp) (List.map fst params);
+        ( [],
+          Format.sprintf "params[%d]"
+            (List.find_idx (String.equal v) (List.map fst params)
+            |> Option.get_exn_or "shouldn't happen due to condition"
+            |> fst) )
+      | Var (V (_, v)) when List.mem ~eq:String.equal v parties ->
+        log "var parties %s" v;
+        (* when compiling to LTL, l.vars is a collection of atomic propositions *)
+        (* this is to access party sets *)
+        ([], Format.sprintf "m.vars[\"%s\"]" (snake_to_camel v))
+        (* ([], Format.sprintf "g.%s" (snake_to_camel v)) *)
+      | Var (V (_, v)) when List.mem ~eq:String.equal v !bound ->
+        log "var bound %s" v;
+        ([], v)
+      | Var (V (_, v)) ->
+        log "var state %s" v;
+        ([], Format.sprintf "g.%s" (snake_to_camel v))
+      | Record kvs ->
+        let record_name = record_name_of kvs in
+        let stmts, kvs1 =
+          List.map
+            (fun (k, v) ->
+              let s, v = comp v in
+              (s, (k, v)))
+            kvs
+          |> List.split
+        in
+        let fields =
+          kvs1
+          |> List.map (fun (k, v) -> Format.sprintf "%s: %s" k v)
+          |> String.concat ", "
+        in
+        let field_types =
           kvs
-        |> List.split
-      in
-      let fields =
-        kvs1
-        |> List.map (fun (k, v) -> Format.sprintf "%s: %s" k v)
-        |> String.concat ", "
-      in
-      let field_types =
-        kvs
-        |> List.map (fun (k, v) ->
-               Format.sprintf "%s %s" k
-                 (compile_typ env (Infer.concretize env v.meta.info.typ)))
-        |> String.concat "\n"
-      in
-      flags.declared_types <- (record_name, field_types) :: flags.declared_types;
-      (List.concat stmts, Format.sprintf "%s{%s}" record_name fields)
-  in
-  comp te
+          |> List.map (fun (k, v) ->
+                 Format.sprintf "%s %s" k
+                   (compile_typ env (Infer.concretize env v.meta.info.typ)))
+          |> String.concat "\n"
+        in
+        declare_type record_name field_types;
+        (List.concat stmts, Format.sprintf "%s{%s}" record_name fields)
+    in
+    comp te
 
-let compile_protocol env parties tp =
+let compile_protocol params env parties tp =
+  log "compiling %a, %a" Print.pp_tprotocol_untyped tp (List.pp String.pp)
+    (List.map fst params);
   let rec comp (tp : tprotocol) =
     match tp.p with
     | Emp -> ["// skip"]
@@ -683,11 +831,11 @@ let compile_protocol env parties tp =
       (* maybe this should be optimized away *)
       ["// call " ^ f]
     | Assign ({ expr = Var (V (_, v)); _ }, e) ->
-      let stmts, e = compile_expr env parties e in
+      let stmts, e = compile_expr params env parties e in
       stmts @ [Format.sprintf "g.%s = %s" (snake_to_camel v) e]
     | Assign (e, e1) ->
-      let se, e = compile_expr env parties e in
-      let se1, e1 = compile_expr env parties e1 in
+      let se, e = compile_expr params env parties e in
+      let se1, e1 = compile_expr params env parties e1 in
       se @ se1 @ [Format.sprintf "g.%s = %s" e e1]
     | SendOnly { to_; msg = Message { typ; args } } ->
       let to_ = var_name (Infer.Cast.must_be_var_t to_) in
@@ -695,12 +843,20 @@ let compile_protocol env parties tp =
         List.map
           (fun (fn, fv) ->
             let fn = var_name (Infer.Cast.must_be_var_t fn) in
-            let sfv, fv = compile_expr env parties fv in
+            let sfv, fv = compile_expr params env parties fv in
             (sfv, (fn, fv)))
           args
         |> List.split
       in
-      let fields = [("typ", typ); ("to", to_)] @ args in
+      let param_to =
+        Format.sprintf "params[%d]"
+          (List.find_idx (String.equal to_) (List.map fst params)
+          |> Option.get_exn_or ("send " ^ to_)
+          |> fst)
+      in
+      let fields =
+        [("typ", Format.sprintf "\"%s\"" typ); ("to", param_to)] @ args
+      in
       let fields =
         fields
         |> List.map (fun (k, v) -> Format.sprintf "\"%s\": %s" k v)
@@ -710,8 +866,16 @@ let compile_protocol env parties tp =
       @ [Format.sprintf "g.History1 = map[string]any{%s}" fields]
     | ReceiveOnly { from; msg = MessageD { typ; args } } ->
       let from = var_name (Infer.Cast.must_be_var_t from) in
+      let param_from =
+        Format.sprintf "params[%d]"
+          (List.find_idx (String.equal from) (List.map fst params)
+          |> Option.get_exn_or
+               (Format.sprintf "recv %s %a" from (List.pp String.pp)
+                  (List.map fst params))
+          |> fst)
+      in
       let fields =
-        [("typ", typ); ("from", from)]
+        [("typ", Format.sprintf "\"%s\"" typ); ("from", param_from)]
         @ List.map
             (fun fn ->
               let fn = var_name (Infer.Cast.must_be_var_t fn) in
@@ -782,7 +946,7 @@ let generate_ltl_monitor ltl_i env parties pname ltl =
   let prop_fns =
     bindings |> SMap.bindings
     |> List.map (fun (v, te) ->
-           let stmt, te = compile_expr env parties te in
+           let stmt, te = compile_expr [] env parties te in
            Format.sprintf
              "func (l *LTLMonitor%d) %s(g Global) bool {\n%sreturn %s\n}" ltl_i
              v
@@ -887,7 +1051,8 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
   in
   let assigned =
     IMap.bindings action_nodes
-    |> List.concat_map Actions.(fun (_, ac) -> assigned_variables ac.protocol)
+    |> List.concat_map
+         Actions.(fun (_, ac) -> abstract_state_variables ac.protocol)
     |> List.sort_uniq ~cmp:(fun (a, _) (b, _) -> String.compare a b)
   in
   log "assigned variables: %a" (List.pp String.pp) (List.map fst assigned);
@@ -951,7 +1116,7 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
              | _ ->
                act.lpre
                |> List.map (fun p ->
-                      let stmts, p = compile_expr env parties p in
+                      let stmts, p = compile_expr [] env parties p in
                       Format.sprintf
                         {|%s
                         if g != nil && !(%s) {
@@ -995,9 +1160,10 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
            (* let tid = act.protocol.pmeta.tid in *)
            Format.sprintf
              {|case %s:
-           %s|}
+           %s
+           return nil|}
              (Actions.node_name pname (id, act)) (* (params_check act.params) *)
-             (compile_protocol env parties act.protocol))
+             (compile_protocol act.params env parties act.protocol))
     |> String.concat "\n"
   in
   let action_defs =
@@ -1017,7 +1183,7 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
              Format.sprintf "%s %s" (snake_to_camel v)
                (compile_typ env info.typ))
     in
-    let vars = "History1 map[string]any" :: vars in
+    let vars = "History1 map[string]any" :: "Self string" :: vars in
     vars |> String.concat "\n"
   in
   let extra_imports =
@@ -1044,6 +1210,10 @@ let translate_party_ltl env i pname ltl action_nodes parties =
   (* reset state *)
   restore_flags ();
   log "generating monitor for party %s" pname;
+  action_nodes
+  |> IMap.iter
+       Actions.(
+         fun i a -> log "%d %a" i (List.pp String.pp) (List.map fst a.params));
   if not (IMap.is_empty action_nodes) then
     let code =
       translate_party_ltl env i pname ltl action_nodes parties |> invoke_gofmt

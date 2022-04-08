@@ -6,6 +6,10 @@ module Lexer = Lexer
 module Parsing = Parsing
 module Ast = Ast
 
+open Log.Make (struct
+  let name = "lib"
+end)
+
 let parse_grain s =
   match s with
   | None | Some "standard" -> Standard
@@ -279,6 +283,11 @@ let monitor grain file =
       let _, action_nodes =
         Actions.split_into_actions (parse_grain grain) pname env pr
       in
+      action_nodes
+      |> IMap.iter
+           Actions.(
+             fun i a ->
+               log "%d %a" i (List.pp String.pp) (List.map fst a.params));
       let ltl =
         List.assoc_opt ~eq:String.equal pname ltl_fml
         |> Option.get_or ~default:[]

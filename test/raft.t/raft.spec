@@ -121,8 +121,8 @@ protocol restart() (
     s.votes_responded = {};
     s.votes_granted = {};
     //s.voter_log = {};
-    s.next_index = ${{ k:1 for k, v in S }};
-    s.match_index = ${{ k:0 for k, v in S }});
+    s.next_index = ${{ k:1 for k, _ in S }};
+    s.match_index = ${{ k:0 for k, _ in S }});
   $restart()
 )
 

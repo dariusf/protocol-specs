@@ -49,8 +49,8 @@ Types
        s.role = 'follower';
        s.votes_responded = {};
        s.votes_granted = {};
-       s.next_index = ${{s.k: 1 for k, v in S}};
-       s.match_index = ${{s.k: 0 for k, v in S}});
+       s.next_index = ${{s.k: 1 for k, _ in S}};
+       s.match_index = ${{s.k: 0 for k, _ in S}});
     $restart()
   )
   protocol start_election() (
@@ -177,8 +177,8 @@ Server projection
     role = 'follower';
     votes_responded = {};
     votes_granted = {};
-    next_index = ${{k: 1 for k, v in S}};
-    match_index = ${{k: 0 for k, v in S}};
+    next_index = ${{k: 1 for k, _ in S}};
+    match_index = ${{k: 0 for k, _ in S}};
     $restart()
   )
   protocol start_election() (
@@ -244,7 +244,7 @@ Server actions
   digraph G {
     1 [label="SChangeRole1\n{Smain = 1}\nrole = 'candidate'\n{Smain = 1}\n"];
     2 [label="SDummy2\n{Smain = 2}\nskip\n{Smain = 2}\n"];
-    3 [label="SChangeRole3\n{Smain = 3}\nrole = 'follower';\nvotes_responded = {};\nvotes_granted = {};\nnext_index = ${{k: 1 for k, v in S}};\nmatch_index = ${{k: 0 for k, v in S}}\n{Smain = 3}\n"];
+    3 [label="SChangeRole3\n{Smain = 3}\nrole = 'follower';\nvotes_responded = {};\nvotes_granted = {};\nnext_index = ${{k: 1 for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{Smain = 3}\n"];
     4 [label="SDummy4\n{Smain = 4}\nskip\n{Smain = 4}\n"];
     5 [label="SReceiveReq5\n{Smain = 5}\nc? req(v)\n{St5(c:C) = 6}\n"];
     7 [label="SChangeLog7\n{St5(c:C) = 6}\nlog = append(log, [<<term: current_term, value: v>>])\n{Smain = 5}\n"];
@@ -307,7 +307,9 @@ Monitor
   func (m *Monitor) precondition(g *Global, action Action, params ...string) error {
   	switch action {
   	case CSendReq62:
-  		// no params check
+  		if len(params) != 1 {
+  			return errors.New("expected 1 params")
+  		}
   		// no logical preconditions
   		if !(m.PC["Cmain"] == 62) {
   			return fmt.Errorf("control precondition of CSendReq62 %v violated", params)
@@ -371,7 +373,9 @@ Monitor
   		m.Log = append(m.Log, entry{action: "SDummy4", params: params})
   		return nil
   	case SReceiveReq5:
-  		// no params check
+  		if len(params) != 1 {
+  			return errors.New("expected 1 params")
+  		}
   		// no logical preconditions
   		if !(m.PC["Smain"] == 5) {
   			return fmt.Errorf("control precondition of SReceiveReq5 %v violated", params)
@@ -387,8 +391,8 @@ Monitor
   		m.Log = append(m.Log, entry{action: "SChangeLog7", params: params})
   		return nil
   	case SChange_PrevLogIndex9:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
+  		if len(params) != 3 {
+  			return errors.New("expected 3 params")
   		}
   		// no logical preconditions
   		if !(m.PC["Smain"] == 4) {
@@ -453,8 +457,8 @@ Monitor
   		m.Log = append(m.Log, entry{action: "SReceiveRequestVoteResp28", params: params})
   		return nil
   	case SChangeVotesResponded29:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
+  		if len(params) != 3 {
+  			return errors.New("expected 3 params")
   		}
   
   		if g != nil && !(reflect.DeepEqual(g.Term, g.CurrentTerm)) {
@@ -484,8 +488,8 @@ Monitor
   		m.Log = append(m.Log, entry{action: "SChange_LogOk36", params: params})
   		return nil
   	case SSendRequestVoteResp39:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
+  		if len(params) != 2 {
+  			return errors.New("expected 2 params")
   		}
   		// no logical preconditions
   		if !(m.PC["St14_"+(params[0] /* s : S */)] == 38) {
