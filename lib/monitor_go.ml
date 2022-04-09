@@ -1051,7 +1051,7 @@ let params_check params =
     Format.sprintf
       {|if len(params) != %d { return errors.New("expected %d params") }|} l l
 
-let cfml_to_precondition (f : Actions.cfml) =
+let cfml_to_precondition (f : cfml) =
   let open Actions in
   let rec aux bound f =
     match f with
@@ -1060,7 +1060,7 @@ let cfml_to_precondition (f : Actions.cfml) =
         default_pc_value
     | AnyOf fs -> List.map (aux bound) fs |> String.concat " || "
     | AllOf fs -> List.map (aux bound) fs |> String.concat " && "
-    | Forall (v, s, z) ->
+    | CForall (v, s, z) ->
       (* TODO invalid go code *)
       let ps = Format.asprintf "%a" Print.pp_party_set s in
       Format.sprintf
@@ -1071,23 +1071,20 @@ let cfml_to_precondition (f : Actions.cfml) =
   in
   aux [] f
 
-let cfml_to_postcondition (f : Actions.cfml) =
-  let open Actions in
+let cfml_to_postcondition (f : cfml) =
   let rec aux bound f =
     match f with
-    | ThreadStart tid ->
-      Format.sprintf "m.%s[%s] == %d" pc (tid_to_string bound tid)
-        default_pc_value
-    | AnyOf fs -> List.map (aux bound) fs |> String.concat " || "
-    | AllOf fs -> List.map (aux bound) fs |> String.concat " && "
-    | Forall (v, s, z) ->
-      (* TODO invalid go code *)
-      let ps = Format.asprintf "%a" Print.pp_party_set s in
-      Format.sprintf
-        "allSet(m.vars[\"%s\"], func(%s string) bool { return %s })" ps v
-        (aux ((v, s) :: bound) z)
+    | AllOf fs -> List.map (aux bound) fs |> String.concat ";\n"
     | Eq (tid, i) ->
       Format.sprintf "m.%s[%s] = %d" pc (tid_to_string bound tid) i
+      (* postconditions are more restrictive than preconditions *)
+    | CForall _ -> nyi "cforall to postcondition"
+    | ThreadStart _ ->
+      bug
+        "possible to have ThreadStart in a postcondition (as then there would \
+         be an action without any control flow)"
+    | AnyOf _ ->
+      bug "not possible to have AnyOf in a postcondition (nondeterminism)"
   in
   aux [] f
 

@@ -247,11 +247,11 @@ Server actions
     3 [label="SChangeRole3\n{Smain = 3}\nrole = 'follower';\nvotes_responded = {};\nvotes_granted = {};\nnext_index = ${{k: 1 for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{Smain = 3}\n"];
     4 [label="SDummy4\n{Smain = 4}\nskip\n{Smain = 4}\n"];
     5 [label="SReceiveReq5\n{Smain = 5}\nc? req(v)\n{St5(c:C) = 6}\n"];
-    7 [label="SChangeLog7\n{St5(c:C) = 6}\nlog = append(log, [<<term: current_term, value: v>>])\n{Smain = 5}\n"];
+    7 [label="SChangeLog7\n{St5(c:C) = 6}\nlog = append(log, [<<term: current_term, value: v>>])\n{All([St5(c:C) = 7, Smain = 5])}\n"];
     9 [label="SChange_PrevLogIndex9\n{Smain = 4}\n_prev_log_index = next_index[t] - 1;\n_prev_log_term = (_prev_log_index > 0) ? (log[_prev_log_index]['term']) : (0);\n_last_entry = min({length(log), next_index[t]});\n_entries = slice(log, next_index[t], _last_entry)\n{St8(t:S) = 12}\n"];
     13 [label="SSendAppendEntries13\n{St8(t:S) = 12}\nt! append_entries(term=term, prev_log_index=_prev_log_index, prev_log_term=_prev_log_term, entries=_entries, commit_index=min({commit_index, _last_entry}))\n{St8(t:S) = 13}\n"];
     14 [label="SReceiveAppendEntries14\n{Smain = 4}\ns? append_entries(term, prev_log_index, prev_log_term, entries, commit_index)\n{St9(s:S) = 14}\n"];
-    15 [label="SCall15\n{All(∀ t:S{self}. St8(t:S) = 13, ∀ s:S{self}. St9(s:S) = 14)}\n$replicate()\n{Smain = 4}\n"];
+    15 [label="SCall15\n{All([∀ t:S{self}. St8(t:S) = 13, ∀ s:S{self}. St9(s:S) = 14])}\n$replicate()\n{Smain = 4}\n"];
     22 [label="SChangeRole22\n{Smain = 2}\nrole = role;\ncurrent_term = current_term + 1;\nvoted_for = [ ];\nvotes_responded = {};\nvotes_granted = {}\n{St10 = 26}\n"];
     27 [label="SSendRequestVote27\n{St10 = 26}\nt! request_vote(term=current_term, last_log_term=(length(log) == 0) ? (0) : (last(log)['term']), last_log_index=length(log))\n{St12(t:S) = 27}\n"];
     28 [label="SReceiveRequestVoteResp28\n{St12(t:S) = 27}\nt? request_vote_resp(term, vote_granted)\n{St12(t:S) = 28}\n"];
@@ -391,8 +391,8 @@ Monitor
   		m.Log = append(m.Log, entry{action: "SChangeLog7", params: params})
   		return nil
   	case SChange_PrevLogIndex9:
-  		if len(params) != 3 {
-  			return errors.New("expected 3 params")
+  		if len(params) != 1 {
+  			return errors.New("expected 1 params")
   		}
   		// no logical preconditions
   		if !(m.PC["Smain"] == 4) {
@@ -457,8 +457,8 @@ Monitor
   		m.Log = append(m.Log, entry{action: "SReceiveRequestVoteResp28", params: params})
   		return nil
   	case SChangeVotesResponded29:
-  		if len(params) != 3 {
-  			return errors.New("expected 3 params")
+  		if len(params) != 1 {
+  			return errors.New("expected 1 params")
   		}
   
   		if g != nil && !(reflect.DeepEqual(g.Term, g.CurrentTerm)) {
@@ -488,8 +488,8 @@ Monitor
   		m.Log = append(m.Log, entry{action: "SChange_LogOk36", params: params})
   		return nil
   	case SSendRequestVoteResp39:
-  		if len(params) != 2 {
-  			return errors.New("expected 2 params")
+  		if len(params) != 1 {
+  			return errors.New("expected 1 params")
   		}
   		// no logical preconditions
   		if !(m.PC["St14_"+(params[0] /* s : S */)] == 38) {

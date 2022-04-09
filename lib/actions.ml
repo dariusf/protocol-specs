@@ -65,6 +65,30 @@ let fresh_node_id =
     incr n;
     r
 
+let rec cfml_flatten (c : cfml) =
+  match c with
+  | ThreadStart _ | Eq _ | CForall _ | AnyOf _ -> [c]
+  | AllOf cs -> List.concat_map cfml_flatten cs
+
+let cfml_from_clauses c =
+  match c |> List.uniq ~eq:equal_cfml with
+  | [] -> bug "impossible"
+  | [c] -> c
+  | c -> AllOf c
+
+(* approach: flatten into clauses where possible and dedup *)
+let cfml_conj a b = cfml_from_clauses (cfml_flatten a @ cfml_flatten b)
+let list_diff ~eq a b = List.filter (fun a -> not (List.mem ~eq a b)) a
+
+let cfml_diff a b =
+  cfml_from_clauses (list_diff ~eq:equal_cfml (cfml_flatten a) (cfml_flatten b))
+
+(** Best-effort, purely syntactic attempt to merge formulae, dropping those subsumed by other formulae *)
+let cfml_merge a1post a2post a2pre =
+  (* cpost = (cfml_merge a1.cpost a2.cpost a2.cpre) ; *)
+  if equal_cfml a1post a2post then a1post
+  else cfml_diff (cfml_conj a1post a2post) a2pre
+
 (* not binders, but used variables *)
 let used_names (t : tprotocol) =
   let vp =
@@ -74,31 +98,6 @@ let used_names (t : tprotocol) =
     end
   in
   vp#visit__protocol () t |> List.uniq ~eq:String.equal
-
-(** Control formulae *)
-type cfml =
-  (* {tid=start} a *)
-  | ThreadStart of tid
-  (* (a \/ b); {AnyOf(a, b)} c *)
-  | AnyOf of cfml list
-  (* (a || b); {AllOf(a, b)} c *)
-  | AllOf of cfml list
-  (* (forall c in C (a)); {Forall(c, C, a)} b *)
-  | Forall of string * party_set * cfml
-  (* a; {tid=1} b *)
-  | Eq of tid * int
-[@@deriving show { with_path = false }]
-
-let rec render_cfml f =
-  match f with
-  | ThreadStart tid -> Format.asprintf "start(%a)" Print.pp_tid tid
-  | AnyOf fs ->
-    fs |> List.map render_cfml |> String.concat ", " |> Format.sprintf "Any(%s)"
-  | AllOf fs ->
-    fs |> List.map render_cfml |> String.concat ", " |> Format.sprintf "All(%s)"
-  | Forall (s, v, b) ->
-    Format.sprintf "∀ %s:%a. %s" s Print.pp_party_set v (render_cfml b)
-  | Eq (tid, pc) -> Format.sprintf "%a = %d" Print.pp_tid tid pc
 
 type node = {
   lpre : texpr list;
@@ -141,7 +140,7 @@ let split_actions_simple :
         | _ -> failwith "cannot interpret set"
       in
       let st = aux lpre ((v1, s1) :: params) body in
-      { st with post = Forall (v1, s1, st.post) }
+      { st with post = CForall (v1, s1, st.post) }
     | Imply (cond, p) | BlockingImply (cond, p) -> aux (cond :: lpre) params p
     | Seq ps ->
       (* convert them all, then stitch them together after *)
@@ -177,7 +176,7 @@ let split_actions_simple :
                   (* change precondition to match predecessor's *)
                   |> IMap.mapi (fun id n ->
                          if List.mem ~eq:Int.equal id sc then
-                           { n with cpre = ft }
+                           { n with cpre = ft (* AllOf [ft; n.cpre] *) }
                          else n));
               post = fc;
             })
@@ -324,8 +323,8 @@ let to_graphviz pname g m =
              | _ ->
                Format.sprintf "{%a}\\n" (List.pp Print.pp_texpr_untyped) lpre
            in
-           let cpre = Format.sprintf "{%s}\\n" (render_cfml cpre) in
-           let cpost = Format.sprintf "{%s}\\n" (render_cfml cpost) in
+           let cpre = Format.sprintf "{%a}\\n" Print.pp_cfml cpre in
+           let cpost = Format.sprintf "{%a}\\n" Print.pp_cfml cpost in
            let params =
              match params with
              | [] -> ""
@@ -493,11 +492,17 @@ let fuse n1 n2 graph actions =
            | None -> bug "bug"
            | Some a1 ->
              (* update protocols and postcondition *)
+             log "merging postconditions %a" (List.pp Print.pp_cfml)
+               [a1.cpost; a2.cpost];
              Some
                {
                  a1 with
-                 params = a1.params @ a2.params;
-                 cpost = a2.cpost;
+                 params =
+                   List.uniq
+                     ~eq:(fun (s1, _) (s2, _) -> String.equal s1 s2)
+                     (a1.params @ a2.params);
+                 (* make sure we don't lose a postcondition. it's not always true that a1.post = a2.pre, e.g. (forall); join *)
+                 cpost = cfml_merge a1.cpost a2.cpost a2.cpre;
                  protocol = merge_protocols a1.protocol a2.protocol;
                })
     in

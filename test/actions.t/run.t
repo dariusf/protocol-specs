@@ -158,7 +158,7 @@ Other side
   >     c.x = 4
   > EOF
   digraph G {
-    1 [label="CChangeA1\n{start(Ct0(p:P))}\na = 1;\nx = 2;\na = 3;\nx = 4\n{Ct1(p:P) = 4}\n"];
+    1 [label="CChangeA1\n{start(Ct0(p:P))}\na = 1;\nx = 2;\na = 3;\nx = 4\n{All([Ct0(p:P) = 2, Ct1(p:P) = 4])}\n"];
   }
 
 TLA+

@@ -391,3 +391,17 @@ type spec = {
   protocol : protocol;
 }
 [@@deriving show { with_path = false }]
+
+(** Control formulae *)
+type cfml =
+  (* {tid=start} a *)
+  | ThreadStart of tid
+  (* (a \/ b); {AnyOf(a, b)} c *)
+  | AnyOf of cfml list
+  (* (a || b); {AllOf(a, b)} c *)
+  | AllOf of cfml list
+  (* (forall c in C (a)); {Forall(c, C, a)} b *)
+  | CForall of string * party_set * cfml
+  (* a; {tid=1} b *)
+  | Eq of tid * int
+[@@deriving show { with_path = false }, eq]

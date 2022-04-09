@@ -425,3 +425,12 @@ let pp_tid fmt t =
            (List.map
               (fun (t, s) -> Format.asprintf "%s:%a" t pp_party_set s)
               ts)))
+
+let rec pp_cfml fmt f =
+  match f with
+  | ThreadStart tid -> Format.fprintf fmt "start(%a)" pp_tid tid
+  | AnyOf fs -> Format.fprintf fmt "Any(%a)" (List.pp ~sep:", " pp_cfml) fs
+  | AllOf fs -> Format.fprintf fmt "All(%a)" (List.pp ~sep:", " pp_cfml) fs
+  | CForall (s, v, b) ->
+    Format.fprintf fmt "∀ %s:%a. %a" s pp_party_set v pp_cfml b
+  | Eq (tid, pc) -> Format.fprintf fmt "%a = %d" pp_tid tid pc

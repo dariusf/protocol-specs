@@ -434,7 +434,7 @@ let cfml_to_pc f =
       (* use the thread that this part is dependent on *)
       let pc = Format.sprintf "pc[self][%s]" (translate_tid bound t) in
       Equals (pc, Term (string_of_int i))
-    | Forall (v, s, b) ->
+    | CForall (v, s, b) ->
       (* rename the variable in case it conflicts with that of the quantifier in scope *)
       let v1 = v ^ "i" in
       let bound = (v, v1) :: bound in
