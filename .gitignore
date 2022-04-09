@@ -5,9 +5,10 @@ _build/
 *.tla
 *.cfg
 states
-*.go
+/*.go
 *.dot
 *.txt
 lib/*.automaton
 lib/*.conflicts
 *.diff
+test/go/*/rv*/*.go

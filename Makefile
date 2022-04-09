@@ -1,15 +1,21 @@
 
 export OCAMLRUNPARAM=b
 
-.PHONY: monitor
-
+.PHONY: all
 all:
 	dune test --display=short
 	dune build @install
 
+.PHONY: w
 w:
 	dune test --display=short -w
 	dune build @install
+
+.PHONY: test-go
+test-go:
+	@for test in $(shell find test/go -d -depth 1); do \
+		cd $$test && make; \
+	done
 
 deps:
 	git ls | depgraph | sd '\{' '{rankdir=BT;' | dot -Tpng > modules.png

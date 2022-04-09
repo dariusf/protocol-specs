@@ -16,3 +16,5 @@
   (pps
    ppx_expect
    )))
+
+(data_only_dirs go)
