@@ -97,7 +97,7 @@ The classic two-phase commit protocol.
 
   $ protocol print 2pc.spec --project P --actions
   digraph G {
-    1 [label="PReceivePrepare1\n{start}\nc? prepare\n{Pt0(c:C) = 1}\n"];
+    1 [label="PReceivePrepare1\n{start(Pt0(c:C))}\nc? prepare\n{Pt0(c:C) = 1}\n"];
     2 [label="PSendPrepared2\n{Pt0(c:C) = 1}\nc! prepared\n{Pt0(c:C) = 2}\n"];
     3 [label="PSendAbort3\n{Pt0(c:C) = 1}\nc! abort\n{Pt0(c:C) = 3}\n"];
     4 [label="PReceiveAbort4\n{Any(Pt0(c:C) = 2, Pt0(c:C) = 3)}\nc? abort\n{Pt0(c:C) = 4}\n"];
@@ -116,7 +116,7 @@ The classic two-phase commit protocol.
 
   $ protocol print 2pc.spec --project C --actions
   digraph G {
-    1 [label="CSendPrepare1\n{start}\np! prepare\n{Ct0(p:P) = 1}\n"];
+    1 [label="CSendPrepare1\n{start(Ct0(p:P))}\np! prepare\n{Ct0(p:P) = 1}\n"];
     2 [label="CReceivePrepared2\n{Ct0(p:P) = 1}\np? prepared\n{Ct0(p:P) = 2}\n"];
     3 [label="CReceiveAbort3\n{Ct0(p:P) = 1}\np? abort\n{Ct0(p:P) = 3}\n"];
     4 [label="CChangeHasAborted4\n{Ct0(p:P) = 3}\nhas_aborted = true\n{Ct0(p:P) = 4}\n"];

@@ -1025,6 +1025,72 @@ let generate_ltl_monitor ltl_i env parties pname ltl =
   in
   (defs, fields, assignments, inits, steps)
 
+let pc = "PC"
+
+let tid_to_string bound (t : tid) =
+  match t.params with
+  | [] -> Format.sprintf "\"%s\"" t.name
+  | _ ->
+    Format.sprintf "\"%s_\" + (%s)" t.name
+      (List.mapi
+         (fun i (v, s) ->
+           if List.mem_assoc ~eq:String.equal v bound then Format.sprintf "%s" v
+           else
+             (* TODO invalid go code *)
+             let ps = Format.asprintf "%a" Print.pp_party_set s in
+             Format.asprintf "params[%d] /* %s : %s */" i v ps)
+         t.params
+      |> String.concat "+")
+
+let params_check params =
+  match params with
+  | [] -> "// no params check"
+  | _ ->
+    flags.uses_errors <- true;
+    let l = List.length params in
+    Format.sprintf
+      {|if len(params) != %d { return errors.New("expected %d params") }|} l l
+
+let cfml_to_precondition (f : Actions.cfml) =
+  let open Actions in
+  let rec aux bound f =
+    match f with
+    | ThreadStart tid ->
+      Format.sprintf "m.%s[%s] == %d" pc (tid_to_string bound tid)
+        default_pc_value
+    | AnyOf fs -> List.map (aux bound) fs |> String.concat " || "
+    | AllOf fs -> List.map (aux bound) fs |> String.concat " && "
+    | Forall (v, s, z) ->
+      (* TODO invalid go code *)
+      let ps = Format.asprintf "%a" Print.pp_party_set s in
+      Format.sprintf
+        "allSet(m.vars[\"%s\"], func(%s string) bool { return %s })" ps v
+        (aux ((v, s) :: bound) z)
+    | Eq (tid, i) ->
+      Format.sprintf "m.%s[%s] == %d" pc (tid_to_string bound tid) i
+  in
+  aux [] f
+
+let cfml_to_postcondition (f : Actions.cfml) =
+  let open Actions in
+  let rec aux bound f =
+    match f with
+    | ThreadStart tid ->
+      Format.sprintf "m.%s[%s] == %d" pc (tid_to_string bound tid)
+        default_pc_value
+    | AnyOf fs -> List.map (aux bound) fs |> String.concat " || "
+    | AllOf fs -> List.map (aux bound) fs |> String.concat " && "
+    | Forall (v, s, z) ->
+      (* TODO invalid go code *)
+      let ps = Format.asprintf "%a" Print.pp_party_set s in
+      Format.sprintf
+        "allSet(m.vars[\"%s\"], func(%s string) bool { return %s })" ps v
+        (aux ((v, s) :: bound) z)
+    | Eq (tid, i) ->
+      Format.sprintf "m.%s[%s] = %d" pc (tid_to_string bound tid) i
+  in
+  aux [] f
+
 let should_generate_ltl_monitor = false
 
 let translate_party_ltl env ltl_i pname ltl action_nodes parties =
@@ -1057,56 +1123,9 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
   in
   log "assigned variables: %a" (List.pp String.pp) (List.map fst assigned);
 
-  let pc = "PC" in
   (* start filling in the template *)
-  let tid_to_string bound (t : tid) =
-    match t.params with
-    | [] -> Format.sprintf "\"%s\"" t.name
-    | _ ->
-      Format.sprintf "\"%s_\" + (%s)" t.name
-        (List.mapi
-           (fun i (v, s) ->
-             if List.mem_assoc ~eq:String.equal v bound then
-               Format.sprintf "%s" v
-             else
-               (* TODO invalid go code *)
-               let ps = Format.asprintf "%a" Print.pp_party_set s in
-               Format.asprintf "params[%d] /* %s : %s */" i v ps)
-           t.params
-        |> String.concat "+")
-  in
-  let params_check params =
-    match params with
-    | [] -> "// no params check"
-    | _ ->
-      flags.uses_errors <- true;
-      let l = List.length params in
-      Format.sprintf
-        {|if len(params) != %d { return errors.New("expected %d params") }|} l l
-  in
   let preconditions =
     let open Actions in
-    let fence_to_precondition act (f : fence_cond) =
-      let rec aux bound f =
-        match f with
-        | ThreadStart ->
-          let current_tid = act.protocol.pmeta.tid in
-          Format.sprintf "m.%s[%s] == %d" pc
-            (tid_to_string bound current_tid)
-            default_pc_value
-        | AnyOf fs -> List.map (aux bound) fs |> String.concat " || "
-        | AllOf fs -> List.map (aux bound) fs |> String.concat " && "
-        | Forall (v, s, z) ->
-          (* TODO invalid go code *)
-          let ps = Format.asprintf "%a" Print.pp_party_set s in
-          Format.sprintf
-            "allSet(m.vars[\"%s\"], func(%s string) bool { return %s })" ps v
-            (aux ((v, s) :: bound) z)
-        | Cond (tid, i) ->
-          Format.sprintf "m.%s[%s] == %d" pc (tid_to_string bound tid) i
-      in
-      aux [] f
-    in
     IMap.bindings action_nodes
     |> List.map (fun (id, act) ->
            let name = Actions.node_name pname (id, act) in
@@ -1136,7 +1155,7 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
              m.Log = append(m.Log, entry{action: "%s", params: params})
              return nil|}
              name (params_check act.params) lpre
-             (fence_to_precondition act act.cpre)
+             (cfml_to_precondition act.cpre)
              name name)
     |> String.concat "\n"
   in
@@ -1144,13 +1163,21 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
     let open Actions in
     IMap.bindings action_nodes
     |> List.map (fun (id, act) ->
-           let tid = act.protocol.pmeta.tid in
+           (* let tid = act.protocol.pmeta.tid in
+              Format.sprintf
+                {|case %s:
+              %s
+              m.%s[%s] = %d|}
+                (Actions.node_name pname (id, act))
+                (params_check act.params) pc (tid_to_string [] tid) id *)
+           (* let tid = act.protocol.pmeta.tid in *)
            Format.sprintf
              {|case %s:
            %s
-           m.%s[%s] = %d|}
+           %s|}
              (Actions.node_name pname (id, act))
-             (params_check act.params) pc (tid_to_string [] tid) id)
+             (params_check act.params)
+             (cfml_to_postcondition act.cpost))
     |> String.concat "\n"
   in
   let protocol_effects =

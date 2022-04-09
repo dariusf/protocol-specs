@@ -144,7 +144,7 @@ Client actions
   digraph G {
     5 [label="CSendReq5\n{Cmain = 5}\ns! req(v=value)\n{Ct5(s:S) = 6}\n"];
     7 [label="CChangeValue7\n{∀ s:S. Ct5(s:S) = 6}\nvalue = value + 1\n{Cmain = 5}\n"];
-    16 [label="CCall16\n{start}\n$client_requests()\n{Ct3 = 5}\n"];
+    16 [label="CCall16\n{start(Ct3)}\n$client_requests()\n{Ct3 = 5}\n"];
     16 -> 5;
     7 -> 5;
     5 -> 7;
@@ -260,11 +260,11 @@ Server actions
     36 [label="SChange_LogOk36\n{St14(s:S) = 35}\n_log_ok = last_log_term > (length(log) == 0) ? (0) : (last(log)['term']) | last_log_term == (length(log) == 0) ? (0) : (last(log)['term']) & last_log_index >= length(log);\n_grant = term == current_term & _log_ok & (voted_for == [self] | voted_for == [ ]);\nvoted_for = [self]\n{St14(s:S) = 38}\n"];
     39 [label="SSendRequestVoteResp39\n{St14(s:S) = 38}\ns! request_vote_resp(term=current_term, vote_granted=_grant)\n{St14(s:S) = 2}\n"];
     41 [label="SCall41\n{Smain = 2}\n$start_election()\n{St16(t:S, s:S) = 2}\n"];
-    44 [label="SChangeRole44\n{start}\nrole = 'follower';\ncurrent_term = 1;\nvoted_for = [ ];\nvotes_responded = {};\nvotes_granted = {};\nlog = [ ];\ncommit_index = 0;\nnext_index = ${{k: 1 for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{St0 = 1}\n"];
-    54 [label="SCall54\n{start}\n$restart()\n{St1 = 3}\n"];
-    55 [label="SCall55\n{start}\n$start_election()\n{St2 = 2}\n"];
-    56 [label="SCall56\n{start}\n$client_requests()\n{St3 = 5}\n"];
-    57 [label="SCall57\n{start}\n$replicate()\n{St4 = 4}\n"];
+    44 [label="SChangeRole44\n{start(St0)}\nrole = 'follower';\ncurrent_term = 1;\nvoted_for = [ ];\nvotes_responded = {};\nvotes_granted = {};\nlog = [ ];\ncommit_index = 0;\nnext_index = ${{k: 1 for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{St0 = 1}\n"];
+    54 [label="SCall54\n{start(St1)}\n$restart()\n{St1 = 3}\n"];
+    55 [label="SCall55\n{start(St2)}\n$start_election()\n{St2 = 2}\n"];
+    56 [label="SCall56\n{start(St3)}\n$client_requests()\n{St3 = 5}\n"];
+    57 [label="SCall57\n{start(St4)}\n$replicate()\n{St4 = 4}\n"];
     57 -> 4;
     56 -> 5;
     55 -> 2;

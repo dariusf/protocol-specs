@@ -6,7 +6,7 @@ Actions
   >     p.a = 1
   > EOF
   digraph G {
-    1 [label="PChangeA1\n{start}\na = 1\n{Pmain = 1}\n"];
+    1 [label="PChangeA1\n{start(Pmain)}\na = 1\n{Pmain = 1}\n"];
   }
 
 Default grain
@@ -18,7 +18,7 @@ Default grain
   >     p.b = 2
   > EOF
   digraph G {
-    1 [label="PChangeA1\n{start}\na = 1;\nb = 2\n{Pmain = 2}\n"];
+    1 [label="PChangeA1\n{start(Pmain)}\na = 1;\nb = 2\n{Pmain = 2}\n"];
   }
 
 Fuse tail
@@ -33,7 +33,7 @@ Fuse tail
   >     p.a = 1
   > EOF
   digraph G {
-    1 [label="PSendM1\n{start}\nc! m\n{Pt0(c:C) = 1}\n"];
+    1 [label="PSendM1\n{start(Pt0(c:C))}\nc! m\n{Pt0(c:C) = 1}\n"];
     2 [label="PChangeB2\n{Pt0(c:C) = 1}\nb = 2;\na = 1\n{Pt0(c:C) = 3}\n"];
     1 -> 2;
   }
@@ -50,7 +50,7 @@ Fuse head
   >     p->c: m
   > EOF
   digraph G {
-    1 [label="PChangeB1\n{start}\nb = 2;\na = 1\n{Pt0(c:C) = 2}\n"];
+    1 [label="PChangeB1\n{start(Pt0(c:C))}\nb = 2;\na = 1\n{Pt0(c:C) = 2}\n"];
     3 [label="PSendM3\n{Pt0(c:C) = 2}\nc! m\n{Pt0(c:C) = 3}\n"];
     1 -> 3;
   }
@@ -68,7 +68,7 @@ Communication grain (P)
   >     c->p: m
   > EOF
   digraph G {
-    1 [label="PChangeA1\n{start}\na = 1;\nc! m\n{Pt0(c:C) = 2}\n"];
+    1 [label="PChangeA1\n{start(Pt0(c:C))}\na = 1;\nc! m\n{Pt0(c:C) = 2}\n"];
     3 [label="PReceiveM3\n{Pt0(c:C) = 2}\nc? m\n{Pt0(c:C) = 3}\n"];
     1 -> 3;
   }
@@ -86,7 +86,7 @@ Communication grain (C)
   >     c->p: m
   > EOF
   digraph G {
-    1 [label="CReceiveM1\n{start}\np? m\n{Ct0(p:P) = 1}\n"];
+    1 [label="CReceiveM1\n{start(Ct0(p:P))}\np? m\n{Ct0(p:P) = 1}\n"];
     2 [label="CChangeB2\n{Ct0(p:P) = 1}\nb = 1;\np! m\n{Ct0(p:P) = 3}\n"];
     1 -> 2;
   }
@@ -100,7 +100,7 @@ Statement grain
   >     p.b = 2
   > EOF
   digraph G {
-    1 [label="PChangeA1\n{start}\na = 1\n{Pmain = 1}\n"];
+    1 [label="PChangeA1\n{start(Pmain)}\na = 1\n{Pmain = 1}\n"];
     2 [label="PChangeB2\n{Pmain = 1}\nb = 2\n{Pmain = 2}\n"];
     1 -> 2;
   }
@@ -121,7 +121,7 @@ Multiple parties
   >     c.m = 1
   > EOF
   digraph G {
-    1 [label="PReceiveM1\n{start}\nc? m\n{Pt0(c:C) = 1}\n"];
+    1 [label="PReceiveM1\n{start(Pt0(c:C))}\nc? m\n{Pt0(c:C) = 1}\n"];
     2 [label="PSendN2\n{Pt0(c:C) = 1}\nc! n\n{Pt0(c:C) = 2}\n"];
     1 -> 2;
   }
@@ -158,7 +158,7 @@ Other side
   >     c.x = 4
   > EOF
   digraph G {
-    1 [label="CChangeA1\n{start}\na = 1;\nx = 2;\na = 3;\nx = 4\n{Ct1(p:P) = 4}\n"];
+    1 [label="CChangeA1\n{start(Ct0(p:P))}\na = 1;\nx = 2;\na = 3;\nx = 4\n{Ct1(p:P) = 4}\n"];
   }
 
 TLA+

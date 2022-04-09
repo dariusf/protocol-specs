@@ -9,6 +9,6 @@ let%expect_test "actions" =
   [%expect
     {|
     digraph G {
-      1 [label="CChangeA1\n{start}\na = 1\n{Cmain = 1}\n"];
+      1 [label="CChangeA1\n{start(Cmain)}\na = 1\n{Cmain = 1}\n"];
     }
 |}]

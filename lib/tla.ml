@@ -421,16 +421,16 @@ let translate_tid bound (t : tid) =
     in
     Format.sprintf "<<%s>>" (String.concat ", " (t.name :: ps1))
 
-let fence_to_pc tid f =
+let cfml_to_pc f =
   let rec aux bound f =
     match f with
-    | ThreadStart ->
+    | ThreadStart tid ->
       (* use the current thread *)
       let pc = Format.sprintf "pc[self][%s]" (translate_tid bound tid) in
       Equals (pc, Term (string_of_int Actions.default_pc_value))
     | AnyOf fs -> Disj (List.map (aux bound) fs)
     | AllOf fs -> Conj (List.map (aux bound) fs)
-    | Cond (t, i) ->
+    | Eq (t, i) ->
       (* use the thread that this part is dependent on *)
       let pc = Format.sprintf "pc[self][%s]" (translate_tid bound t) in
       Equals (pc, Term (string_of_int i))
@@ -445,9 +445,8 @@ let fence_to_pc tid f =
   aux [] f
 
 let translate_node all_vars pname (id, node) =
-  (* not sure if we want to get this from the graph? *)
   let tid = node.protocol.pmeta.tid in
-  let pc_current = fence_to_pc tid node.cpre in
+  let pc_current = cfml_to_pc node.cpre in
   let pc_next =
     AssignLocal
       ( "pc",

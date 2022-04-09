@@ -75,34 +75,37 @@ let used_names (t : tprotocol) =
   in
   vp#visit__protocol () t |> List.uniq ~eq:String.equal
 
-type fence_cond =
-  (* TODO tid? *)
-  | ThreadStart
-  | AnyOf of fence_cond list
-  | AllOf of fence_cond list
-  | Forall of string * party_set * fence_cond
-  | Cond of tid * int
+(** Control formulae *)
+type cfml =
+  (* {tid=start} a *)
+  | ThreadStart of tid
+  (* (a \/ b); {AnyOf(a, b)} c *)
+  | AnyOf of cfml list
+  (* (a || b); {AllOf(a, b)} c *)
+  | AllOf of cfml list
+  (* (forall c in C (a)); {Forall(c, C, a)} b *)
+  | Forall of string * party_set * cfml
+  (* a; {tid=1} b *)
+  | Eq of tid * int
 [@@deriving show { with_path = false }]
 
-let rec render_fence f =
+let rec render_cfml f =
   match f with
-  | ThreadStart -> "start"
+  | ThreadStart tid -> Format.asprintf "start(%a)" Print.pp_tid tid
   | AnyOf fs ->
-    fs |> List.map render_fence |> String.concat ", "
-    |> Format.sprintf "Any(%s)"
+    fs |> List.map render_cfml |> String.concat ", " |> Format.sprintf "Any(%s)"
   | AllOf fs ->
-    fs |> List.map render_fence |> String.concat ", "
-    |> Format.sprintf "All(%s)"
+    fs |> List.map render_cfml |> String.concat ", " |> Format.sprintf "All(%s)"
   | Forall (s, v, b) ->
-    Format.sprintf "∀ %s:%a. %s" s Print.pp_party_set v (render_fence b)
-  | Cond (tid, pc) -> Format.sprintf "%a = %d" Print.pp_tid tid pc
+    Format.sprintf "∀ %s:%a. %s" s Print.pp_party_set v (render_cfml b)
+  | Eq (tid, pc) -> Format.sprintf "%a = %d" Print.pp_tid tid pc
 
 type node = {
   lpre : texpr list;
   protocol : tprotocol;
   params : (string * party_set) list;
-  cpre : fence_cond;
-  cpost : fence_cond;
+  cpre : cfml;
+  cpost : cfml;
 }
 [@@deriving show { with_path = false }]
 
@@ -114,7 +117,7 @@ type state = {
   (* actions, or actions in the graph *)
   actions : node IMap.t;
   (* the postcondition of the returned node (and the precondition of its successor) *)
-  post : fence_cond;
+  post : cfml;
 }
 
 let split_actions_simple :
@@ -158,7 +161,7 @@ let split_actions_simple :
           states
       in
 
-      (* the fence cond is what the SUCCESSOR of a node has to wait for *)
+      (* the cfml cond is what the SUCCESSOR of a node has to wait for *)
       let st =
         foldl1
           (fun { start = st; end_ = et; graph = gt; actions = mt; post = ft }
@@ -200,34 +203,29 @@ let split_actions_simple :
             Print.pp_tprotocol_untyped t (List.pp String.pp)
             (List.map fst params) (List.pp String.pp) (List.map fst used_params);
 
-          let unq_fence = Cond (thread, id) in
+          let unq_cfml = Eq (thread, id) in
           let node =
             {
               params = used_params;
               lpre;
               protocol = { t with p = t.p };
               (* temporarily, a more specific one is filled in when this appears as part of a larger structure *)
-              cpre = ThreadStart;
-              cpost = unq_fence;
+              cpre = ThreadStart thread;
+              cpost = unq_cfml;
             }
           in
           let m = IMap.singleton id node in
-          {
-            start = [id];
-            end_ = [id];
-            graph = g;
-            actions = m;
-            post = unq_fence;
-          }
+          { start = [id]; end_ = [id]; graph = g; actions = m; post = unq_cfml }
         | _ -> bug "unexpected"
       end
     | Call { f = name; _ } ->
       (* possibly cyclic graph *)
       (* create the beginning node *)
       let id = fresh_node_id () in
-      let cpre = ThreadStart in
+      let thread = t.pmeta.tid in
+      let cpre = ThreadStart thread in
       let dest_id = List.assoc ~eq:String.equal name fn_entrypoints in
-      let cpost = Cond (t.pmeta.tid, dest_id) in
+      let cpost = Eq (t.pmeta.tid, dest_id) in
       let action =
         {
           params;
@@ -281,7 +279,7 @@ let split_actions_simple :
         end_ = [];
         graph = G.empty;
         actions = IMap.empty;
-        post = ThreadStart;
+        post = ThreadStart t.pmeta.tid;
       }
     | Send _ -> bug "find actions send"
   in
@@ -326,8 +324,8 @@ let to_graphviz pname g m =
              | _ ->
                Format.sprintf "{%a}\\n" (List.pp Print.pp_texpr_untyped) lpre
            in
-           let cpre = Format.sprintf "{%s}\\n" (render_fence cpre) in
-           let cpost = Format.sprintf "{%s}\\n" (render_fence cpost) in
+           let cpre = Format.sprintf "{%s}\\n" (render_cfml cpre) in
+           let cpost = Format.sprintf "{%s}\\n" (render_cfml cpost) in
            let params =
              match params with
              | [] -> ""
@@ -648,7 +646,7 @@ let split_into_actions :
                         .protocol
                 in *)
              (* see if anything bad happens when we have multiple starts, say due to par *)
-             let entry_cond = Cond (sp.tp.pmeta.tid, entry) in
+             let entry_cond = Eq (sp.tp.pmeta.tid, entry) in
              let actions =
                st.actions
                |> IMap.add entry
