@@ -267,7 +267,7 @@ let monitor grain file =
   let ltl_fml =
     ltl_fml
     |> List.map (fun l ->
-           match Ltl_go.fml_ownership env l with
+           match Monitor_go.fml_ownership env l with
            | [] -> bad_input "fml ownership: no variables?"
            | [o] -> (o, l)
            | _ -> bad_input "more than one party owns this")
@@ -292,7 +292,7 @@ let monitor grain file =
         List.assoc_opt ~eq:String.equal pname ltl_fml
         |> Option.get_or ~default:[]
       in
-      Ltl_go.translate_party_ltl env i pname ltl action_nodes
+      Monitor_go.translate_party_ltl env i pname ltl action_nodes
         (List.map (fun p -> p.repr |> var_name) parties))
     parties
 
