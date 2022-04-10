@@ -1,7 +1,13 @@
 
 .PHONY: all
 all:
-	protocol monitor ../../../test/functions.t/fns.spec
-	mv monitorC.go rvc
+	protocol monitor preamble.spec
+	protocol monitor join.spec
+	protocol monitor disj.spec
+	mkdir -p rvp
+	mkdir -p rvq
+	mkdir -p rvr
 	mv monitorP.go rvp
+	mv monitorQ.go rvq
+	mv monitorR.go rvr
 	go run main.go

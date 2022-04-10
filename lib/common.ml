@@ -12,6 +12,9 @@ type loc = {
 }
 [@@deriving show { with_path = false }, eq]
 
+let dummy_loc =
+  { start = { line = -1; col = -1 }; stop = { line = -1; col = -1 } }
+
 exception Check_failure of string
 
 let fail ~loc s =

@@ -19,23 +19,13 @@ let parse_grain s =
 
 let parse file =
   let spec = Parsing.parse_spec file in
-  {
-    spec with
-    protocol =
-      spec.protocol
-      |> (* if no_normalize then Fun.id else *)
-      Normalize.normalize;
-  }
+  { spec with protocol = spec.protocol |> Normalize.normalize }
+  |> Normalize.add_preamble
 
 let parse_string s =
   let spec = Parsing.parse_string s in
-  {
-    spec with
-    protocol =
-      spec.protocol
-      |> (* if no_normalize then Fun.id else *)
-      Normalize.normalize;
-  }
+  { spec with protocol = spec.protocol |> Normalize.normalize }
+  |> Normalize.add_preamble
 
 let require_project_party p =
   Option.get_exn_or "a party must be chosen using --project" p

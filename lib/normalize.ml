@@ -53,6 +53,40 @@ let rec normalize_t p =
   let p1 = normalize_once p in
   if equal_tprotocol p p1 then p1 else normalize_t p1
 
+let create_p p = { p; pmeta = Common.dummy_loc }
+let create_e expr = { expr; meta = Common.dummy_loc }
+
+(** Given a spec with party declarations, add an initialization block to the main protocol, so the declaration actually executes. We have to use dummy locations because we're adding code, but there shouldn't be type errors there because the preamble is checked separately. *)
+let add_preamble spec =
+  let party_preambles =
+    spec.decls
+    |> List.filter_map (fun d ->
+           match d with
+           | SpecParty { initial = []; _ } -> None
+           | SpecParty sp ->
+             let v = create_e (Var (V (None, sp.var))) in
+             let s = create_e (Var (V (None, sp.set))) in
+             let b =
+               create_p
+                 (Seq
+                    (List.map
+                       (fun (s, e) ->
+                         create_p
+                           (Assign
+                              (create_e (Var (V (Some (Party sp.var), s))), e)))
+                       sp.initial))
+             in
+             let forall = create_p (Forall (v, s, b)) in
+             Some forall
+           | _ -> None)
+  in
+  let protocol =
+    match party_preambles with
+    | [] -> spec.protocol
+    | _ -> create_p (Seq (party_preambles @ [spec.protocol]))
+  in
+  { spec with protocol }
+
 let interpret_seq_of_assignments_as_specparty bs =
   let bindings =
     List.filter_map
@@ -79,6 +113,7 @@ let interpret_seq_of_assignments_as_specparty bs =
   in
   (vars, size)
 
+(** Convert a party preamble encoded in the AST into a SpecParty *)
 let to_specparty var set b =
   let initial, size =
     match b with

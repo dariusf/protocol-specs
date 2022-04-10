@@ -155,10 +155,12 @@ This projects and typechecks, but likely isn't what was meant.
   >   forall c in C
   >     c.leader =>*
   >       p->c: m
-  forall (p : party P;global) in (P : map(party P, bool);global)
-    forall (c : party C;global) in (C : map(party C, bool);global)
-      (c.leader : bool;C) =>*
-        (p : party P;global)->(c : party C;global) : m
+  (forall (c : party C;global) in (C : map(party C, bool);global)
+     (c.leader : bool;C) = true);
+  (forall (p : party P;global) in (P : map(party P, bool);global)
+     forall (c : party C;global) in (C : map(party C, bool);global)
+       (c.leader : bool;C) =>*
+         (p : party P;global)->(c : party C;global) : m)
 
   $ protocol print --project P <<EOF
   > party c in C (c.leader = true)
@@ -177,9 +179,10 @@ This projects and typechecks, but likely isn't what was meant.
   >   forall c in C
   >     c.leader =>*
   >       p->c: m
-  forall p in P
-    leader =>*
-      p? m
+  leader = true;
+  (forall p in P
+     leader =>*
+       p? m)
 
 Multiple uses of the same party set, aka self-sends within a role.
 
@@ -349,12 +352,13 @@ Self-send with conditions. Shows that we also need to consider if the owner of a
   >     c.leader =>*
   >       c->d: m
   > EOF
-  forall d in (C \ {self})
-    leader =>*
-      d! m
-  ||
-  forall c in (C \ {self})
-    c? m
+  leader = false;
+  (forall d in (C \ {self})
+     leader =>*
+       d! m
+   ||
+   forall c in (C \ {self})
+     c? m)
 
 Why are the following cases different?
 
@@ -368,11 +372,13 @@ Why are the following cases different?
   >     c.a = true;
   >     d.b = true
   > EOF
-  forall d in (C \ {self})
-    a = true
-  ||
-  forall c in (C \ {self})
-    b = true
+  a = false;
+  b = false;
+  (forall d in (C \ {self})
+     a = true
+   ||
+   forall c in (C \ {self})
+     b = true)
 
   $ protocol print --project C - <<EOF
   > party c in C (
@@ -384,10 +390,12 @@ Why are the following cases different?
   >   forall d in (C \\ {c})
   >     d.b = true
   > EOF
-  a = true
-  ||
-  forall c in (C \ {self})
-    b = true
+  a = false;
+  b = false;
+  (a = true
+   ||
+   forall c in (C \ {self})
+     b = true)
 
 Conditional using expressions from the different parties, but same set. We could split the expression, but it doesn't seem meaningful to do so, as 1. if they're from the same set, this is useless, and 2. if they're from different sets, this can't be checked.
 

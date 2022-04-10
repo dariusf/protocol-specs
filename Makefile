@@ -8,7 +8,7 @@ all:
 
 .PHONY: w
 w:
-	dune test --display=short -w
+	dune test --display=short --watch --terminal-persistence=clear-on-rebuild
 	dune build @install
 
 .PHONY: test-go

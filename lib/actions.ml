@@ -99,7 +99,7 @@ let used_names (t : tprotocol) =
   in
   vp#visit__protocol () t |> List.uniq ~eq:String.equal
 
-type node = {
+type action = {
   lpre : texpr list;
   protocol : tprotocol;
   params : (string * party_set) list;
@@ -114,7 +114,7 @@ type state = {
   end_ : int list;
   graph : G.t;
   (* actions, or actions in the graph *)
-  actions : node IMap.t;
+  actions : action IMap.t;
   (* the postcondition of the returned node (and the precondition of its successor) *)
   post : cfml;
 }
@@ -444,22 +444,26 @@ let is_directed_edge n1 n2 g =
 let last xs = xs |> List.last 1 |> List.hd
 
 (** this ends up being quadratic, can be fixed by maintaining an incremental representation which is updated when something is added *)
-let rec should_merge_protocols grain (t1 : tprotocol) (t2 : tprotocol) =
-  log "merge %a (%a) (%a)" pp_grain grain Print.pp_tprotocol_untyped t1
-    Print.pp_tprotocol_untyped t2;
-  let res =
-    match (t1.p, t2.p, grain) with
-    | _, (Emp | Call _), _ -> true
-    | (Emp | Call _), _, _ -> true
-    | Seq s1, Seq s2, _ -> should_merge_protocols grain (last s1) (List.hd s2)
-    | Seq s1, _, _ -> should_merge_protocols grain (last s1) t2
-    | _, Seq s2, _ -> should_merge_protocols grain t1 (List.hd s2)
-    | Assign _, Assign _, (Standard | Communication) -> true
-    | Assign _, (SendOnly _ | ReceiveOnly _), Communication -> true
-    | _, _, _ -> false
+let should_merge_protocols grain (t1 : tprotocol) a2 (t2 : tprotocol) =
+  let rec merge t1 t2 =
+    log "merge %a (%a) (%a)" pp_grain grain Print.pp_tprotocol_untyped t1
+      Print.pp_tprotocol_untyped t2;
+    let res =
+      match (t1.p, t2.p, grain) with
+      | _, (Emp | Call _), _ -> true
+      | (Emp | Call _), _, _ -> true
+      | Seq s1, Seq s2, _ -> merge (last s1) (List.hd s2)
+      | Seq s1, _, _ -> merge (last s1) t2
+      | _, Seq s2, _ -> merge t1 (List.hd s2)
+      | Assign _, Assign _, (Standard | Communication) -> true
+      | Assign _, (SendOnly _ | ReceiveOnly _), Communication -> true
+      | _, _, _ -> false
+    in
+    log "merge %b" res;
+    res
   in
-  log "merge %b" res;
-  res
+  (* why check this only at the top level? it's already been checked for inner nodes given that they are built bottom-up *)
+  match a2.lpre with _ :: _ -> false | [] -> merge t1 t2
 
 let merge_protocols (t1 : tprotocol) (t2 : tprotocol) : tprotocol =
   log "merge_protocols: (%a) (%a)" Print.pp_tprotocol_untyped t1
@@ -559,8 +563,9 @@ let fuse_edges grain graph actions =
       end
     | (f, t) :: rest ->
       if
-        should_merge_protocols grain (IMap.find f a).protocol
-          (IMap.find t a).protocol
+        let a1 = IMap.find f a in
+        let a2 = IMap.find t a in
+        should_merge_protocols grain a1.protocol a2 a2.protocol
       then begin
         log "fusing %d %d" f t;
         let g, a = fuse f t g a in
@@ -605,7 +610,7 @@ let misc_pruning graph actions =
   (graph, actions)
 
 let split_into_actions :
-    grain -> string -> env -> tprotocol -> G.t * node IMap.t =
+    grain -> string -> env -> tprotocol -> G.t * action IMap.t =
  fun grain party env t ->
   let t = label_threads env party t in
   let env =

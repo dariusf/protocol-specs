@@ -1134,11 +1134,12 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
                |> List.map (fun p ->
                       let stmts, p = compile_expr [] env parties p in
                       Format.sprintf
-                        {|%s
-                        if g != nil && !(%s) {
+                        {|%sif g != nil && !(%s) {
               return fmt.Errorf("logical precondition of %%s, %%v violated", "%s", params)
             }|}
-                        (stmts |> String.concat "\n")
+                        (match stmts with
+                        | [] -> ""
+                        | _ -> (stmts |> String.concat "\n") ^ "\n")
                         p name)
                |> String.concat "\n"
            in

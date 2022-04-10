@@ -105,7 +105,7 @@ This fails because we cannot infer a type for a...
   > (forall c in C
   >   c.a = {})
   > EOF
-  error at line 3, col 2:
+  error at line -1, col -1:
   failed to infer type for a
 
 ... but this should work.
@@ -129,7 +129,9 @@ This fails because we cannot infer a type for a...
   >   forall c in C
   >     c->p: m(x=c.a);
   >     b = x
-  forall (p : party P;global) in (P : map(party P, bool);global)
-    forall (c : party C;global) in (C : map(party C, bool);global)
-      (c : party C;global)->(p : party P;global) : m((x : int;P)=(c.a : int;C));
-      (p.b : int;P) = (p.x : int;P)
+  (forall (c : party C;global) in (C : map(party C, bool);global)
+     (c.a : int;C) = 1);
+  (forall (p : party P;global) in (P : map(party P, bool);global)
+     forall (c : party C;global) in (C : map(party C, bool);global)
+       (c : party C;global)->(p : party P;global) : m((x : int;P)=(c.a : int;C));
+       (p.b : int;P) = (p.x : int;P))
