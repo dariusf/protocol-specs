@@ -55,7 +55,7 @@
   	case CChangeB2:
   		// no params check
   		if g != nil && !(g.B > 0) {
-  			return fmt.Errorf("logical precondition of %s, %v violated", "CChangeB2", params)
+  			return fmt.Errorf("logical precondition of %s, %#v violated", "CChangeB2", params)
   		}
   		if !(m.PC["Cmain"] == 1) {
   			return fmt.Errorf("control precondition of CChangeB2 %v violated", params)

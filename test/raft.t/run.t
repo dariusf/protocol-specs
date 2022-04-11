@@ -497,7 +497,7 @@ Monitor
   	case SChangeCurrentTerm23:
   		// no params check
   		if g != nil && !(reflect.DeepEqual(g.Role, "candidate")) {
-  			return fmt.Errorf("logical precondition of %s, %v violated", "SChangeCurrentTerm23", params)
+  			return fmt.Errorf("logical precondition of %s, %#v violated", "SChangeCurrentTerm23", params)
   		}
   		if !(m.PC["St10"] == 22) {
   			return fmt.Errorf("control precondition of SChangeCurrentTerm23 %v violated", params)
@@ -529,7 +529,7 @@ Monitor
   			return errors.New("expected 1 params")
   		}
   		if g != nil && !(reflect.DeepEqual(g.Term, g.CurrentTerm)) {
-  			return fmt.Errorf("logical precondition of %s, %v violated", "SChangeVotesResponded29", params)
+  			return fmt.Errorf("logical precondition of %s, %#v violated", "SChangeVotesResponded29", params)
   		}
   		if !(m.PC["St12_"+(params[0] /* t : S */)] == 28) {
   			return fmt.Errorf("control precondition of SChangeVotesResponded29 %v violated", params)
@@ -541,7 +541,7 @@ Monitor
   			return errors.New("expected 1 params")
   		}
   		if g != nil && !(g.VoteGranted) {
-  			return fmt.Errorf("logical precondition of %s, %v violated", "SChangeVotesGranted30", params)
+  			return fmt.Errorf("logical precondition of %s, %#v violated", "SChangeVotesGranted30", params)
   		}
   		if !(m.PC["St12_"+(params[0] /* t : S */)] == 29) {
   			return fmt.Errorf("control precondition of SChangeVotesGranted30 %v violated", params)
@@ -553,7 +553,7 @@ Monitor
   			return errors.New("expected 1 params")
   		}
   		if g != nil && !(card(g.VotesGranted) > ((len(m.vars["S"]) / 2) + 1)) {
-  			return fmt.Errorf("logical precondition of %s, %v violated", "SChangeRole31", params)
+  			return fmt.Errorf("logical precondition of %s, %#v violated", "SChangeRole31", params)
   		}
   		if !(m.PC["St12_"+(params[0] /* t : S */)] == 30) {
   			return fmt.Errorf("control precondition of SChangeRole31 %v violated", params)
@@ -581,10 +581,10 @@ Monitor
   	case SChangeVotedFor38:
   		// no params check
   		if g != nil && !(g._Grant) {
-  			return fmt.Errorf("logical precondition of %s, %v violated", "SChangeVotedFor38", params)
+  			return fmt.Errorf("logical precondition of %s, %#v violated", "SChangeVotedFor38", params)
   		}
   		if g != nil && !(g.Term <= g.CurrentTerm) {
-  			return fmt.Errorf("logical precondition of %s, %v violated", "SChangeVotedFor38", params)
+  			return fmt.Errorf("logical precondition of %s, %#v violated", "SChangeVotedFor38", params)
   		}
   		if !(m.PC["St14_"+(params[0] /* s : S */)] == 37) {
   			return fmt.Errorf("control precondition of SChangeVotedFor38 %v violated", params)

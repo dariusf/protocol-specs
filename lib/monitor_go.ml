@@ -128,6 +128,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
+  "reflect"
 	%{extra_imports}
 )
 
@@ -148,7 +149,7 @@ const (
 )
 
 // from __future__ import any
-type any interface{}
+type Any interface{}
 
 func allSlice(s []string, f func(string) bool) bool {
 	b := true
@@ -217,7 +218,7 @@ type entry struct {
 type Log = []entry
 
 type Monitor struct {
-	previous Global
+	g Global
 	PC map[string]int
 	//vars     map[string][]string
 	vars     map[string]map[string]bool
@@ -230,20 +231,20 @@ type Monitor struct {
 //func NewMonitor(vars map[string][]string) *Monitor {
 func NewMonitor(vars map[string]map[string]bool) *Monitor {
 	return &Monitor{
-    // previous is the empty Global
-    PC: map[string]int{}, // not the smae as a nil map
+    // g is the empty Global. initialization is done by users as part of protocols
+    PC: map[string]int{}, // not the same as a nil map
     vars: vars,
 		%{ltl_monitor_init}
     // Everything else uses mzero
   }
 }
 
+// deprecated, as loops should be part of protocols
 func (m *Monitor) Reset() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	defer m.trackTime(time.Now())
 
-	m.previous = Global{}
 	m.PC = map[string]int{}
 	// vars ok
   %{ltl_monitor_assignments}
@@ -278,8 +279,6 @@ func (m *Monitor) StepS(g Global) error {
 	defer m.lock.Unlock()
 	defer m.trackTime(time.Now())
 
-	m.previous = g
-
 	// LTL monitors
 
 	%{ltl_monitor_step}
@@ -288,16 +287,20 @@ func (m *Monitor) StepS(g Global) error {
 }
 
 // Combination of StepA and StepS
-func (m *Monitor) Step(g Global, act Action, params ...string) error {
+func (m *Monitor) Step(g1 Global, act Action, params ...string) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	defer m.trackTime(time.Now())
 
-	if err := m.precondition(&g, act, params...); err != nil {
+	if err := m.precondition(&m.g, act, params...); err != nil {
 		return err
 	}
 
-	m.previous = g
+  m.applyProtocolEffect(&m.g, act, params...);
+
+  if !reflect.DeepEqual(m.g, g1) {
+    return fmt.Errorf("postcondition violation: abstract states were not equal\nprev: %#v\nnext: %#v", m.g, g1)
+  }
 
 	if err := m.applyControlPostcondition(act, params...); err != nil {
 		return err
@@ -315,9 +318,9 @@ func (m *Monitor) PrintLog() {
 	defer m.lock.Unlock()
 
 	for _, e := range m.Log {
-		fmt.Printf("%s %v\n", e.action, e.params)
+		fmt.Printf("%s %#v\n", e.action, e.params)
 	}
-	// fmt.Printf("Monitor time taken: %v\n", time.Duration(m.ExecutionTimeNs))
+	// fmt.Printf("Monitor time taken: %#v\n", time.Duration(m.ExecutionTimeNs))
 	fmt.Printf("Monitor time taken: %d\n", m.ExecutionTimeNs)
 }
 
@@ -855,7 +858,7 @@ let compile_protocol params env parties tp =
           |> fst)
       in
       let fields =
-        [("typ", Format.sprintf "\"%s\"" typ); ("to", param_to)] @ args
+        [("type", Format.sprintf "\"%s\"" typ); ("to", param_to)] @ args
       in
       let fields =
         fields
@@ -863,7 +866,7 @@ let compile_protocol params env parties tp =
         |> String.concat ","
       in
       List.concat stmts
-      @ [Format.sprintf "g.History1 = map[string]any{%s}" fields]
+      @ [Format.sprintf "g.History1 = map[string]Any{%s}" fields]
     | ReceiveOnly { from; msg = MessageD { typ; args } } ->
       let from = var_name (Infer.Cast.must_be_var_t from) in
       let param_from =
@@ -875,7 +878,7 @@ let compile_protocol params env parties tp =
           |> fst)
       in
       let fields =
-        [("typ", Format.sprintf "\"%s\"" typ); ("from", param_from)]
+        [("type", Format.sprintf "\"%s\"" typ); ("from", param_from)]
         @ List.map
             (fun fn ->
               let fn = var_name (Infer.Cast.must_be_var_t fn) in
@@ -887,7 +890,7 @@ let compile_protocol params env parties tp =
         |> List.map (fun (k, v) -> Format.sprintf "\"%s\": %s" k v)
         |> String.concat ","
       in
-      [Format.sprintf "g.History1 = map[string]any{%s}" fields]
+      [Format.sprintf "g.History1 = map[string]Any{%s}" fields]
     (* not expected *)
     | Exists (_, _, _) -> nyi "Exists"
     | Imply _ -> nyi "Imply should have been translated away"
@@ -1135,7 +1138,7 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
                       let stmts, p = compile_expr [] env parties p in
                       Format.sprintf
                         {|%sif g != nil && !(%s) {
-              return fmt.Errorf("logical precondition of %%s, %%v violated", "%s", params)
+              return fmt.Errorf("logical precondition of %%s, %%#v violated", "%s", params)
             }|}
                         (match stmts with
                         | [] -> ""
@@ -1208,14 +1211,14 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
              Format.sprintf "%s %s" (snake_to_camel v)
                (compile_typ env info.typ))
     in
-    let vars = "History1 map[string]any" :: "Self string" :: vars in
+    let vars = "History1 map[string]Any" :: "Self string" :: vars in
     vars |> String.concat "\n"
   in
   let extra_imports =
     String.concat "\n"
     @@ List.concat
          [
-           (if flags.uses_reflect then ["\"reflect\""] else []);
+           (* (if flags.uses_reflect then ["\"reflect\""] else []); *)
            (if flags.uses_errors then ["\"errors\""] else []);
          ]
   in
