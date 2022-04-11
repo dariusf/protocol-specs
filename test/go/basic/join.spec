@@ -1,9 +1,10 @@
 
-party r in R (r.a = 1; r.b = 1)
+party r in R (r.a = 1)
+party s in S (size = 2)
 
 (forall r in R
-  (r.a = r.a + 1 || r.b = r.b + 1));
+  forall s in S
+    r->s: m);
 
 forall r in R
-  r.a + r.b == 4 =>
-    r.c = 1
+  r.a = 2
