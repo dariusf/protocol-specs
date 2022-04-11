@@ -46,7 +46,7 @@ func checkP(step string, err error, m *rvp.Monitor, expectedSuccess bool) {
 
 func tryC() {
 
-	parties := map[string]map[string]bool{"P": {"p1": true}, "C": {"c1": true}}
+	parties := map[string]interface{}{"P": map[string]bool{"p1": true}, "C": map[string]bool{"c1": true}}
 	m := rvc.NewMonitor(parties)
 
 	err := m.StepA(rvc.CSendM8, "p2")
@@ -67,7 +67,7 @@ func tryC() {
 
 func tryP() {
 
-	parties := map[string]map[string]bool{"P": {"p1": true}, "C": {"c1": true}}
+	parties := map[string]interface{}{"P": map[string]bool{"p1": true}, "C": map[string]bool{"c1": true}}
 	m := rvp.NewMonitor(parties)
 
 	err := m.StepA(rvp.PReceiveM4, "c1")

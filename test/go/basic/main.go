@@ -4,6 +4,7 @@ import (
 	"basic/rvp"
 	"basic/rvq"
 	"basic/rvr"
+	"basic/rvt"
 	"fmt"
 )
 
@@ -64,9 +65,28 @@ func checkR(step string, err error, m *rvr.Monitor, expectedSuccess bool) {
 	}
 }
 
+func checkT(step string, err error, m *rvt.Monitor, expectedSuccess bool) {
+	println("check", step)
+	if err != nil {
+		expected := ""
+		if !expectedSuccess {
+			expected = " (expected)"
+		}
+		fmt.Printf("  error = %v%s\n", err, expected)
+		if expectedSuccess {
+			panic("expected success but failed")
+		}
+	} else {
+		fmt.Printf("  pc = %v\n", m.PC)
+		if !expectedSuccess {
+			panic("expected failure but succeeded")
+		}
+	}
+}
+
 func testDisj() {
 
-	parties := map[string]map[string]bool{"P": {"p1": true}}
+	parties := map[string]interface{}{"P": map[string]bool{"p1": true}}
 	m := rvp.NewMonitor(parties)
 
 	err := m.Step(rvp.Global{B: 1}, rvp.PChangeB1)
@@ -91,7 +111,7 @@ func testDisj() {
 
 func testPreamble() {
 
-	parties := map[string]map[string]bool{"Q": {"q1": true}}
+	parties := map[string]interface{}{"Q": map[string]bool{"q1": true}}
 	m := rvq.NewMonitor(parties)
 
 	err := m.StepA(rvq.QChangeC3)
@@ -119,7 +139,7 @@ func testPreamble() {
 
 func testJoin() {
 
-	parties := map[string]map[string]bool{"R": {"r1": true}, "S": {"s1": true, "s2": true}}
+	parties := map[string]interface{}{"R": map[string]bool{"r1": true}, "S": map[string]bool{"s1": true, "s2": true}}
 	m := rvr.NewMonitor(parties)
 
 	err := m.Step(rvr.Global{A: 1}, rvr.RChangeA1)
@@ -128,27 +148,53 @@ func testJoin() {
 	err = m.StepA(rvr.RChangeA1)
 	checkR("cannot move on before both parties 1", err, m, false)
 
-	fmt.Println("!!")
-	fmt.Println(map[string]rvr.Any{"to": "s1", "type": "m"})
-
-	err = m.Step(rvr.Global{A: 1, History1: map[string]rvr.Any{"to": "s1", "type": "m"}}, rvr.RSendM2, "s1")
+	err = m.Step(rvr.Global{A: 1, History1: map[string]interface{}{"to": "s1", "type": "m"}}, rvr.RSendM2, "s1")
 	checkR("first party", err, m, true)
 
 	err = m.StepA(rvr.RChangeA1)
 	checkR("cannot move on before both parties 2", err, m, false)
 
-	err = m.Step(rvr.Global{A: 1, History1: map[string]rvr.Any{"to": "s2", "type": "m"}}, rvr.RSendM2, "s2")
+	err = m.Step(rvr.Global{A: 1, History1: map[string]interface{}{"to": "s2", "type": "m"}}, rvr.RSendM2, "s2")
 	checkR("second party", err, m, true)
 
-	err = m.Step(rvr.Global{A: 2, History1: map[string]rvr.Any{"to": "s2", "type": "m"}}, rvr.RChangeA3)
+	err = m.Step(rvr.Global{A: 2, History1: map[string]interface{}{"to": "s2", "type": "m"}}, rvr.RChangeA3)
 	checkR("final state change", err, m, true)
 
 	m.PrintLog()
 }
+
+func testSelfSend() {
+
+	parties := map[string]interface{}{"T": map[string]bool{"t1": true, "t2": true}, "Self": "t1"}
+	m := rvt.NewMonitor(parties)
+
+	// from the perspective of t1
+	err := m.Step(rvt.Global{Parties: map[string]bool{}}, rvt.TChangeParties1)
+	checkT("init", err, m, true)
+
+	// explore the branch where we send first
+	err = m.Step(rvt.Global{Parties: map[string]bool{}, History1: map[string]interface{}{"to": "t2", "type": "m"}}, rvt.TSendM2, "t2")
+	checkT("send m2", err, m, true)
+
+	err = m.Step(rvt.Global{Parties: map[string]bool{"t1": true}, History1: map[string]interface{}{"to": "t2", "type": "m"}}, rvt.TChangeParties3, "t2")
+	checkT("add recipient to set", err, m, true)
+
+	// explore the branch where we receive
+	err = m.Step(rvt.Global{Parties: map[string]bool{"t1": true}, History1: map[string]interface{}{"from": "t2", "type": "m"}}, rvt.TReceiveM4, "t2")
+	checkT("receive m4", err, m, true)
+
+	err = m.Step(rvt.Global{Parties: map[string]bool{"t1": true, "t2": true}, History1: map[string]interface{}{"from": "t2", "type": "m"}}, rvt.TChangeParties5, "t2")
+	checkT("add sender to set", err, m, true)
+
+	m.PrintLog()
+}
+
 func main() {
 	testDisj()
 	fmt.Println("---")
 	testPreamble()
 	fmt.Println("---")
 	testJoin()
+	fmt.Println("---")
+	testSelfSend()
 }

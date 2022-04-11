@@ -86,10 +86,10 @@ type LTLMonitor%{i} struct {
 	state     State%{i}
 	succeeded bool
 	failed    bool
-	vars      map[string]map[string]bool
+	vars      map[string]interface{}
 }
 
-func NewLTLMonitor%{i}(vars map[string]map[string]bool) *LTLMonitor%{i} {
+func NewLTLMonitor%{i}(vars map[string]interface{}) *LTLMonitor%{i} {
 	return &LTLMonitor%{i}{
 		vars: vars,
 		state: %{initial_state},
@@ -147,9 +147,6 @@ type Action int
 const (
 %{action_defs}
 )
-
-// from __future__ import any
-type Any interface{}
 
 func allSlice(s []string, f func(string) bool) bool {
 	b := true
@@ -220,16 +217,16 @@ type Log = []entry
 type Monitor struct {
 	g Global
 	PC map[string]int
-	//vars     map[string][]string
-	vars     map[string]map[string]bool
+	vars     map[string]interface{}
 	%{ltl_monitor_fields}
 	Log Log
 	ExecutionTimeNs int64
 	lock        sync.Mutex
 }
-
-//func NewMonitor(vars map[string][]string) *Monitor {
-func NewMonitor(vars map[string]map[string]bool) *Monitor {
+// vars is a list of parameters provided at runtime, such as the concrete
+// identifiers of the members of a party set, and the identifier to use for
+// `self`.
+func NewMonitor(vars map[string]interface{}) *Monitor {
 	return &Monitor{
     // g is the empty Global. initialization is done by users as part of protocols
     PC: map[string]int{}, // not the same as a nil map
@@ -777,6 +774,7 @@ let compile_expr :
             ( List.concat stmts,
               Format.sprintf "%s(%s)" f1 (String.concat ", " args) )
         end
+      | Var (V (_, "self")) -> ([], "m.vars[\"Self\"].(string)")
       | Var (V (_, v)) when List.mem ~eq:String.equal v (List.map fst params) ->
         log "var params %s %a" v (List.pp String.pp) (List.map fst params);
         ( [],
@@ -788,7 +786,9 @@ let compile_expr :
         log "var parties %s" v;
         (* when compiling to LTL, l.vars is a collection of atomic propositions *)
         (* this is to access party sets *)
-        ([], Format.sprintf "m.vars[\"%s\"]" (snake_to_camel v))
+        ( [],
+          Format.sprintf "m.vars[\"%s\"].(map[string]bool)" (snake_to_camel v)
+        )
         (* ([], Format.sprintf "g.%s" (snake_to_camel v)) *)
       | Var (V (_, v)) when List.mem ~eq:String.equal v !bound ->
         log "var bound %s" v;
@@ -866,7 +866,7 @@ let compile_protocol params env parties tp =
         |> String.concat ","
       in
       List.concat stmts
-      @ [Format.sprintf "g.History1 = map[string]Any{%s}" fields]
+      @ [Format.sprintf "g.History1 = map[string]interface{}{%s}" fields]
     | ReceiveOnly { from; msg = MessageD { typ; args } } ->
       let from = var_name (Infer.Cast.must_be_var_t from) in
       let param_from =
@@ -890,7 +890,7 @@ let compile_protocol params env parties tp =
         |> List.map (fun (k, v) -> Format.sprintf "\"%s\": %s" k v)
         |> String.concat ","
       in
-      [Format.sprintf "g.History1 = map[string]Any{%s}" fields]
+      [Format.sprintf "g.History1 = map[string]interface{}{%s}" fields]
     (* not expected *)
     | Exists (_, _, _) -> nyi "Exists"
     | Imply _ -> nyi "Imply should have been translated away"
@@ -1067,7 +1067,9 @@ let cfml_to_precondition (f : cfml) =
       (* TODO invalid go code *)
       let ps = Format.asprintf "%a" Print.pp_party_set s in
       Format.sprintf
-        "allSet(m.vars[\"%s\"], func(%s string) bool { return %s })" ps v
+        "allSet(m.vars[\"%s\"].(map[string]bool), func(%s string) bool { \
+         return %s })"
+        ps v
         (aux ((v, s) :: bound) z)
     | Eq (tid, i) ->
       Format.sprintf "m.%s[%s] == %d" pc (tid_to_string bound tid) i
@@ -1211,7 +1213,7 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
              Format.sprintf "%s %s" (snake_to_camel v)
                (compile_typ env info.typ))
     in
-    let vars = "History1 map[string]Any" :: "Self string" :: vars in
+    let vars = "History1 map[string]interface{}" :: vars in
     vars |> String.concat "\n"
   in
   let extra_imports =

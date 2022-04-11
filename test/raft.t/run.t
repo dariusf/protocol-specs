@@ -369,7 +369,7 @@ Monitor
   	case CChangeValue73:
   		// no params check
   		// no logical preconditions
-  		if !(allSet(m.vars["S"], func(s string) bool { return m.PC["Ct22_"+(s)] == 72 })) {
+  		if !(allSet(m.vars["S"].(map[string]bool), func(s string) bool { return m.PC["Ct22_"+(s)] == 72 })) {
   			return fmt.Errorf("control precondition of CChangeValue73 %v violated", params)
   		}
   		m.Log = append(m.Log, entry{action: "CChangeValue73", params: params})
@@ -481,7 +481,7 @@ Monitor
   	case SCall15:
   		// no params check
   		// no logical preconditions
-  		if !(allSet(m.vars["S  {self}"], func(t string) bool { return m.PC["St8_"+(t)] == 13 }) && allSet(m.vars["S  {self}"], func(s string) bool { return m.PC["St9_"+(s)] == 14 })) {
+  		if !(allSet(m.vars["S  {self}"].(map[string]bool), func(t string) bool { return m.PC["St8_"+(t)] == 13 }) && allSet(m.vars["S  {self}"].(map[string]bool), func(s string) bool { return m.PC["St9_"+(s)] == 14 })) {
   			return fmt.Errorf("control precondition of SCall15 %v violated", params)
   		}
   		m.Log = append(m.Log, entry{action: "SCall15", params: params})
@@ -552,7 +552,7 @@ Monitor
   		if len(params) != 1 {
   			return errors.New("expected 1 params")
   		}
-  		if g != nil && !(card(g.VotesGranted) > ((len(m.vars["S"]) / 2) + 1)) {
+  		if g != nil && !(card(g.VotesGranted) > ((len(m.vars["S"].(map[string]bool)) / 2) + 1)) {
   			return fmt.Errorf("logical precondition of %s, %#v violated", "SChangeRole31", params)
   		}
   		if !(m.PC["St12_"+(params[0] /* t : S */)] == 30) {

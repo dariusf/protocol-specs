@@ -449,7 +449,7 @@ The classic two-phase commit protocol.
   		if g != nil && !(g.HasAborted) {
   			return fmt.Errorf("logical precondition of %s, %#v violated", "CSendAbort5", params)
   		}
-  		if !(allSet(m.vars["P"], func(p string) bool { return m.PC["Ct0_"+(p)] == 2 || m.PC["Ct0_"+(p)] == 4 })) {
+  		if !(allSet(m.vars["P"].(map[string]bool), func(p string) bool { return m.PC["Ct0_"+(p)] == 2 || m.PC["Ct0_"+(p)] == 4 })) {
   			return fmt.Errorf("control precondition of CSendAbort5 %v violated", params)
   		}
   		m.Log = append(m.Log, entry{action: "CSendAbort5", params: params})
@@ -481,7 +481,7 @@ The classic two-phase commit protocol.
   		if g != nil && !(!(g.HasAborted)) {
   			return fmt.Errorf("logical precondition of %s, %#v violated", "CSendCommit8", params)
   		}
-  		if !(allSet(m.vars["P"], func(p string) bool { return m.PC["Ct0_"+(p)] == 2 || m.PC["Ct0_"+(p)] == 4 })) {
+  		if !(allSet(m.vars["P"].(map[string]bool), func(p string) bool { return m.PC["Ct0_"+(p)] == 2 || m.PC["Ct0_"+(p)] == 4 })) {
   			return fmt.Errorf("control precondition of CSendCommit8 %v violated", params)
   		}
   		m.Log = append(m.Log, entry{action: "CSendCommit8", params: params})
