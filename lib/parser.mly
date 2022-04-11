@@ -11,8 +11,8 @@
 %token <int> INT
 %token <string> IDENT
 %token <string> STRING
-%token FORALL EXISTS IN DOT FOR IF THEN END COND WHEN DISJ SEMI PAR ARROW EQ STAR DOLLAR LET QUESTION BANG
-%token INVARIANT LTL PROTOCOL PARTY
+%token FORALL EXISTS IN DOT FOR IF THEN END COND WHEN DISJ SEMI PAR ARROW EQ STAR DOLLAR LET QUESTION
+%token INVARIANT LTL PROTOCOL PARTY SKIP
 
 %left PAR DISJ
 (* this also resolves shift/reduce conflicts with par/disj/semi, has to be before (lower than) semi *)
@@ -24,7 +24,7 @@
 (* keep in sync with the table in Print *)
 %nonassoc BOX DIAMOND
 %right IMPLIES
-%right QUESTION
+%right QUESTION COLON
 %left OR
 %left AND
 %left EQEQ NEQ
@@ -59,6 +59,8 @@ prot :
   | pr = protocol; EOF { pr }
 
 protocol :
+  | SKIP
+    { p_with_pos $startpos $endpos Emp }
   | v = expr; EQ; e = expr;
     { p_with_pos $startpos $endpos (Assign (v, e)) }
   | p1 = var; ARROW; p2 = var; COLON; m = IDENT; args = loption(delimited(LPAREN, separated_nonempty_list(COMMA, msg_kvp), RPAREN));

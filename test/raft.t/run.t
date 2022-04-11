@@ -2,30 +2,20 @@ Raft
 
   $ protocol print raft.spec
   (forall s in S
-     s.role = 'follower';
      s.current_term = 1;
+     s.role = 'follower';
      s.voted_for = [ ];
-     s.votes_responded = {};
-     s.votes_granted = {};
      s.log = [ ];
      s.commit_index = 0;
+     s.votes_responded = {};
+     s.votes_granted = {};
      s.next_index = ${{k: 1 for k, _ in S}};
      s.match_index = ${{k: 0 for k, _ in S}});
   (forall c in C
      c.value = 0);
-  ((forall s in S
-      s.role = 'follower';
-      s.current_term = 1;
-      s.voted_for = [ ];
-      s.votes_responded = {};
-      s.votes_granted = {};
-      s.log = [ ];
-      s.commit_index = 0;
-      s.next_index = ${{k: 1 for k, _ in S}};
-      s.match_index = ${{k: 0 for k, _ in S}});
-   $timeout()
+  ($restart()
    ||
-   $restart()
+   $timeout()
    ||
    $start_election()
    ||
@@ -62,13 +52,13 @@ Types
        s.votes_responded = {};
        s.votes_granted = {};
        s.next_index = ${{s.k: 1 for k, _ in S}};
-       s.match_index = ${{s.k: 0 for k, _ in S}});
+       s.match_index = ${{s.k: 0 for k, _ in S}};
+       s.commit_index = 0);
     $restart()
   )
   protocol start_election() (
-    forall s in S
-      s.role = s.role;
-      (s.role == 'candidate' =>*
+    (forall s in S
+       s.role == 'candidate' =>*
          s.current_term = s.current_term + 1;
          s.voted_for = [ ];
          s.votes_responded = {};
@@ -84,44 +74,36 @@ Types
                  (s.term == s.current_term =>
                     s.votes_responded = union(s.votes_responded, {t});
                     (s.vote_granted =>
-                       s.votes_granted = union(s.votes_granted, {t});
-                       (card(s.votes_granted) > size(S) / 2 + 1 =>
-                          s.role = 'leader';
-                          s.next_index = ${{s.k: length(s.log) for k, _ in S}};
-                          s.match_index = ${{s.k: 0 for k, _ in S}});
-                       $start_election())))))
+                       s.votes_granted = union(s.votes_granted, {t})))));
+         (card(s.votes_granted) > size(S) / 2 + 1 =>*
+            s.role = 'leader';
+            s.next_index = ${{s.k: length(s.log) for k, _ in S}};
+            s.match_index = ${{s.k: 0 for k, _ in S}})
+     \/
+     skip);
+    $start_election()
   )
   protocol timeout() (
     (forall s in S
-       member(s.role, {'follower', 'candidate'}) =>*
+       member(s.role, {'follower'}) =>*
          s.role = 'candidate');
     $timeout()
   )
   (forall (s : party S;global) in (S : map(party S, bool);global)
-     (s.role : string;S) = 'follower';
      (s.current_term : int;S) = 1;
+     (s.role : string;S) = 'follower';
      (s.voted_for : map(int, party S);S) = [ ];
-     (s.votes_responded : map(party S, bool);S) = {};
-     (s.votes_granted : map(party S, bool);S) = {};
      (s.log : map(int, record(term:int, value:int));S) = [ ];
      (s.commit_index : int;S) = 0;
+     (s.votes_responded : map(party S, bool);S) = {};
+     (s.votes_granted : map(party S, bool);S) = {};
      (s.next_index : map(party S, int);S) = ${{(s.k : party S;S): 1 for k, _ in (S : map(party S, bool);global)}};
      (s.match_index : map(party S, int);S) = ${{(s.k : party S;S): 0 for k, _ in (S : map(party S, bool);global)}});
   (forall (c : party C;global) in (C : map(party C, bool);global)
      (c.value : int;C) = 0);
-  ((forall (s : party S;global) in (S : map(party S, bool);global)
-      (s.role : string;S) = 'follower';
-      (s.current_term : int;S) = 1;
-      (s.voted_for : map(int, party S);S) = [ ];
-      (s.votes_responded : map(party S, bool);S) = {};
-      (s.votes_granted : map(party S, bool);S) = {};
-      (s.log : map(int, record(term:int, value:int));S) = [ ];
-      (s.commit_index : int;S) = 0;
-      (s.next_index : map(party S, int);S) = ${{(s.k : party S;S): 1 for k, _ in (S : map(party S, bool);global)}};
-      (s.match_index : map(party S, int);S) = ${{(s.k : party S;S): 0 for k, _ in (S : map(party S, bool);global)}});
-   $timeout()
+  ($restart()
    ||
-   $restart()
+   $timeout()
    ||
    $start_election()
    ||
@@ -145,17 +127,15 @@ Client projection
     $restart()
   )
   protocol start_election() (
-    forall s in S
-      forall t in (S \ {s})
-        $start_election()
+    $start_election()
   )
   protocol timeout() (
     $timeout()
   )
   value = 0;
-  ($timeout()
+  ($restart()
    ||
-   $restart()
+   $timeout()
    ||
    $start_election()
    ||
@@ -206,10 +186,10 @@ Server projection
     votes_granted = {};
     next_index = ${{k: 1 for k, _ in S}};
     match_index = ${{k: 0 for k, _ in S}};
+    commit_index = 0;
     $restart()
   )
   protocol start_election() (
-    role = role;
     (role == 'candidate' =>*
        current_term = current_term + 1;
        voted_for = [ ];
@@ -221,52 +201,39 @@ Server projection
           (term == current_term =>
              votes_responded = union(votes_responded, {t});
              (vote_granted =>
-                votes_granted = union(votes_granted, {t});
-                (card(votes_granted) > size(S) / 2 + 1 =>
-                   role = 'leader';
-                   next_index = ${{k: length(log) for k, _ in S}};
-                   match_index = ${{k: 0 for k, _ in S}});
-                $start_election()))))
-    ||
-    forall s in (S \ {self})
-      (s? request_vote(term, last_log_term, last_log_index);
+                votes_granted = union(votes_granted, {t}))));
+       (card(votes_granted) > size(S) / 2 + 1 =>*
+          role = 'leader';
+          next_index = ${{k: length(log) for k, _ in S}};
+          match_index = ${{k: 0 for k, _ in S}})
+     ||
+     forall s in (S \ {self})
+       s? request_vote(term, last_log_term, last_log_index);
        _log_ok = last_log_term > (length(log) == 0) ? (0) : (last(log)['term']) | last_log_term == (length(log) == 0) ? (0) : (last(log)['term']) & last_log_index >= length(log);
        _grant = term == current_term & _log_ok & (voted_for == [self] | voted_for == [ ]);
        (term <= current_term =>
           _grant =>
             voted_for = [self];
-            s! request_vote_resp(term=current_term, vote_granted=_grant);
-            $start_election())
-       ||
-       forall t in (S \ {self, s})
-         $start_election())
+            s! request_vote_resp(term=current_term, vote_granted=_grant)));
+    $start_election()
   )
   protocol timeout() (
-    (member(role, {'follower', 'candidate'}) =>*
+    (member(role, {'follower'}) =>*
        role = 'candidate');
     $timeout()
   )
-  role = 'follower';
   current_term = 1;
+  role = 'follower';
   voted_for = [ ];
-  votes_responded = {};
-  votes_granted = {};
   log = [ ];
   commit_index = 0;
+  votes_responded = {};
+  votes_granted = {};
   next_index = ${{k: 1 for k, _ in S}};
   match_index = ${{k: 0 for k, _ in S}};
-  (role = 'follower';
-   current_term = 1;
-   voted_for = [ ];
-   votes_responded = {};
-   votes_granted = {};
-   log = [ ];
-   commit_index = 0;
-   next_index = ${{k: 1 for k, _ in S}};
-   match_index = ${{k: 0 for k, _ in S}};
-   $timeout()
+  ($restart()
    ||
-   $restart()
+   $timeout()
    ||
    $start_election()
    ||
@@ -280,7 +247,7 @@ Server actions
   digraph G {
     1 [label="SChangeRole1\n{Smain = 1}\nrole = 'candidate'\n{Smain = 1}\n"];
     2 [label="SDummy2\n{Smain = 2}\nskip\n{Smain = 2}\n"];
-    3 [label="SChangeRole3\n{Smain = 3}\nrole = 'follower';\nvotes_responded = {};\nvotes_granted = {};\nnext_index = ${{k: 1 for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{Smain = 3}\n"];
+    3 [label="SChangeRole3\n{Smain = 3}\nrole = 'follower';\nvotes_responded = {};\nvotes_granted = {};\nnext_index = ${{k: 1 for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}};\ncommit_index = 0\n{Smain = 3}\n"];
     4 [label="SDummy4\n{Smain = 4}\nskip\n{Smain = 4}\n"];
     5 [label="SReceiveReq5\n{Smain = 5}\nc? req(v)\n{St5(c:C) = 6}\n"];
     7 [label="SChangeLog7\n{St5(c:C) = 6}\nlog = append(log, [<<term: current_term, value: v>>])\n{All([St5(c:C) = 7, Smain = 5])}\n"];
@@ -288,46 +255,38 @@ Server actions
     13 [label="SSendAppendEntries13\n{St8(t:S) = 12}\nt! append_entries(term=term, prev_log_index=_prev_log_index, prev_log_term=_prev_log_term, entries=_entries, commit_index=min({commit_index, _last_entry}))\n{St8(t:S) = 13}\n"];
     14 [label="SReceiveAppendEntries14\n{Smain = 4}\ns? append_entries(term, prev_log_index, prev_log_term, entries, commit_index)\n{St9(s:S) = 14}\n"];
     15 [label="SCall15\n{All([∀ t:S{self}. St8(t:S) = 13, ∀ s:S{self}. St9(s:S) = 14])}\n$replicate()\n{Smain = 4}\n"];
-    22 [label="SChangeRole22\n{Smain = 2}\nrole = role\n{St10 = 22}\n"];
-    23 [label="SChangeCurrentTerm23\n{St10 = 22}\ncurrent_term = current_term + 1;\nvoted_for = [ ];\nvotes_responded = {};\nvotes_granted = {}\n{St10 = 26}\n"];
+    23 [label="SChangeCurrentTerm23\n{Smain = 2}\ncurrent_term = current_term + 1;\nvoted_for = [ ];\nvotes_responded = {};\nvotes_granted = {}\n{St10 = 26}\n"];
     27 [label="SSendRequestVote27\n{St10 = 26}\nt! request_vote(term=current_term, last_log_term=(length(log) == 0) ? (0) : (last(log)['term']), last_log_index=length(log))\n{St12(t:S) = 27}\n"];
     28 [label="SReceiveRequestVoteResp28\n{St12(t:S) = 27}\nt? request_vote_resp(term, vote_granted)\n{St12(t:S) = 28}\n"];
-    29 [label="SChangeVotesResponded29\n{St12(t:S) = 28}\nvotes_responded = union(votes_responded, {t})\n{St12(t:S) = 29}\n"];
-    30 [label="SChangeVotesGranted30\n{St12(t:S) = 29}\nvotes_granted = union(votes_granted, {t})\n{St12(t:S) = 30}\n"];
-    31 [label="SChangeRole31\n{St12(t:S) = 30}\nrole = 'leader';\nnext_index = ${{k: length(log) for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{St12(t:S) = 2}\n"];
-    35 [label="SReceiveRequestVote35\n{Smain = 2}\ns? request_vote(term, last_log_term, last_log_index)\n{St14(s:S) = 35}\n"];
-    36 [label="SChange_LogOk36\n{St14(s:S) = 35}\n_log_ok = last_log_term > (length(log) == 0) ? (0) : (last(log)['term']) | last_log_term == (length(log) == 0) ? (0) : (last(log)['term']) & last_log_index >= length(log);\n_grant = term == current_term & _log_ok & (voted_for == [self] | voted_for == [ ])\n{St14(s:S) = 37}\n"];
-    38 [label="SChangeVotedFor38\n{St14(s:S) = 37}\nvoted_for = [self]\n{St14(s:S) = 38}\n"];
-    39 [label="SSendRequestVoteResp39\n{St14(s:S) = 38}\ns! request_vote_resp(term=current_term, vote_granted=_grant)\n{St14(s:S) = 2}\n"];
-    41 [label="SCall41\n{Smain = 2}\n$start_election()\n{St16(t:S, s:S) = 2}\n"];
-    44 [label="SChangeRole44\n{start(Smain)}\nrole = 'follower';\ncurrent_term = 1;\nvoted_for = [ ];\nvotes_responded = {};\nvotes_granted = {};\nlog = [ ];\ncommit_index = 0;\nnext_index = ${{k: 1 for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{Smain = 52}\n"];
-    53 [label="SChangeRole53\n{Smain = 52}\nrole = 'follower';\ncurrent_term = 1;\nvoted_for = [ ];\nvotes_responded = {};\nvotes_granted = {};\nlog = [ ];\ncommit_index = 0;\nnext_index = ${{k: 1 for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{St0 = 1}\n"];
-    63 [label="SCall63\n{Smain = 52}\n$restart()\n{St1 = 3}\n"];
-    64 [label="SCall64\n{Smain = 52}\n$start_election()\n{St2 = 2}\n"];
-    65 [label="SCall65\n{Smain = 52}\n$client_requests()\n{St3 = 5}\n"];
-    66 [label="SCall66\n{Smain = 52}\n$replicate()\n{St4 = 4}\n"];
-    66 -> 4;
-    65 -> 5;
-    64 -> 2;
-    63 -> 3;
-    53 -> 1;
-    44 -> 66;
-    44 -> 65;
-    44 -> 64;
-    44 -> 63;
-    44 -> 53;
-    41 -> 2;
+    29 [label="SChangeVotesResponded29\n{St12(t:S) = 28}\nvotes_responded = union(votes_responded, {t});\nvotes_granted = union(votes_granted, {t});\nrole = 'leader';\nnext_index = ${{k: length(log) for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{All([St12(t:S) = 30, St10 = 33])}\n"];
+    34 [label="SReceiveRequestVote34\n{Smain = 2}\ns? request_vote(term, last_log_term, last_log_index)\n{St13(s:S) = 34}\n"];
+    35 [label="SChange_LogOk35\n{St13(s:S) = 34}\n_log_ok = last_log_term > (length(log) == 0) ? (0) : (last(log)['term']) | last_log_term == (length(log) == 0) ? (0) : (last(log)['term']) & last_log_index >= length(log);\n_grant = term == current_term & _log_ok & (voted_for == [self] | voted_for == [ ]);\nvoted_for = [self]\n{St13(s:S) = 37}\n"];
+    38 [label="SSendRequestVoteResp38\n{St13(s:S) = 37}\ns! request_vote_resp(term=current_term, vote_granted=_grant)\n{St13(s:S) = 38}\n"];
+    39 [label="SCall39\n{All([St10 = 33, ∀ s:S{self}. St13(s:S) = 38])}\n$start_election()\n{Smain = 2}\n"];
+    42 [label="SChangeCurrentTerm42\n{start(Smain)}\ncurrent_term = 1;\nrole = 'follower';\nvoted_for = [ ];\nlog = [ ];\ncommit_index = 0;\nvotes_responded = {};\nvotes_granted = {};\nnext_index = ${{k: 1 for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{Smain = 50}\n"];
+    51 [label="SCall51\n{Smain = 50}\n$restart()\n{St0 = 3}\n"];
+    52 [label="SCall52\n{Smain = 50}\n$timeout()\n{St1 = 1}\n"];
+    53 [label="SCall53\n{Smain = 50}\n$start_election()\n{St2 = 2}\n"];
+    54 [label="SCall54\n{Smain = 50}\n$client_requests()\n{St3 = 5}\n"];
+    55 [label="SCall55\n{Smain = 50}\n$replicate()\n{St4 = 4}\n"];
+    55 -> 4;
+    54 -> 5;
+    53 -> 2;
+    52 -> 1;
+    51 -> 3;
+    42 -> 55;
+    42 -> 54;
+    42 -> 53;
+    42 -> 52;
+    42 -> 51;
     39 -> 2;
     38 -> 39;
-    36 -> 38;
-    35 -> 36;
-    31 -> 2;
-    30 -> 31;
-    29 -> 30;
+    35 -> 38;
+    34 -> 35;
+    29 -> 39;
     28 -> 29;
     27 -> 28;
     23 -> 27;
-    22 -> 23;
     15 -> 4;
     14 -> 15;
     13 -> 15;
@@ -337,9 +296,8 @@ Server actions
     4 -> 14;
     4 -> 9;
     3 -> 3;
-    2 -> 41;
-    2 -> 35;
-    2 -> 22;
+    2 -> 34;
+    2 -> 23;
     1 -> 1;
   }
 
@@ -356,39 +314,39 @@ Monitor
   $ sed -n '/func.*precondition/,/^}/p' monitorC.go
   func (m *Monitor) precondition(g *Global, action Action, params ...string) error {
   	switch action {
-  	case CSendReq71:
+  	case CSendReq60:
   		if len(params) != 1 {
   			return errors.New("expected 1 params")
   		}
   		// no logical preconditions
-  		if !(m.PC["Cmain"] == 71) {
-  			return fmt.Errorf("control precondition of CSendReq71 %v violated", params)
+  		if !(m.PC["Cmain"] == 60) {
+  			return fmt.Errorf("control precondition of CSendReq60 %v violated", params)
   		}
-  		m.Log = append(m.Log, entry{action: "CSendReq71", params: params})
+  		m.Log = append(m.Log, entry{action: "CSendReq60", params: params})
   		return nil
-  	case CChangeValue73:
+  	case CChangeValue62:
   		// no params check
   		// no logical preconditions
-  		if !(allSet(m.vars["S"].(map[string]bool), func(s string) bool { return m.PC["Ct22_"+(s)] == 72 })) {
-  			return fmt.Errorf("control precondition of CChangeValue73 %v violated", params)
+  		if !(allSet(m.vars["S"].(map[string]bool), func(s string) bool { return m.PC["Ct19_"+(s)] == 61 })) {
+  			return fmt.Errorf("control precondition of CChangeValue62 %v violated", params)
   		}
-  		m.Log = append(m.Log, entry{action: "CChangeValue73", params: params})
+  		m.Log = append(m.Log, entry{action: "CChangeValue62", params: params})
   		return nil
-  	case CChangeValue79:
+  	case CChangeValue68:
   		// no params check
   		// no logical preconditions
   		if !(m.PC["Cmain"] == 0) {
-  			return fmt.Errorf("control precondition of CChangeValue79 %v violated", params)
+  			return fmt.Errorf("control precondition of CChangeValue68 %v violated", params)
   		}
-  		m.Log = append(m.Log, entry{action: "CChangeValue79", params: params})
+  		m.Log = append(m.Log, entry{action: "CChangeValue68", params: params})
   		return nil
-  	case CCall83:
+  	case CCall72:
   		// no params check
   		// no logical preconditions
-  		if !(m.PC["Cmain"] == 79) {
-  			return fmt.Errorf("control precondition of CCall83 %v violated", params)
+  		if !(m.PC["Cmain"] == 68) {
+  			return fmt.Errorf("control precondition of CCall72 %v violated", params)
   		}
-  		m.Log = append(m.Log, entry{action: "CCall83", params: params})
+  		m.Log = append(m.Log, entry{action: "CCall72", params: params})
   		return nil
   	default:
   		panic("invalid action")
@@ -486,20 +444,10 @@ Monitor
   		}
   		m.Log = append(m.Log, entry{action: "SCall15", params: params})
   		return nil
-  	case SChangeRole22:
+  	case SChangeCurrentTerm23:
   		// no params check
   		// no logical preconditions
   		if !(m.PC["Smain"] == 2) {
-  			return fmt.Errorf("control precondition of SChangeRole22 %v violated", params)
-  		}
-  		m.Log = append(m.Log, entry{action: "SChangeRole22", params: params})
-  		return nil
-  	case SChangeCurrentTerm23:
-  		// no params check
-  		if g != nil && !(reflect.DeepEqual(g.Role, "candidate")) {
-  			return fmt.Errorf("logical precondition of %s, %#v violated", "SChangeCurrentTerm23", params)
-  		}
-  		if !(m.PC["St10"] == 22) {
   			return fmt.Errorf("control precondition of SChangeCurrentTerm23 %v violated", params)
   		}
   		m.Log = append(m.Log, entry{action: "SChangeCurrentTerm23", params: params})
@@ -528,136 +476,95 @@ Monitor
   		if len(params) != 1 {
   			return errors.New("expected 1 params")
   		}
-  		if g != nil && !(reflect.DeepEqual(g.Term, g.CurrentTerm)) {
-  			return fmt.Errorf("logical precondition of %s, %#v violated", "SChangeVotesResponded29", params)
-  		}
+  		// no logical preconditions
   		if !(m.PC["St12_"+(params[0] /* t : S */)] == 28) {
   			return fmt.Errorf("control precondition of SChangeVotesResponded29 %v violated", params)
   		}
   		m.Log = append(m.Log, entry{action: "SChangeVotesResponded29", params: params})
   		return nil
-  	case SChangeVotesGranted30:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
-  		if g != nil && !(g.VoteGranted) {
-  			return fmt.Errorf("logical precondition of %s, %#v violated", "SChangeVotesGranted30", params)
-  		}
-  		if !(m.PC["St12_"+(params[0] /* t : S */)] == 29) {
-  			return fmt.Errorf("control precondition of SChangeVotesGranted30 %v violated", params)
-  		}
-  		m.Log = append(m.Log, entry{action: "SChangeVotesGranted30", params: params})
-  		return nil
-  	case SChangeRole31:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
-  		if g != nil && !(card(g.VotesGranted) > ((len(m.vars["S"].(map[string]bool)) / 2) + 1)) {
-  			return fmt.Errorf("logical precondition of %s, %#v violated", "SChangeRole31", params)
-  		}
-  		if !(m.PC["St12_"+(params[0] /* t : S */)] == 30) {
-  			return fmt.Errorf("control precondition of SChangeRole31 %v violated", params)
-  		}
-  		m.Log = append(m.Log, entry{action: "SChangeRole31", params: params})
-  		return nil
-  	case SReceiveRequestVote35:
+  	case SReceiveRequestVote34:
   		if len(params) != 1 {
   			return errors.New("expected 1 params")
   		}
   		// no logical preconditions
   		if !(m.PC["Smain"] == 2) {
-  			return fmt.Errorf("control precondition of SReceiveRequestVote35 %v violated", params)
+  			return fmt.Errorf("control precondition of SReceiveRequestVote34 %v violated", params)
   		}
-  		m.Log = append(m.Log, entry{action: "SReceiveRequestVote35", params: params})
+  		m.Log = append(m.Log, entry{action: "SReceiveRequestVote34", params: params})
   		return nil
-  	case SChange_LogOk36:
+  	case SChange_LogOk35:
   		// no params check
   		// no logical preconditions
-  		if !(m.PC["St14_"+(params[0] /* s : S */)] == 35) {
-  			return fmt.Errorf("control precondition of SChange_LogOk36 %v violated", params)
+  		if !(m.PC["St13_"+(params[0] /* s : S */)] == 34) {
+  			return fmt.Errorf("control precondition of SChange_LogOk35 %v violated", params)
   		}
-  		m.Log = append(m.Log, entry{action: "SChange_LogOk36", params: params})
+  		m.Log = append(m.Log, entry{action: "SChange_LogOk35", params: params})
   		return nil
-  	case SChangeVotedFor38:
-  		// no params check
-  		if g != nil && !(g._Grant) {
-  			return fmt.Errorf("logical precondition of %s, %#v violated", "SChangeVotedFor38", params)
-  		}
-  		if g != nil && !(g.Term <= g.CurrentTerm) {
-  			return fmt.Errorf("logical precondition of %s, %#v violated", "SChangeVotedFor38", params)
-  		}
-  		if !(m.PC["St14_"+(params[0] /* s : S */)] == 37) {
-  			return fmt.Errorf("control precondition of SChangeVotedFor38 %v violated", params)
-  		}
-  		m.Log = append(m.Log, entry{action: "SChangeVotedFor38", params: params})
-  		return nil
-  	case SSendRequestVoteResp39:
+  	case SSendRequestVoteResp38:
   		if len(params) != 1 {
   			return errors.New("expected 1 params")
   		}
   		// no logical preconditions
-  		if !(m.PC["St14_"+(params[0] /* s : S */)] == 38) {
-  			return fmt.Errorf("control precondition of SSendRequestVoteResp39 %v violated", params)
+  		if !(m.PC["St13_"+(params[0] /* s : S */)] == 37) {
+  			return fmt.Errorf("control precondition of SSendRequestVoteResp38 %v violated", params)
   		}
-  		m.Log = append(m.Log, entry{action: "SSendRequestVoteResp39", params: params})
+  		m.Log = append(m.Log, entry{action: "SSendRequestVoteResp38", params: params})
   		return nil
-  	case SCall41:
-  		if len(params) != 2 {
-  			return errors.New("expected 2 params")
-  		}
+  	case SCall39:
+  		// no params check
   		// no logical preconditions
-  		if !(m.PC["Smain"] == 2) {
-  			return fmt.Errorf("control precondition of SCall41 %v violated", params)
+  		if !(m.PC["St10"] == 33 && allSet(m.vars["S  {self}"].(map[string]bool), func(s string) bool { return m.PC["St13_"+(s)] == 38 })) {
+  			return fmt.Errorf("control precondition of SCall39 %v violated", params)
   		}
-  		m.Log = append(m.Log, entry{action: "SCall41", params: params})
+  		m.Log = append(m.Log, entry{action: "SCall39", params: params})
   		return nil
-  	case SChangeRole44:
+  	case SChangeCurrentTerm42:
   		// no params check
   		// no logical preconditions
   		if !(m.PC["Smain"] == 0) {
-  			return fmt.Errorf("control precondition of SChangeRole44 %v violated", params)
+  			return fmt.Errorf("control precondition of SChangeCurrentTerm42 %v violated", params)
   		}
-  		m.Log = append(m.Log, entry{action: "SChangeRole44", params: params})
+  		m.Log = append(m.Log, entry{action: "SChangeCurrentTerm42", params: params})
   		return nil
-  	case SChangeRole53:
+  	case SCall51:
   		// no params check
   		// no logical preconditions
-  		if !(m.PC["Smain"] == 52) {
-  			return fmt.Errorf("control precondition of SChangeRole53 %v violated", params)
+  		if !(m.PC["Smain"] == 50) {
+  			return fmt.Errorf("control precondition of SCall51 %v violated", params)
   		}
-  		m.Log = append(m.Log, entry{action: "SChangeRole53", params: params})
+  		m.Log = append(m.Log, entry{action: "SCall51", params: params})
   		return nil
-  	case SCall63:
+  	case SCall52:
   		// no params check
   		// no logical preconditions
-  		if !(m.PC["Smain"] == 52) {
-  			return fmt.Errorf("control precondition of SCall63 %v violated", params)
+  		if !(m.PC["Smain"] == 50) {
+  			return fmt.Errorf("control precondition of SCall52 %v violated", params)
   		}
-  		m.Log = append(m.Log, entry{action: "SCall63", params: params})
+  		m.Log = append(m.Log, entry{action: "SCall52", params: params})
   		return nil
-  	case SCall64:
+  	case SCall53:
   		// no params check
   		// no logical preconditions
-  		if !(m.PC["Smain"] == 52) {
-  			return fmt.Errorf("control precondition of SCall64 %v violated", params)
+  		if !(m.PC["Smain"] == 50) {
+  			return fmt.Errorf("control precondition of SCall53 %v violated", params)
   		}
-  		m.Log = append(m.Log, entry{action: "SCall64", params: params})
+  		m.Log = append(m.Log, entry{action: "SCall53", params: params})
   		return nil
-  	case SCall65:
+  	case SCall54:
   		// no params check
   		// no logical preconditions
-  		if !(m.PC["Smain"] == 52) {
-  			return fmt.Errorf("control precondition of SCall65 %v violated", params)
+  		if !(m.PC["Smain"] == 50) {
+  			return fmt.Errorf("control precondition of SCall54 %v violated", params)
   		}
-  		m.Log = append(m.Log, entry{action: "SCall65", params: params})
+  		m.Log = append(m.Log, entry{action: "SCall54", params: params})
   		return nil
-  	case SCall66:
+  	case SCall55:
   		// no params check
   		// no logical preconditions
-  		if !(m.PC["Smain"] == 52) {
-  			return fmt.Errorf("control precondition of SCall66 %v violated", params)
+  		if !(m.PC["Smain"] == 50) {
+  			return fmt.Errorf("control precondition of SCall55 %v violated", params)
   		}
-  		m.Log = append(m.Log, entry{action: "SCall66", params: params})
+  		m.Log = append(m.Log, entry{action: "SCall55", params: params})
   		return nil
   	default:
   		panic("invalid action")

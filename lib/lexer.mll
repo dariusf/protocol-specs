@@ -34,6 +34,7 @@ rule token = parse
   | "let" { LET }
   | "always" { BOX }
   | "eventually" { DIAMOND }
+  | "skip" { SKIP }
   | ident as i { IDENT i }
   | "$" { DOLLAR }
   | "&" { AND }
@@ -73,7 +74,6 @@ rule token = parse
   | "[" { LBRACKET }
   | "]" { RBRACKET }
   | "?" { QUESTION }
-  | "!" { BANG }
   | "<>" { DIAMOND }
   (* conflict with empty list; consider using always *)
   | "[]" { BOX }

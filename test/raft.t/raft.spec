@@ -2,15 +2,24 @@
 // In Search of an Understandable Consensus Algorithm (2014)
 
 party s in S (
-  s.role = 'follower';
+  // Global
+  // messages, elections, allLogs
+
+  // Servers
   s.current_term = 1;
-  //s.voted_for = ${{ k:true for k, _ in S }}; // none
-  s.voted_for = [ ];
-  s.votes_responded = {};
-  s.votes_granted = {};
-  //s.voter_log = {{ }}; // TODO ghost
+  s.role = 'follower';
+  s.voted_for = [ ]; // optional
+
+  // Log
   s.log = [ ];
   s.commit_index = 0;
+  
+  // Candidates
+  s.votes_responded = {};
+  s.votes_granted = {};
+  // s.voter_log
+
+  // Leaders
   s.next_index = ${{ k:1 for k, _ in S }};
   s.match_index = ${{ k:0 for k, _ in S }}
 )
@@ -48,17 +57,13 @@ protocol client_requests() (
 
 protocol start_election() (
   (forall s in S
-    s.role = s.role; // this hack is required because we don't declare the party vars upfront, and variables have to be written to for them to get fresh types
-    //s.voted_for = s.voted_for;
     s.role == 'candidate' =>*
       s.current_term = s.current_term + 1;
       s.voted_for = [ ]; // none
       s.votes_responded = {};
       s.votes_granted = {};
-      //s.voter_log = ${{k: [ ] for k, _ in S}};
-      // TODO
 
-      forall t in (S \ {s})
+      (forall t in (S \ {s})
         s->t: request_vote(
           term = s.current_term,
           //last_log_term = last_term(s.log),
@@ -86,30 +91,29 @@ protocol start_election() (
             term = t.current_term,
             vote_granted = t._grant);
 
-          s.term == s.current_term =>
-            s.votes_responded = union(s.votes_responded, {t});
-            s.vote_granted =>
-              s.votes_granted = union(s.votes_granted, {t});
+  s.term == s.current_term =>
+    s.votes_responded = union(s.votes_responded, {t});
+    s.vote_granted =>
+      s.votes_granted = union(s.votes_granted, {t}));
 
-          // become leader
-          // (length(s.votes_granted) > quorum(S) =>
+  // become leader
+  // length(s.votes_granted) > quorum(S) =>
+  (card(s.votes_granted) > size(S)/2+1 =>*
+    s.role = 'leader';
+    s.next_index = ${{ s.k:length(s.log) for k, _ in S }}; // TODO extra var
+    s.match_index = ${{ s.k:0 for k, _ in S }})
+  \/
+  // we can always time out (but not before trying to send a message to everyone)
+  skip);
 
-          (card(s.votes_granted) > size(S)/2+1 =>
-            s.role = 'leader';
-            s.next_index = ${{ s.k:length(s.log) for k, _ in S }}; // TODO extra var
-            s.match_index = ${{ s.k:0 for k, _ in S }});
-            // TODO elections ghost variable
-
-          // can repeatedly start elections if we time out
-          // TODO should this be outside?
-          $start_election()
-    )//;
-  )
-
+  // can repeatedly start elections if we time out
+  // TODO should this be outside?
+  $start_election()
+)
 
 protocol timeout() (
   (forall s in S
-    member(s.role, {'follower', 'candidate'}) =>*
+    member(s.role, {'follower'}) =>*
       s.role = 'candidate');
   $timeout()
 )
@@ -118,11 +122,13 @@ protocol restart() (
   // everything but current term, voted for, and log is lost
   (forall s in S
     s.role = 'follower';
+    // forces this subprotocol to be here or this type can't be inferred
+    // TODO defer checking instantiatedness until after all subprotocols are checked, so ordering doesn't matter
     s.votes_responded = {};
     s.votes_granted = {};
-    //s.voter_log = {};
     s.next_index = ${{ k:1 for k, _ in S }};
-    s.match_index = ${{ k:0 for k, _ in S }});
+    s.match_index = ${{ k:0 for k, _ in S }};
+    s.commit_index = 0);
   $restart()
 )
 
@@ -150,18 +156,5 @@ protocol replicate() (
   $replicate()
 )
 
-(forall s in S
-  s.role = 'follower';
-  s.current_term = 1;
-  s.voted_for = [ ]; //none;
-  s.votes_responded = {};
-  s.votes_granted = {};
-  //s.voter_log = {}; // TODO ghost
-  s.log = [ ];
-  s.commit_index = 0;
-  s.next_index = ${{ k:1 for k, _ in S }};
-  s.match_index = ${{ k:0 for k, _ in S }}
-);
-
 // "threads" can cooperate via shared memory, or directly via sequencing
-$timeout || $restart || $start_election || $client_requests || $replicate
+$restart || $timeout || $start_election || $client_requests || $replicate
