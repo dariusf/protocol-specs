@@ -154,7 +154,7 @@ protocol replicate() (
             s->t: append_entries_resp(
               term = s.current_term,
               success = false,
-              match_index = 0)
+              mmatch_index = 0)
               // ; TODO?
           ) \/ (
             // return to follower state
@@ -173,7 +173,7 @@ protocol replicate() (
                   t->s: append_entries_resp(
                     term = t.current_term,
                     success = true,
-                    match_index = t.prev_log_index + length(t.entries)
+                    mmatch_index = t.prev_log_index + length(t.entries)
                   )
                   // ; TODO
               ) \/ (
