@@ -852,10 +852,13 @@ let compile_protocol params env parties tp =
         |> List.split
       in
       let param_to =
-        Format.sprintf "params[%d]"
-          (List.find_idx (String.equal to_) (List.map fst params)
-          |> Option.get_exn_or ("send " ^ to_)
-          |> fst)
+        match to_ with
+        | "self" -> "m.vars[\"Self\"]"
+        | _ ->
+          Format.sprintf "params[%d]"
+            (List.find_idx (String.equal to_) (List.map fst params)
+            |> Option.get_exn_or ("send " ^ to_)
+            |> fst)
       in
       let fields =
         [("type", Format.sprintf "\"%s\"" typ); ("to", param_to)] @ args
@@ -870,12 +873,15 @@ let compile_protocol params env parties tp =
     | ReceiveOnly { from; msg = MessageD { typ; args } } ->
       let from = var_name (Infer.Cast.must_be_var_t from) in
       let param_from =
-        Format.sprintf "params[%d]"
-          (List.find_idx (String.equal from) (List.map fst params)
-          |> Option.get_exn_or
-               (Format.sprintf "recv %s %a" from (List.pp String.pp)
-                  (List.map fst params))
-          |> fst)
+        match from with
+        | "self" -> "m.vars[\"Self\"]"
+        | _ ->
+          Format.sprintf "params[%d]"
+            (List.find_idx (String.equal from) (List.map fst params)
+            |> Option.get_exn_or
+                 (Format.sprintf "recv %s %a" from (List.pp String.pp)
+                    (List.map fst params))
+            |> fst)
       in
       let fields =
         [("type", Format.sprintf "\"%s\"" typ); ("from", param_from)]

@@ -5,6 +5,7 @@ import (
 	"basic/rvq"
 	"basic/rvr"
 	"basic/rvt"
+	"basic/rvu"
 	"fmt"
 )
 
@@ -66,6 +67,25 @@ func checkR(step string, err error, m *rvr.Monitor, expectedSuccess bool) {
 }
 
 func checkT(step string, err error, m *rvt.Monitor, expectedSuccess bool) {
+	println("check", step)
+	if err != nil {
+		expected := ""
+		if !expectedSuccess {
+			expected = " (expected)"
+		}
+		fmt.Printf("  error = %v%s\n", err, expected)
+		if expectedSuccess {
+			panic("expected success but failed")
+		}
+	} else {
+		fmt.Printf("  pc = %v\n", m.PC)
+		if !expectedSuccess {
+			panic("expected failure but succeeded")
+		}
+	}
+}
+
+func checkU(step string, err error, m *rvu.Monitor, expectedSuccess bool) {
 	println("check", step)
 	if err != nil {
 		expected := ""
@@ -172,7 +192,7 @@ func testSelfSend() {
 	err := m.Step(rvt.Global{Parties: map[string]bool{}}, rvt.TChangeParties1)
 	checkT("init", err, m, true)
 
-	// explore the branch where we send first
+	// explore the thread where we send first
 	err = m.Step(rvt.Global{Parties: map[string]bool{}, History1: map[string]interface{}{"to": "t2", "type": "m"}}, rvt.TSendM2, "t2")
 	checkT("send m2", err, m, true)
 
@@ -189,6 +209,29 @@ func testSelfSend() {
 	m.PrintLog()
 }
 
+func testSelfSend1() {
+
+	parties := map[string]interface{}{"U": map[string]bool{"u1": true, "u2": true}, "Self": "u2"}
+	m := rvu.NewMonitor(parties)
+
+	// from the perspective of u2
+	err := m.Step(rvu.Global{Parties: map[string]bool{}}, rvu.UChangeParties1)
+	checkU("start u", err, m, true)
+
+	// explore the thread where we send and receive to/from self
+	err = m.Step(rvu.Global{Parties: map[string]bool{}, History1: map[string]interface{}{"to": "u2", "type": "m"}}, rvu.USendM2, "t2")
+	checkU("send m2", err, m, true)
+
+	err = m.Step(rvu.Global{Parties: map[string]bool{}, History1: map[string]interface{}{"from": "u2", "type": "m"}}, rvu.UReceiveM3, "t2")
+	checkU("receive m3", err, m, true)
+
+	// only u2 should be in the set because we didn't involve u1
+	err = m.Step(rvu.Global{Parties: map[string]bool{"u2": true}, History1: map[string]interface{}{"from": "u2", "type": "m"}}, rvu.UChangeParties4)
+	checkU("add to set", err, m, true)
+
+	m.PrintLog()
+}
+
 func main() {
 	testDisj()
 	fmt.Println("---")
@@ -197,4 +240,6 @@ func main() {
 	testJoin()
 	fmt.Println("---")
 	testSelfSend()
+	fmt.Println("---")
+	testSelfSend1()
 }
