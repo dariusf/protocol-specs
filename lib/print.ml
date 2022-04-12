@@ -428,7 +428,7 @@ let pp_tid fmt t =
 
 let rec pp_cfml fmt f =
   match f with
-  | ThreadStart tid -> Format.fprintf fmt "start(%a)" pp_tid tid
+  | ThreadStart tid -> Format.fprintf fmt "%a = start" pp_tid tid
   | AnyOf fs -> Format.fprintf fmt "Any(%a)" (List.pp ~sep:", " pp_cfml) fs
   | AllOf fs -> Format.fprintf fmt "All(%a)" (List.pp ~sep:", " pp_cfml) fs
   | CForall (s, v, b) ->

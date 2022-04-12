@@ -14,7 +14,7 @@ w:
 .PHONY: test-go
 test-go:
 	@for test in $(shell find test/go -d -depth 1); do \
-		cd $$test && make; \
+		(cd $$test && make); \
 	done
 
 deps:

@@ -67,11 +67,10 @@ module Typ = struct
     end
 
   class ['self] reduce_typ_list =
-    object (self : 'self)
-      inherit [_] reduce
+    object (_ : 'self)
+      inherit [_] reduce_typ
       method zero = []
       method plus a b = a @ b
-      method visit_t _env _ = self#zero
     end
 end [@warning "-17"]
 
@@ -392,16 +391,45 @@ type spec = {
 }
 [@@deriving show { with_path = false }]
 
-(** Control formulae *)
-type cfml =
-  (* {tid=start} a *)
-  | ThreadStart of tid
-  (* (a \/ b); {AnyOf(a, b)} c *)
-  | AnyOf of cfml list
-  (* (a || b); {AllOf(a, b)} c *)
-  | AllOf of cfml list
-  (* (forall c in C (a)); {Forall(c, C, a)} b *)
-  | CForall of string * party_set * cfml
-  (* a; {tid=1} b *)
-  | Eq of tid * int
-[@@deriving show { with_path = false }, eq]
+module Cfml = struct
+  (** Control formulae *)
+  type cfml =
+    (* {tid=start} a *)
+    | ThreadStart of tid
+    (* (a \/ b); {AnyOf(a, b)} c *)
+    | AnyOf of cfml list
+    (* (a || b); {AllOf(a, b)} c *)
+    | AllOf of cfml list
+    (* (forall c in C (a)); {Forall(c, C, a)} b *)
+    | CForall of string * party_set * cfml
+    (* a; {tid=1} b *)
+    | Eq of tid * int
+  [@@deriving
+    show { with_path = false },
+      eq,
+      visitors { variety = "map"; name = "map" },
+      visitors { variety = "reduce"; name = "reduce" }]
+
+  class ['self] map_cfml =
+    object (_ : 'self)
+      inherit [_] map
+      method visit_tid _env t = t
+      method visit_party_set _env t = t
+    end
+
+  class virtual ['self] reduce_cfml =
+    object (self : 'self)
+      inherit [_] reduce
+      method visit_tid _env _ = self#zero
+      method visit_party_set _env _ = self#zero
+    end
+
+  class ['self] reduce_cfml_list =
+    object (_ : 'self)
+      inherit [_] reduce_cfml
+      method zero = []
+      method plus a b = a @ b
+    end
+end [@warning "-17"]
+
+include Cfml

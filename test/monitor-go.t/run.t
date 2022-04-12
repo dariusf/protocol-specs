@@ -28,7 +28,7 @@
   >     c.b = 1
   > EOF
   digraph G {
-    1 [label="CChangeB1\n{start(Cmain)}\nb = 0\n{Cmain = 1}\n"];
+    1 [label="CChangeB1\n{Cmain = start}\nb = 0\n{Cmain = 1}\n"];
     2 [label="CChangeB2\n{Cmain = 1}\nb = 1\n{Cmain = 2}\n"];
     1 -> 2;
   }
@@ -42,25 +42,23 @@
   monitorC.go
 
   $ sed -n '/func.*precondition/,/^}/p' monitorC.go
-  func (m *Monitor) precondition(g *Global, action Action, params ...string) error {
+  func (m *Monitor) precondition(g *Global, action Action, cparams map[string]string, lparams map[string]string) error {
   	switch action {
   	case CChangeB1:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["Cmain"] == 0) {
-  			return fmt.Errorf("control precondition of CChangeB1 %v violated", params)
+  			return fmt.Errorf("control precondition of CChangeB1 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "CChangeB1", params: params})
   		return nil
   	case CChangeB2:
-  		// no params check
   		if g != nil && !(g.B > 0) {
-  			return fmt.Errorf("logical precondition of %s, %#v violated", "CChangeB2", params)
+  			return fmt.Errorf("logical precondition of %s, %#v violated", "CChangeB2", lparams)
   		}
+  
   		if !(m.PC["Cmain"] == 1) {
-  			return fmt.Errorf("control precondition of CChangeB2 %v violated", params)
+  			return fmt.Errorf("control precondition of CChangeB2 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "CChangeB2", params: params})
   		return nil
   	default:
   		panic("invalid action")
@@ -68,13 +66,13 @@
   }
 
   $ sed -n '/func.*applyControlPostcondition/,/^}/p' monitorC.go
-  func (m *Monitor) applyControlPostcondition(action Action, params ...string) error {
+  func (m *Monitor) applyControlPostcondition(action Action, cparams map[string]string) error {
   	switch action {
   	case CChangeB1:
-  		// no params check
+  
   		m.PC["Cmain"] = 1
   	case CChangeB2:
-  		// no params check
+  
   		m.PC["Cmain"] = 2
   	default:
   		panic("invalid action")
@@ -91,15 +89,14 @@
   monitorC.go
 
   $ sed -n '/func.*precondition/,/^}/p' monitorC.go
-  func (m *Monitor) precondition(g *Global, action Action, params ...string) error {
+  func (m *Monitor) precondition(g *Global, action Action, cparams map[string]string, lparams map[string]string) error {
   	switch action {
   	case CChangeA1:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["Cmain"] == 0) {
-  			return fmt.Errorf("control precondition of CChangeA1 %v violated", params)
+  			return fmt.Errorf("control precondition of CChangeA1 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "CChangeA1", params: params})
   		return nil
   	default:
   		panic("invalid action")
@@ -107,10 +104,10 @@
   }
 
   $ sed -n '/func.*applyControlPostcondition/,/^}/p' monitorC.go
-  func (m *Monitor) applyControlPostcondition(action Action, params ...string) error {
+  func (m *Monitor) applyControlPostcondition(action Action, cparams map[string]string) error {
   	switch action {
   	case CChangeA1:
-  		// no params check
+  
   		m.PC["Cmain"] = 2
   	default:
   		panic("invalid action")

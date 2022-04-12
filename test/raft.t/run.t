@@ -168,7 +168,7 @@ Client actions
   digraph G {
     5 [label="CSendReq5\n{Cmain = 5}\ns! req(v=value)\n{Ct5(s:S) = 6}\n"];
     7 [label="CChangeValue7\n{∀ s:S. Ct5(s:S) = 6}\nvalue = value + 1\n{Cmain = 5}\n"];
-    13 [label="CChangeValue13\n{start(Cmain)}\nvalue = 0\n{Cmain = 13}\n"];
+    13 [label="CChangeValue13\n{Cmain = start}\nvalue = 0\n{Cmain = 13}\n"];
     17 [label="CCall17\n{Cmain = 13}\n$client_requests()\n{Ct3 = 5}\n"];
     17 -> 5;
     13 -> 17;
@@ -334,7 +334,7 @@ Server actions
     54 [label="SChange_LogOk54\n{St15(s:S) = 53}\n_log_ok = last_log_term > (length(log) == 0) ? (0) : (last(log)['term']) | last_log_term == (length(log) == 0) ? (0) : (last(log)['term']) & last_log_index >= length(log);\n_grant = term == current_term & _log_ok & (voted_for == [self] | voted_for == [ ]);\nvoted_for = [self]\n{St15(s:S) = 56}\n"];
     57 [label="SSendRequestVoteResp57\n{St15(s:S) = 56}\ns! request_vote_resp(term=current_term, granted=_grant)\n{St15(s:S) = 57}\n"];
     58 [label="SCall58\n{All([St10 = 52, ∀ s:S{self}. St15(s:S) = 57])}\n$start_election()\n{Smain = 2}\n"];
-    61 [label="SChangeCurrentTerm61\n{start(Smain)}\ncurrent_term = 1;\nrole = 'follower';\nvoted_for = [ ];\nlog = [ ];\ncommit_index = 0;\nvotes_responded = {};\nvotes_granted = {};\nnext_index = ${{k: 1 for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{Smain = 69}\n"];
+    61 [label="SChangeCurrentTerm61\n{Smain = start}\ncurrent_term = 1;\nrole = 'follower';\nvoted_for = [ ];\nlog = [ ];\ncommit_index = 0;\nvotes_responded = {};\nvotes_granted = {};\nnext_index = ${{k: 1 for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{Smain = 69}\n"];
     70 [label="SCall70\n{Smain = 69}\n$restart()\n{St0 = 3}\n"];
     71 [label="SCall71\n{Smain = 69}\n$timeout()\n{St1 = 1}\n"];
     72 [label="SCall72\n{Smain = 69}\n$start_election()\n{St2 = 2}\n"];
@@ -405,41 +405,35 @@ Monitor
   monitorC.go
 
   $ sed -n '/func.*precondition/,/^}/p' monitorC.go
-  func (m *Monitor) precondition(g *Global, action Action, params ...string) error {
+  func (m *Monitor) precondition(g *Global, action Action, cparams map[string]string, lparams map[string]string) error {
   	switch action {
   	case CSendReq79:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
+  
   		if !(m.PC["Cmain"] == 79) {
-  			return fmt.Errorf("control precondition of CSendReq79 %v violated", params)
+  			return fmt.Errorf("control precondition of CSendReq79 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "CSendReq79", params: params})
   		return nil
   	case CChangeValue81:
-  		// no params check
   		// no logical preconditions
+  
   		if !(allSet(m.vars["S"].(map[string]bool), func(s string) bool { return m.PC["Ct21_"+(s)] == 80 })) {
-  			return fmt.Errorf("control precondition of CChangeValue81 %v violated", params)
+  			return fmt.Errorf("control precondition of CChangeValue81 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "CChangeValue81", params: params})
   		return nil
   	case CChangeValue87:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["Cmain"] == 0) {
-  			return fmt.Errorf("control precondition of CChangeValue87 %v violated", params)
+  			return fmt.Errorf("control precondition of CChangeValue87 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "CChangeValue87", params: params})
   		return nil
   	case CCall91:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["Cmain"] == 87) {
-  			return fmt.Errorf("control precondition of CCall91 %v violated", params)
+  			return fmt.Errorf("control precondition of CCall91 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "CCall91", params: params})
   		return nil
   	default:
   		panic("invalid action")
@@ -447,355 +441,319 @@ Monitor
   }
 
   $ sed -n '/func.*precondition/,/^}/p' monitorS.go
-  func (m *Monitor) precondition(g *Global, action Action, params ...string) error {
+  func (m *Monitor) precondition(g *Global, action Action, cparams map[string]string, lparams map[string]string) error {
   	switch action {
   	case SChangeRole1:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["Smain"] == 1) {
-  			return fmt.Errorf("control precondition of SChangeRole1 %v violated", params)
+  			return fmt.Errorf("control precondition of SChangeRole1 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SChangeRole1", params: params})
   		return nil
   	case SDummy2:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["Smain"] == 2) {
-  			return fmt.Errorf("control precondition of SDummy2 %v violated", params)
+  			return fmt.Errorf("control precondition of SDummy2 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SDummy2", params: params})
   		return nil
   	case SChangeRole3:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["Smain"] == 3) {
-  			return fmt.Errorf("control precondition of SChangeRole3 %v violated", params)
+  			return fmt.Errorf("control precondition of SChangeRole3 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SChangeRole3", params: params})
   		return nil
   	case SDummy4:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["Smain"] == 4) {
-  			return fmt.Errorf("control precondition of SDummy4 %v violated", params)
+  			return fmt.Errorf("control precondition of SDummy4 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SDummy4", params: params})
   		return nil
   	case SReceiveReq5:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
+  
   		if !(m.PC["Smain"] == 5) {
-  			return fmt.Errorf("control precondition of SReceiveReq5 %v violated", params)
+  			return fmt.Errorf("control precondition of SReceiveReq5 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SReceiveReq5", params: params})
   		return nil
   	case SChangeLog7:
-  		// no params check
   		// no logical preconditions
-  		if !(m.PC["St5_"+(params[0] /* c : C */)] == 6) {
-  			return fmt.Errorf("control precondition of SChangeLog7 %v violated", params)
+  		if _, ok := cparams["c"]; !ok {
+  			return fmt.Errorf("expected c to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SChangeLog7", params: params})
+  		if !(m.PC["St5_"+(cparams["c"] /* : C */)] == 6) {
+  			return fmt.Errorf("control precondition of SChangeLog7 %v violated", cparams)
+  		}
   		return nil
   	case SChange_PrevLogIndex9:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
+  
   		if !(m.PC["Smain"] == 4) {
-  			return fmt.Errorf("control precondition of SChange_PrevLogIndex9 %v violated", params)
+  			return fmt.Errorf("control precondition of SChange_PrevLogIndex9 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SChange_PrevLogIndex9", params: params})
   		return nil
   	case SSendAppendEntries13:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["St8_"+(params[0] /* t : S */)] == 12) {
-  			return fmt.Errorf("control precondition of SSendAppendEntries13 %v violated", params)
+  		if _, ok := cparams["t"]; !ok {
+  			return fmt.Errorf("expected t to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SSendAppendEntries13", params: params})
+  		if !(m.PC["St8_"+(cparams["t"] /* : S */)] == 12) {
+  			return fmt.Errorf("control precondition of SSendAppendEntries13 %v violated", cparams)
+  		}
   		return nil
   	case SSendAppendEntriesResp14:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["St8_"+(params[0] /* t : S */)] == 13) {
-  			return fmt.Errorf("control precondition of SSendAppendEntriesResp14 %v violated", params)
+  		if _, ok := cparams["t"]; !ok {
+  			return fmt.Errorf("expected t to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SSendAppendEntriesResp14", params: params})
+  		if !(m.PC["St8_"+(cparams["t"] /* : S */)] == 13) {
+  			return fmt.Errorf("control precondition of SSendAppendEntriesResp14 %v violated", cparams)
+  		}
   		return nil
   	case SReceiveAppendEntriesResp15:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["St8_"+(params[0] /* t : S */)] == 13) {
-  			return fmt.Errorf("control precondition of SReceiveAppendEntriesResp15 %v violated", params)
+  		if _, ok := cparams["t"]; !ok {
+  			return fmt.Errorf("expected t to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SReceiveAppendEntriesResp15", params: params})
+  		if !(m.PC["St8_"+(cparams["t"] /* : S */)] == 13) {
+  			return fmt.Errorf("control precondition of SReceiveAppendEntriesResp15 %v violated", cparams)
+  		}
   		return nil
   	case SReceiveAppendEntries16:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
+  
   		if !(m.PC["Smain"] == 4) {
-  			return fmt.Errorf("control precondition of SReceiveAppendEntries16 %v violated", params)
+  			return fmt.Errorf("control precondition of SReceiveAppendEntries16 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SReceiveAppendEntries16", params: params})
   		return nil
   	case SChange_LogOk17:
-  		// no params check
   		// no logical preconditions
-  		if !(m.PC["St9_"+(params[0] /* s : S */)] == 16) {
-  			return fmt.Errorf("control precondition of SChange_LogOk17 %v violated", params)
+  		if _, ok := cparams["s"]; !ok {
+  			return fmt.Errorf("expected s to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SChange_LogOk17", params: params})
+  		if !(m.PC["St9_"+(cparams["s"] /* : S */)] == 16) {
+  			return fmt.Errorf("control precondition of SChange_LogOk17 %v violated", cparams)
+  		}
   		return nil
   	case SReceiveAppendEntriesResp18:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["St9_"+(params[0] /* s : S */)] == 17) {
-  			return fmt.Errorf("control precondition of SReceiveAppendEntriesResp18 %v violated", params)
+  		if _, ok := cparams["s"]; !ok {
+  			return fmt.Errorf("expected s to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SReceiveAppendEntriesResp18", params: params})
+  		if !(m.PC["St9_"+(cparams["s"] /* : S */)] == 17) {
+  			return fmt.Errorf("control precondition of SReceiveAppendEntriesResp18 %v violated", cparams)
+  		}
   		return nil
   	case SChangeRole19:
-  		// no params check
   		// no logical preconditions
-  		if !(m.PC["St9_"+(params[0] /* s : S */)] == 17) {
-  			return fmt.Errorf("control precondition of SChangeRole19 %v violated", params)
+  		if _, ok := cparams["s"]; !ok {
+  			return fmt.Errorf("expected s to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SChangeRole19", params: params})
+  		if !(m.PC["St9_"+(cparams["s"] /* : S */)] == 17) {
+  			return fmt.Errorf("control precondition of SChangeRole19 %v violated", cparams)
+  		}
   		return nil
   	case SChange_Index20:
-  		// no params check
   		// no logical preconditions
-  		if !(m.PC["St9_"+(params[0] /* s : S */)] == 17) {
-  			return fmt.Errorf("control precondition of SChange_Index20 %v violated", params)
+  		if _, ok := cparams["s"]; !ok {
+  			return fmt.Errorf("expected s to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SChange_Index20", params: params})
+  		if !(m.PC["St9_"+(cparams["s"] /* : S */)] == 17) {
+  			return fmt.Errorf("control precondition of SChange_Index20 %v violated", cparams)
+  		}
   		return nil
   	case SSendAppendEntriesResp22:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["St9_"+(params[0] /* s : S */)] == 21) {
-  			return fmt.Errorf("control precondition of SSendAppendEntriesResp22 %v violated", params)
+  		if _, ok := cparams["s"]; !ok {
+  			return fmt.Errorf("expected s to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SSendAppendEntriesResp22", params: params})
+  		if !(m.PC["St9_"+(cparams["s"] /* : S */)] == 21) {
+  			return fmt.Errorf("control precondition of SSendAppendEntriesResp22 %v violated", cparams)
+  		}
   		return nil
   	case SChangeLog23:
-  		// no params check
   		// no logical preconditions
-  		if !(m.PC["St9_"+(params[0] /* s : S */)] == 17) {
-  			return fmt.Errorf("control precondition of SChangeLog23 %v violated", params)
+  		if _, ok := cparams["s"]; !ok {
+  			return fmt.Errorf("expected s to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SChangeLog23", params: params})
+  		if !(m.PC["St9_"+(cparams["s"] /* : S */)] == 17) {
+  			return fmt.Errorf("control precondition of SChangeLog23 %v violated", cparams)
+  		}
   		return nil
   	case SChangeLog24:
-  		// no params check
   		// no logical preconditions
-  		if !(m.PC["St9_"+(params[0] /* s : S */)] == 17) {
-  			return fmt.Errorf("control precondition of SChangeLog24 %v violated", params)
+  		if _, ok := cparams["s"]; !ok {
+  			return fmt.Errorf("expected s to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SChangeLog24", params: params})
+  		if !(m.PC["St9_"+(cparams["s"] /* : S */)] == 17) {
+  			return fmt.Errorf("control precondition of SChangeLog24 %v violated", cparams)
+  		}
   		return nil
   	case SCall25:
-  		// no params check
   		// no logical preconditions
+  
   		if !(allSet(m.vars["S  {self}"].(map[string]bool), func(t string) bool { return m.PC["St8_"+(t)] == 14 || m.PC["St8_"+(t)] == 15 }) && allSet(m.vars["S  {self}"].(map[string]bool), func(s string) bool {
   			return m.PC["St9_"+(s)] == 18 || m.PC["St9_"+(s)] == 19 || m.PC["St9_"+(s)] == 22 || m.PC["St9_"+(s)] == 23 || m.PC["St9_"+(s)] == 24
   		})) {
-  			return fmt.Errorf("control precondition of SCall25 %v violated", params)
+  			return fmt.Errorf("control precondition of SCall25 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SCall25", params: params})
   		return nil
   	case SChangeCurrentTerm33:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["Smain"] == 2) {
-  			return fmt.Errorf("control precondition of SChangeCurrentTerm33 %v violated", params)
+  			return fmt.Errorf("control precondition of SChangeCurrentTerm33 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SChangeCurrentTerm33", params: params})
   		return nil
   	case SSendRequestVote37:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["St10"] == 36) {
-  			return fmt.Errorf("control precondition of SSendRequestVote37 %v violated", params)
+  			return fmt.Errorf("control precondition of SSendRequestVote37 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SSendRequestVote37", params: params})
   		return nil
   	case SReceiveRequestVote38:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["St12"] == 37) {
-  			return fmt.Errorf("control precondition of SReceiveRequestVote38 %v violated", params)
+  			return fmt.Errorf("control precondition of SReceiveRequestVote38 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SReceiveRequestVote38", params: params})
   		return nil
   	case SChange_LogOk39:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["St12"] == 38) {
-  			return fmt.Errorf("control precondition of SChange_LogOk39 %v violated", params)
+  			return fmt.Errorf("control precondition of SChange_LogOk39 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SChange_LogOk39", params: params})
   		return nil
   	case SSendRequestVoteResp42:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["St12"] == 41) {
-  			return fmt.Errorf("control precondition of SSendRequestVoteResp42 %v violated", params)
+  			return fmt.Errorf("control precondition of SSendRequestVoteResp42 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SSendRequestVoteResp42", params: params})
   		return nil
   	case SReceiveRequestVoteResp43:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["St12"] == 42) {
-  			return fmt.Errorf("control precondition of SReceiveRequestVoteResp43 %v violated", params)
+  			return fmt.Errorf("control precondition of SReceiveRequestVoteResp43 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SReceiveRequestVoteResp43", params: params})
   		return nil
   	case SChangeVotesResponded44:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["St12"] == 43) {
-  			return fmt.Errorf("control precondition of SChangeVotesResponded44 %v violated", params)
+  			return fmt.Errorf("control precondition of SChangeVotesResponded44 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SChangeVotesResponded44", params: params})
   		return nil
   	case SSendRequestVote46:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
+  
   		if !(m.PC["St10"] == 36) {
-  			return fmt.Errorf("control precondition of SSendRequestVote46 %v violated", params)
+  			return fmt.Errorf("control precondition of SSendRequestVote46 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SSendRequestVote46", params: params})
   		return nil
   	case SReceiveRequestVoteResp47:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["St14_"+(params[0] /* t : S */)] == 46) {
-  			return fmt.Errorf("control precondition of SReceiveRequestVoteResp47 %v violated", params)
+  		if _, ok := cparams["t"]; !ok {
+  			return fmt.Errorf("expected t to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SReceiveRequestVoteResp47", params: params})
+  		if !(m.PC["St14_"+(cparams["t"] /* : S */)] == 46) {
+  			return fmt.Errorf("control precondition of SReceiveRequestVoteResp47 %v violated", cparams)
+  		}
   		return nil
   	case SChangeVotesResponded48:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["St14_"+(params[0] /* t : S */)] == 47) {
-  			return fmt.Errorf("control precondition of SChangeVotesResponded48 %v violated", params)
+  		if _, ok := cparams["t"]; !ok {
+  			return fmt.Errorf("expected t to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SChangeVotesResponded48", params: params})
+  		if !(m.PC["St14_"+(cparams["t"] /* : S */)] == 47) {
+  			return fmt.Errorf("control precondition of SChangeVotesResponded48 %v violated", cparams)
+  		}
   		return nil
   	case SChangeRole50:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["St12"] == 45 && allSet(m.vars["S  {self}"].(map[string]bool), func(t string) bool { return m.PC["St14_"+(t)] == 49 })) {
-  			return fmt.Errorf("control precondition of SChangeRole50 %v violated", params)
+  			return fmt.Errorf("control precondition of SChangeRole50 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SChangeRole50", params: params})
   		return nil
   	case SReceiveRequestVote53:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
+  
   		if !(m.PC["Smain"] == 2) {
-  			return fmt.Errorf("control precondition of SReceiveRequestVote53 %v violated", params)
+  			return fmt.Errorf("control precondition of SReceiveRequestVote53 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SReceiveRequestVote53", params: params})
   		return nil
   	case SChange_LogOk54:
-  		// no params check
   		// no logical preconditions
-  		if !(m.PC["St15_"+(params[0] /* s : S */)] == 53) {
-  			return fmt.Errorf("control precondition of SChange_LogOk54 %v violated", params)
+  		if _, ok := cparams["s"]; !ok {
+  			return fmt.Errorf("expected s to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SChange_LogOk54", params: params})
+  		if !(m.PC["St15_"+(cparams["s"] /* : S */)] == 53) {
+  			return fmt.Errorf("control precondition of SChange_LogOk54 %v violated", cparams)
+  		}
   		return nil
   	case SSendRequestVoteResp57:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["St15_"+(params[0] /* s : S */)] == 56) {
-  			return fmt.Errorf("control precondition of SSendRequestVoteResp57 %v violated", params)
+  		if _, ok := cparams["s"]; !ok {
+  			return fmt.Errorf("expected s to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SSendRequestVoteResp57", params: params})
+  		if !(m.PC["St15_"+(cparams["s"] /* : S */)] == 56) {
+  			return fmt.Errorf("control precondition of SSendRequestVoteResp57 %v violated", cparams)
+  		}
   		return nil
   	case SCall58:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["St10"] == 52 && allSet(m.vars["S  {self}"].(map[string]bool), func(s string) bool { return m.PC["St15_"+(s)] == 57 })) {
-  			return fmt.Errorf("control precondition of SCall58 %v violated", params)
+  			return fmt.Errorf("control precondition of SCall58 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SCall58", params: params})
   		return nil
   	case SChangeCurrentTerm61:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["Smain"] == 0) {
-  			return fmt.Errorf("control precondition of SChangeCurrentTerm61 %v violated", params)
+  			return fmt.Errorf("control precondition of SChangeCurrentTerm61 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SChangeCurrentTerm61", params: params})
   		return nil
   	case SCall70:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["Smain"] == 69) {
-  			return fmt.Errorf("control precondition of SCall70 %v violated", params)
+  			return fmt.Errorf("control precondition of SCall70 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SCall70", params: params})
   		return nil
   	case SCall71:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["Smain"] == 69) {
-  			return fmt.Errorf("control precondition of SCall71 %v violated", params)
+  			return fmt.Errorf("control precondition of SCall71 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SCall71", params: params})
   		return nil
   	case SCall72:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["Smain"] == 69) {
-  			return fmt.Errorf("control precondition of SCall72 %v violated", params)
+  			return fmt.Errorf("control precondition of SCall72 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SCall72", params: params})
   		return nil
   	case SCall73:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["Smain"] == 69) {
-  			return fmt.Errorf("control precondition of SCall73 %v violated", params)
+  			return fmt.Errorf("control precondition of SCall73 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SCall73", params: params})
   		return nil
   	case SCall74:
-  		// no params check
   		// no logical preconditions
+  
   		if !(m.PC["Smain"] == 69) {
-  			return fmt.Errorf("control precondition of SCall74 %v violated", params)
+  			return fmt.Errorf("control precondition of SCall74 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "SCall74", params: params})
   		return nil
   	default:
   		panic("invalid action")

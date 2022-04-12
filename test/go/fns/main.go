@@ -49,16 +49,16 @@ func tryC() {
 	parties := map[string]interface{}{"P": map[string]bool{"p1": true}, "C": map[string]bool{"c1": true}}
 	m := rvc.NewMonitor(parties)
 
-	err := m.StepA(rvc.CSendM8, "p2")
+	err := m.StepA(rvc.CSendM8, map[string]string{"p": "p2"})
 	checkC("send 1", err, m, true)
 	// nonexistent party is allowed because there's nothing after to blow this up
 
 	// repeat
-	err = m.StepA(rvc.CSendM8, "p1")
+	err = m.StepA(rvc.CSendM8, map[string]string{"p": "p1"})
 	checkC("send 2", err, m, true)
 	// this doesn't fail
 
-	err = m.StepA(rvc.CSendM8, "p1")
+	err = m.StepA(rvc.CSendM8, map[string]string{"c": "c1"})
 	checkC("send 3", err, m, false)
 	// now this fails
 
@@ -70,17 +70,17 @@ func tryP() {
 	parties := map[string]interface{}{"P": map[string]bool{"p1": true}, "C": map[string]bool{"c1": true}}
 	m := rvp.NewMonitor(parties)
 
-	err := m.StepA(rvp.PReceiveM4, "c1")
+	err := m.StepA(rvp.PReceiveM4, map[string]string{"c": "c1"})
 	checkP("recv", err, m, true)
 
-	err = m.StepA(rvp.PChangeA1)
+	err = m.StepA(rvp.PChangeA1, map[string]string{})
 	checkP("change 1", err, m, true)
 
 	// violation
-	err = m.StepA(rvp.PReceiveM4, "c1")
+	err = m.StepA(rvp.PReceiveM4, map[string]string{"c": "c1"})
 	checkP("ERROR recv again", err, m, false)
 
-	err = m.StepA(rvp.PChangeA1)
+	err = m.StepA(rvp.PChangeA1, map[string]string{"c": "c1"})
 	checkP("change 2", err, m, true)
 
 	m.PrintLog()

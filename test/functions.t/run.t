@@ -26,14 +26,14 @@ Recursion example
   $ protocol print fns.spec --project P --actions
   digraph G {
     1 [label="PChangeA1\n{Pmain = 1}\na = 1\n{Pmain = 1}\n"];
-    4 [label="PReceiveM4\n{start(Pt0(c:C))}\nc? m\n{All([Pt0(c:C) = 4, Pmain = 1])}\n"];
+    4 [label="PReceiveM4\n{Pt0(c:C) = start}\nc? m\n{All([Pt0(c:C) = 4, Pmain = 1])}\n"];
     4 -> 1;
     1 -> 1;
   }
 
   $ protocol print fns.spec --project C --actions
   digraph G {
-    3 [label="CSendM3\n{start(Ct0(p:P))}\np! m\n{All([Ct0(p:P) = 3, Cmain = 1])}\n"];
+    3 [label="CSendM3\n{Ct0(p:P) = start}\np! m\n{All([Ct0(p:P) = 3, Cmain = 1])}\n"];
   }
 
 $ protocol tla fns.spec

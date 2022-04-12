@@ -193,15 +193,9 @@ let split_actions_simple :
           let thread = pmeta.tid in
           let g = G.add_vertex G.empty id in
           let used_params =
+            (* we can't filter for used parameters here, as we need to look at both the control formulae and the protocol of each action *)
             params
-            |> List.filter (fun (pa, _) ->
-                   List.mem ~eq:String.equal pa
-                     (used_names t |> List.uniq ~eq:String.equal))
           in
-          log "params for expr %d: %a | params %a | used %a" id
-            Print.pp_tprotocol_untyped t (List.pp String.pp)
-            (List.map fst params) (List.pp String.pp) (List.map fst used_params);
-
           let unq_cfml = Eq (thread, id) in
           let node =
             {
@@ -609,6 +603,29 @@ let misc_pruning graph actions =
   let graph, actions = remove_vertices useless_calls graph actions in
   (graph, actions)
 
+let cfml_used_names cfml =
+  let vc =
+    object
+      inherit [_] reduce_cfml_list
+      method! visit_CForall _env v _s _b = [v]
+    end
+  in
+  vc#visit_cfml () cfml |> List.uniq ~eq:String.equal
+
+let filter_used_params actions =
+  actions
+  |> IMap.map (fun a ->
+         {
+           a with
+           params =
+             a.params
+             |> List.filter (fun (pa, _) ->
+                    List.mem ~eq:String.equal pa (cfml_used_names a.cpre)
+                    || List.mem ~eq:String.equal pa (cfml_used_names a.cpost)
+                    || List.mem ~eq:String.equal pa
+                         (used_names a.protocol |> List.uniq ~eq:String.equal));
+         })
+
 let split_into_actions :
     grain -> string -> env -> tprotocol -> G.t * action IMap.t =
  fun grain party env t ->
@@ -703,6 +720,8 @@ let split_into_actions :
   in
   let graph, actions = fuse_edges grain graph actions in
   let graph, actions = misc_pruning graph actions in
+  (* may not want to do this. the spaces of params to logical parts and control parts should be disjoint *)
+  (* let actions = filter_used_params actions in *)
   (graph, actions)
 
 let collect_message_types (p : tprotocol) =

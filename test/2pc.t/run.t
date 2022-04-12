@@ -97,7 +97,7 @@ The classic two-phase commit protocol.
 
   $ protocol print 2pc.spec --project P --actions
   digraph G {
-    1 [label="PReceivePrepare1\n{start(Pt0(c:C))}\nc? prepare\n{Pt0(c:C) = 1}\n"];
+    1 [label="PReceivePrepare1\n{Pt0(c:C) = start}\nc? prepare\n{Pt0(c:C) = 1}\n"];
     2 [label="PSendPrepared2\n{Pt0(c:C) = 1}\nc! prepared\n{Pt0(c:C) = 2}\n"];
     3 [label="PSendAbort3\n{Pt0(c:C) = 1}\nc! abort\n{Pt0(c:C) = 3}\n"];
     4 [label="PReceiveAbort4\n{Any([Pt0(c:C) = 2, Pt0(c:C) = 3])}\nc? abort\n{Pt0(c:C) = 4}\n"];
@@ -116,7 +116,7 @@ The classic two-phase commit protocol.
 
   $ protocol print 2pc.spec --project C --actions
   digraph G {
-    1 [label="CSendPrepare1\n{start(Ct0(p:P))}\np! prepare\n{Ct0(p:P) = 1}\n"];
+    1 [label="CSendPrepare1\n{Ct0(p:P) = start}\np! prepare\n{Ct0(p:P) = 1}\n"];
     2 [label="CReceivePrepared2\n{Ct0(p:P) = 1}\np? prepared\n{Ct0(p:P) = 2}\n"];
     3 [label="CReceiveAbort3\n{Ct0(p:P) = 1}\np? abort\n{Ct0(p:P) = 3}\n"];
     4 [label="CChangeHasAborted4\n{Ct0(p:P) = 3}\nhas_aborted = true\n{Ct0(p:P) = 4}\n"];
@@ -228,10 +228,10 @@ The classic two-phase commit protocol.
       /\ m.mdest = self
     /\ UNCHANGED <<has_aborted, aborted, committed, messages>>
   
-  CChangeHasAborted4(self) ==
+  CChangeHasAborted4(self, p) ==
     /\ pc[self][<<Ct0, p>>] = 3
     /\ pc' = [pc EXCEPT ![self] = [pc[self] EXCEPT ![<<Ct0, p>>] = 4]]
-    /\ history' = Append(<<"CChangeHasAborted4">>, history)
+    /\ history' = Append(<<"CChangeHasAborted4", p>>, history)
     /\ has_aborted' = [has_aborted EXCEPT ![self] = TRUE]
     /\ UNCHANGED <<aborted, committed, messages>>
   
@@ -353,7 +353,7 @@ The classic two-phase commit protocol.
     \/ \E self \in C : \E p \in P : CSendPrepare1(self, p)
     \/ \E self \in C : \E p \in P : CReceivePrepared2(self, p)
     \/ \E self \in C : \E p \in P : CReceiveAbort3(self, p)
-    \/ \E self \in C : CChangeHasAborted4(self)
+    \/ \E self \in C : \E p \in P : CChangeHasAborted4(self, p)
     \/ \E self \in C : \E p \in P : CSendAbort5(self, p)
     \/ \E self \in C : \E p \in P : CReceiveAbortAck6(self, p)
     \/ \E self \in C : \E p \in P : CChangeAborted7(self, p)
@@ -402,109 +402,97 @@ The classic two-phase commit protocol.
   monitorP.go
 
   $ sed -n '/func.*precondition/,/^}/p' monitorC.go
-  func (m *Monitor) precondition(g *Global, action Action, params ...string) error {
+  func (m *Monitor) precondition(g *Global, action Action, cparams map[string]string, lparams map[string]string) error {
   	switch action {
   	case CSendPrepare1:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["Ct0_"+(params[0] /* p : P */)] == 0) {
-  			return fmt.Errorf("control precondition of CSendPrepare1 %v violated", params)
+  		if _, ok := cparams["p"]; !ok {
+  			return fmt.Errorf("expected p to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "CSendPrepare1", params: params})
+  		if !(m.PC["Ct0_"+(cparams["p"] /* : P */)] == 0) {
+  			return fmt.Errorf("control precondition of CSendPrepare1 %v violated", cparams)
+  		}
   		return nil
   	case CReceivePrepared2:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["Ct0_"+(params[0] /* p : P */)] == 1) {
-  			return fmt.Errorf("control precondition of CReceivePrepared2 %v violated", params)
+  		if _, ok := cparams["p"]; !ok {
+  			return fmt.Errorf("expected p to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "CReceivePrepared2", params: params})
+  		if !(m.PC["Ct0_"+(cparams["p"] /* : P */)] == 1) {
+  			return fmt.Errorf("control precondition of CReceivePrepared2 %v violated", cparams)
+  		}
   		return nil
   	case CReceiveAbort3:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["Ct0_"+(params[0] /* p : P */)] == 1) {
-  			return fmt.Errorf("control precondition of CReceiveAbort3 %v violated", params)
+  		if _, ok := cparams["p"]; !ok {
+  			return fmt.Errorf("expected p to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "CReceiveAbort3", params: params})
+  		if !(m.PC["Ct0_"+(cparams["p"] /* : P */)] == 1) {
+  			return fmt.Errorf("control precondition of CReceiveAbort3 %v violated", cparams)
+  		}
   		return nil
   	case CChangeHasAborted4:
-  		// no params check
   		// no logical preconditions
-  		if !(m.PC["Ct0_"+(params[0] /* p : P */)] == 3) {
-  			return fmt.Errorf("control precondition of CChangeHasAborted4 %v violated", params)
+  		if _, ok := cparams["p"]; !ok {
+  			return fmt.Errorf("expected p to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "CChangeHasAborted4", params: params})
+  		if !(m.PC["Ct0_"+(cparams["p"] /* : P */)] == 3) {
+  			return fmt.Errorf("control precondition of CChangeHasAborted4 %v violated", cparams)
+  		}
   		return nil
   	case CSendAbort5:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		if g != nil && !(g.HasAborted) {
-  			return fmt.Errorf("logical precondition of %s, %#v violated", "CSendAbort5", params)
+  			return fmt.Errorf("logical precondition of %s, %#v violated", "CSendAbort5", lparams)
   		}
+  
   		if !(allSet(m.vars["P"].(map[string]bool), func(p string) bool { return m.PC["Ct0_"+(p)] == 2 || m.PC["Ct0_"+(p)] == 4 })) {
-  			return fmt.Errorf("control precondition of CSendAbort5 %v violated", params)
+  			return fmt.Errorf("control precondition of CSendAbort5 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "CSendAbort5", params: params})
   		return nil
   	case CReceiveAbortAck6:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["Ct2_"+(params[0] /* p : P */)] == 5) {
-  			return fmt.Errorf("control precondition of CReceiveAbortAck6 %v violated", params)
+  		if _, ok := cparams["p"]; !ok {
+  			return fmt.Errorf("expected p to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "CReceiveAbortAck6", params: params})
+  		if !(m.PC["Ct2_"+(cparams["p"] /* : P */)] == 5) {
+  			return fmt.Errorf("control precondition of CReceiveAbortAck6 %v violated", cparams)
+  		}
   		return nil
   	case CChangeAborted7:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["Ct2_"+(params[0] /* p : P */)] == 6) {
-  			return fmt.Errorf("control precondition of CChangeAborted7 %v violated", params)
+  		if _, ok := cparams["p"]; !ok {
+  			return fmt.Errorf("expected p to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "CChangeAborted7", params: params})
+  		if !(m.PC["Ct2_"+(cparams["p"] /* : P */)] == 6) {
+  			return fmt.Errorf("control precondition of CChangeAborted7 %v violated", cparams)
+  		}
   		return nil
   	case CSendCommit8:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		if g != nil && !(!(g.HasAborted)) {
-  			return fmt.Errorf("logical precondition of %s, %#v violated", "CSendCommit8", params)
+  			return fmt.Errorf("logical precondition of %s, %#v violated", "CSendCommit8", lparams)
   		}
+  
   		if !(allSet(m.vars["P"].(map[string]bool), func(p string) bool { return m.PC["Ct0_"+(p)] == 2 || m.PC["Ct0_"+(p)] == 4 })) {
-  			return fmt.Errorf("control precondition of CSendCommit8 %v violated", params)
+  			return fmt.Errorf("control precondition of CSendCommit8 %v violated", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "CSendCommit8", params: params})
   		return nil
   	case CReceiveCommitAck9:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["Ct1_"+(params[0] /* p : P */)] == 8) {
-  			return fmt.Errorf("control precondition of CReceiveCommitAck9 %v violated", params)
+  		if _, ok := cparams["p"]; !ok {
+  			return fmt.Errorf("expected p to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "CReceiveCommitAck9", params: params})
+  		if !(m.PC["Ct1_"+(cparams["p"] /* : P */)] == 8) {
+  			return fmt.Errorf("control precondition of CReceiveCommitAck9 %v violated", cparams)
+  		}
   		return nil
   	case CChangeCommitted10:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["Ct1_"+(params[0] /* p : P */)] == 9) {
-  			return fmt.Errorf("control precondition of CChangeCommitted10 %v violated", params)
+  		if _, ok := cparams["p"]; !ok {
+  			return fmt.Errorf("expected p to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "CChangeCommitted10", params: params})
+  		if !(m.PC["Ct1_"+(cparams["p"] /* : P */)] == 9) {
+  			return fmt.Errorf("control precondition of CChangeCommitted10 %v violated", cparams)
+  		}
   		return nil
   	default:
   		panic("invalid action")
@@ -512,56 +500,58 @@ The classic two-phase commit protocol.
   }
 
   $ sed -n '/func.*applyControlPostcondition/,/^}/p' monitorC.go
-  func (m *Monitor) applyControlPostcondition(action Action, params ...string) error {
+  func (m *Monitor) applyControlPostcondition(action Action, cparams map[string]string) error {
   	switch action {
   	case CSendPrepare1:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
+  		if _, ok := cparams["p"]; !ok {
+  			return fmt.Errorf("expected p to be in cparams: %v", cparams)
   		}
-  		m.PC["Ct0_"+(params[0] /* p : P */)] = 1
+  		m.PC["Ct0_"+(cparams["p"] /* : P */)] = 1
   	case CReceivePrepared2:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
+  		if _, ok := cparams["p"]; !ok {
+  			return fmt.Errorf("expected p to be in cparams: %v", cparams)
   		}
-  		m.PC["Ct0_"+(params[0] /* p : P */)] = 2
+  		m.PC["Ct0_"+(cparams["p"] /* : P */)] = 2
   	case CReceiveAbort3:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
+  		if _, ok := cparams["p"]; !ok {
+  			return fmt.Errorf("expected p to be in cparams: %v", cparams)
   		}
-  		m.PC["Ct0_"+(params[0] /* p : P */)] = 3
+  		m.PC["Ct0_"+(cparams["p"] /* : P */)] = 3
   	case CChangeHasAborted4:
-  		// no params check
-  		m.PC["Ct0_"+(params[0] /* p : P */)] = 4
+  		if _, ok := cparams["p"]; !ok {
+  			return fmt.Errorf("expected p to be in cparams: %v", cparams)
+  		}
+  		m.PC["Ct0_"+(cparams["p"] /* : P */)] = 4
   	case CSendAbort5:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
+  		if _, ok := cparams["p"]; !ok {
+  			return fmt.Errorf("expected p to be in cparams: %v", cparams)
   		}
-  		m.PC["Ct2_"+(params[0] /* p : P */)] = 5
+  		m.PC["Ct2_"+(cparams["p"] /* : P */)] = 5
   	case CReceiveAbortAck6:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
+  		if _, ok := cparams["p"]; !ok {
+  			return fmt.Errorf("expected p to be in cparams: %v", cparams)
   		}
-  		m.PC["Ct2_"+(params[0] /* p : P */)] = 6
+  		m.PC["Ct2_"+(cparams["p"] /* : P */)] = 6
   	case CChangeAborted7:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
+  		if _, ok := cparams["p"]; !ok {
+  			return fmt.Errorf("expected p to be in cparams: %v", cparams)
   		}
-  		m.PC["Ct2_"+(params[0] /* p : P */)] = 7
+  		m.PC["Ct2_"+(cparams["p"] /* : P */)] = 7
   	case CSendCommit8:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
+  		if _, ok := cparams["p"]; !ok {
+  			return fmt.Errorf("expected p to be in cparams: %v", cparams)
   		}
-  		m.PC["Ct1_"+(params[0] /* p : P */)] = 8
+  		m.PC["Ct1_"+(cparams["p"] /* : P */)] = 8
   	case CReceiveCommitAck9:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
+  		if _, ok := cparams["p"]; !ok {
+  			return fmt.Errorf("expected p to be in cparams: %v", cparams)
   		}
-  		m.PC["Ct1_"+(params[0] /* p : P */)] = 9
+  		m.PC["Ct1_"+(cparams["p"] /* : P */)] = 9
   	case CChangeCommitted10:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
+  		if _, ok := cparams["p"]; !ok {
+  			return fmt.Errorf("expected p to be in cparams: %v", cparams)
   		}
-  		m.PC["Ct1_"+(params[0] /* p : P */)] = 10
+  		m.PC["Ct1_"+(cparams["p"] /* : P */)] = 10
   	default:
   		panic("invalid action")
   	}
@@ -569,77 +559,76 @@ The classic two-phase commit protocol.
   }
 
   $ sed -n '/func.*precondition/,/^}/p' monitorP.go
-  func (m *Monitor) precondition(g *Global, action Action, params ...string) error {
+  func (m *Monitor) precondition(g *Global, action Action, cparams map[string]string, lparams map[string]string) error {
   	switch action {
   	case PReceivePrepare11:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["Pt3_"+(params[0] /* c : C */)] == 0) {
-  			return fmt.Errorf("control precondition of PReceivePrepare11 %v violated", params)
+  		if _, ok := cparams["c"]; !ok {
+  			return fmt.Errorf("expected c to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "PReceivePrepare11", params: params})
+  		if !(m.PC["Pt3_"+(cparams["c"] /* : C */)] == 0) {
+  			return fmt.Errorf("control precondition of PReceivePrepare11 %v violated", cparams)
+  		}
   		return nil
   	case PSendPrepared12:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["Pt3_"+(params[0] /* c : C */)] == 11) {
-  			return fmt.Errorf("control precondition of PSendPrepared12 %v violated", params)
+  		if _, ok := cparams["c"]; !ok {
+  			return fmt.Errorf("expected c to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "PSendPrepared12", params: params})
+  		if !(m.PC["Pt3_"+(cparams["c"] /* : C */)] == 11) {
+  			return fmt.Errorf("control precondition of PSendPrepared12 %v violated", cparams)
+  		}
   		return nil
   	case PSendAbort13:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["Pt3_"+(params[0] /* c : C */)] == 11) {
-  			return fmt.Errorf("control precondition of PSendAbort13 %v violated", params)
+  		if _, ok := cparams["c"]; !ok {
+  			return fmt.Errorf("expected c to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "PSendAbort13", params: params})
+  		if !(m.PC["Pt3_"+(cparams["c"] /* : C */)] == 11) {
+  			return fmt.Errorf("control precondition of PSendAbort13 %v violated", cparams)
+  		}
   		return nil
   	case PReceiveAbort14:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["Pt3_"+(params[0] /* c : C */)] == 12 || m.PC["Pt3_"+(params[0] /* c : C */)] == 13) {
-  			return fmt.Errorf("control precondition of PReceiveAbort14 %v violated", params)
+  		if _, ok := cparams["c"]; !ok {
+  			return fmt.Errorf("expected c to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "PReceiveAbort14", params: params})
+  		if _, ok := cparams["c"]; !ok {
+  			return fmt.Errorf("expected c to be in cparams: %v", cparams)
+  		}
+  		if !(m.PC["Pt3_"+(cparams["c"] /* : C */)] == 12 || m.PC["Pt3_"+(cparams["c"] /* : C */)] == 13) {
+  			return fmt.Errorf("control precondition of PReceiveAbort14 %v violated", cparams)
+  		}
   		return nil
   	case PSendAbortAck15:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["Pt3_"+(params[0] /* c : C */)] == 14) {
-  			return fmt.Errorf("control precondition of PSendAbortAck15 %v violated", params)
+  		if _, ok := cparams["c"]; !ok {
+  			return fmt.Errorf("expected c to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "PSendAbortAck15", params: params})
+  		if !(m.PC["Pt3_"+(cparams["c"] /* : C */)] == 14) {
+  			return fmt.Errorf("control precondition of PSendAbortAck15 %v violated", cparams)
+  		}
   		return nil
   	case PReceiveCommit16:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["Pt3_"+(params[0] /* c : C */)] == 12 || m.PC["Pt3_"+(params[0] /* c : C */)] == 13) {
-  			return fmt.Errorf("control precondition of PReceiveCommit16 %v violated", params)
+  		if _, ok := cparams["c"]; !ok {
+  			return fmt.Errorf("expected c to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "PReceiveCommit16", params: params})
+  		if _, ok := cparams["c"]; !ok {
+  			return fmt.Errorf("expected c to be in cparams: %v", cparams)
+  		}
+  		if !(m.PC["Pt3_"+(cparams["c"] /* : C */)] == 12 || m.PC["Pt3_"+(cparams["c"] /* : C */)] == 13) {
+  			return fmt.Errorf("control precondition of PReceiveCommit16 %v violated", cparams)
+  		}
   		return nil
   	case PSendCommitAck17:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
-  		}
   		// no logical preconditions
-  		if !(m.PC["Pt3_"+(params[0] /* c : C */)] == 16) {
-  			return fmt.Errorf("control precondition of PSendCommitAck17 %v violated", params)
+  		if _, ok := cparams["c"]; !ok {
+  			return fmt.Errorf("expected c to be in cparams: %v", cparams)
   		}
-  		m.Log = append(m.Log, entry{action: "PSendCommitAck17", params: params})
+  		if !(m.PC["Pt3_"+(cparams["c"] /* : C */)] == 16) {
+  			return fmt.Errorf("control precondition of PSendCommitAck17 %v violated", cparams)
+  		}
   		return nil
   	default:
   		panic("invalid action")
@@ -647,43 +636,43 @@ The classic two-phase commit protocol.
   }
 
   $ sed -n '/func.*applyControlPostcondition/,/^}/p' monitorP.go
-  func (m *Monitor) applyControlPostcondition(action Action, params ...string) error {
+  func (m *Monitor) applyControlPostcondition(action Action, cparams map[string]string) error {
   	switch action {
   	case PReceivePrepare11:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
+  		if _, ok := cparams["c"]; !ok {
+  			return fmt.Errorf("expected c to be in cparams: %v", cparams)
   		}
-  		m.PC["Pt3_"+(params[0] /* c : C */)] = 11
+  		m.PC["Pt3_"+(cparams["c"] /* : C */)] = 11
   	case PSendPrepared12:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
+  		if _, ok := cparams["c"]; !ok {
+  			return fmt.Errorf("expected c to be in cparams: %v", cparams)
   		}
-  		m.PC["Pt3_"+(params[0] /* c : C */)] = 12
+  		m.PC["Pt3_"+(cparams["c"] /* : C */)] = 12
   	case PSendAbort13:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
+  		if _, ok := cparams["c"]; !ok {
+  			return fmt.Errorf("expected c to be in cparams: %v", cparams)
   		}
-  		m.PC["Pt3_"+(params[0] /* c : C */)] = 13
+  		m.PC["Pt3_"+(cparams["c"] /* : C */)] = 13
   	case PReceiveAbort14:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
+  		if _, ok := cparams["c"]; !ok {
+  			return fmt.Errorf("expected c to be in cparams: %v", cparams)
   		}
-  		m.PC["Pt3_"+(params[0] /* c : C */)] = 14
+  		m.PC["Pt3_"+(cparams["c"] /* : C */)] = 14
   	case PSendAbortAck15:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
+  		if _, ok := cparams["c"]; !ok {
+  			return fmt.Errorf("expected c to be in cparams: %v", cparams)
   		}
-  		m.PC["Pt3_"+(params[0] /* c : C */)] = 15
+  		m.PC["Pt3_"+(cparams["c"] /* : C */)] = 15
   	case PReceiveCommit16:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
+  		if _, ok := cparams["c"]; !ok {
+  			return fmt.Errorf("expected c to be in cparams: %v", cparams)
   		}
-  		m.PC["Pt3_"+(params[0] /* c : C */)] = 16
+  		m.PC["Pt3_"+(cparams["c"] /* : C */)] = 16
   	case PSendCommitAck17:
-  		if len(params) != 1 {
-  			return errors.New("expected 1 params")
+  		if _, ok := cparams["c"]; !ok {
+  			return fmt.Errorf("expected c to be in cparams: %v", cparams)
   		}
-  		m.PC["Pt3_"+(params[0] /* c : C */)] = 17
+  		m.PC["Pt3_"+(cparams["c"] /* : C */)] = 17
   	default:
   		panic("invalid action")
   	}
