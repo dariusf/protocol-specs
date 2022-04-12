@@ -1052,13 +1052,13 @@ let tid_to_string bound (t : tid) =
       |> String.concat "+")
 
 let params_check params =
-  match params with
-  | [] -> "// no params check"
-  | _ ->
-    flags.uses_errors <- true;
-    let l = List.length params in
-    Format.sprintf
-      {|if len(params) != %d { return errors.New("expected %d params") }|} l l
+  (* match params with
+     | [] -> "// no params check"
+     | _ -> *)
+  flags.uses_errors <- true;
+  let l = List.length params in
+  Format.sprintf
+    {|if len(params) != %d { return errors.New("expected %d params") }|} l l
 
 let cfml_to_precondition (f : cfml) =
   let open Actions in
