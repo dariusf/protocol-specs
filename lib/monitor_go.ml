@@ -145,6 +145,8 @@ var state = Global{
   // initialize
 }
 
+var log = true
+
 type Action int
 const (
 %{action_defs}
@@ -268,6 +270,10 @@ func (m *Monitor) StepA(act Action, cparams map[string]string) error {
 		return err
 	}
 
+  if log {
+    fmt.Printf("%v\n", act)
+  }
+
 	if err := m.applyControlPostcondition(act, cparams); err != nil {
 		return err
 	}
@@ -295,6 +301,10 @@ func (m *Monitor) Step(g1 Global, act Action, cparams map[string]string, lparams
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	defer m.trackTime(time.Now())
+
+  if log {
+    fmt.Printf("%v\n", act)
+  }
 
 	if err := m.precondition(&m.g, act, cparams, lparams); err != nil {
 		return err
