@@ -122,7 +122,7 @@ type state = {
 let split_actions_simple :
     texpr list ->
     (string * party_set) list ->
-    (string * (int * tid)) list ->
+    (string * int) list ->
     tprotocol ->
     state =
  fun lpre params fn_entrypoints (tprotocol : tprotocol) ->
@@ -212,12 +212,13 @@ let split_actions_simple :
         | _ -> bug "unexpected"
       end
     | Call { f = name; _ } ->
+      (* possibly cyclic graph *)
       (* create the beginning node *)
       let id = fresh_node_id () in
       let thread = t.pmeta.tid in
       let cpre = ThreadStart thread in
-      let dest_id, fn_tid = List.assoc ~eq:String.equal name fn_entrypoints in
-      let cpost = Eq (fn_tid, dest_id) in
+      let dest_id = List.assoc ~eq:String.equal name fn_entrypoints in
+      let cpost = Eq (t.pmeta.tid, dest_id) in
       let action =
         {
           params;
@@ -643,10 +644,10 @@ let split_into_actions :
   (* let initial_graph, fn_entrypoints = *)
   let fn_entrypoints =
     List.fold_right
-      (fun (name, sp) t ->
+      (fun (name, _sp) t ->
         let id = fresh_node_id () in
         (* let g = G.add_vertex g id in *)
-        (name, (id, sp.tp.pmeta.tid)) :: t)
+        (name, id) :: t)
       (* (g, (name, id) :: t)) *)
       (* fns (G.empty, []) *)
       fns []
@@ -659,9 +660,7 @@ let split_into_actions :
            let st = split_actions_simple [] [] fn_entrypoints sp.tp in
            (* create the starting actions and link to the beginning of the function *)
            let st =
-             let entry, _tid =
-               List.assoc ~eq:String.equal name fn_entrypoints
-             in
+             let entry = List.assoc ~eq:String.equal name fn_entrypoints in
              (* let fn_start =
                   match st.start with
                   | [s] -> s

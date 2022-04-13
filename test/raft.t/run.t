@@ -169,7 +169,7 @@ Client actions
     5 [label="CSendReq5\n{Cmain = 5}\ns! req(v=value)\n{Ct5(s:S) = 6}\n"];
     7 [label="CChangeValue7\n{∀ s:S. Ct5(s:S) = 6}\nvalue = value + 1\n{Cmain = 5}\n"];
     13 [label="CChangeValue13\n{Cmain = start}\nvalue = 0\n{Cmain = 13}\n"];
-    17 [label="CCall17\n{Cmain = 13}\n$client_requests()\n{Cmain = 5}\n"];
+    17 [label="CCall17\n{Cmain = 13}\n$client_requests()\n{Ct3 = 5}\n"];
     17 -> 5;
     13 -> 17;
     7 -> 5;
@@ -335,11 +335,11 @@ Server actions
     57 [label="SSendRequestVoteResp57\n{St15(s:S) = 56}\ns! request_vote_resp(term=current_term, granted=_grant)\n{St15(s:S) = 57}\n"];
     58 [label="SCall58\n{All([St10 = 52, ∀ s:S{self}. St15(s:S) = 57])}\n$start_election()\n{Smain = 2}\n"];
     61 [label="SChangeCurrentTerm61\n{Smain = start}\ncurrent_term = 1;\nrole = 'follower';\nvoted_for = [ ];\nlog = [ ];\ncommit_index = 0;\nvotes_responded = {};\nvotes_granted = {};\nnext_index = ${{k: 1 for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{Smain = 69}\n"];
-    70 [label="SCall70\n{Smain = 69}\n$restart()\n{Smain = 3}\n"];
-    71 [label="SCall71\n{Smain = 69}\n$timeout()\n{Smain = 1}\n"];
-    72 [label="SCall72\n{Smain = 69}\n$start_election()\n{Smain = 2}\n"];
-    73 [label="SCall73\n{Smain = 69}\n$client_requests()\n{Smain = 5}\n"];
-    74 [label="SCall74\n{Smain = 69}\n$replicate()\n{Smain = 4}\n"];
+    70 [label="SCall70\n{Smain = 69}\n$restart()\n{St0 = 3}\n"];
+    71 [label="SCall71\n{Smain = 69}\n$timeout()\n{St1 = 1}\n"];
+    72 [label="SCall72\n{Smain = 69}\n$start_election()\n{St2 = 2}\n"];
+    73 [label="SCall73\n{Smain = 69}\n$client_requests()\n{St3 = 5}\n"];
+    74 [label="SCall74\n{Smain = 69}\n$replicate()\n{St4 = 4}\n"];
     74 -> 4;
     73 -> 5;
     72 -> 2;
