@@ -366,9 +366,11 @@ let fresh_thread_id =
     incr n;
     Format.sprintf "%st%d" party r
 
-let label_threads env party (p : tprotocol) : tprotocol =
+let label_threads ?main env party (p : tprotocol) : tprotocol =
   (* note that these names cannot have underscores or they become typed model values in TLA+ *)
-  let main_thread = Format.sprintf "%smain" party in
+  let main_thread =
+    match main with Some m -> m | None -> Format.sprintf "%smain" party
+  in
   let rec aux tid p =
     let p = { p with pmeta = { p.pmeta with tid } } in
     let p1 =
@@ -626,17 +628,67 @@ let filter_used_params actions =
                          (used_names a.protocol |> List.uniq ~eq:String.equal));
          })
 
+(** for now, we assume that each function is called only on one thread. we find
+    this call and use its thread as the function's main thread, which is necessary
+    for call-under-par to work at all.
+
+    the more general solution would be to parameterize function cpres/cposts by
+    calling thread, which we can substitute at call sites. function preconditions
+    would have to match against possible instantiations though. not clear how to do
+    this in a non-convoluted way. a simple one would be to find all calls and generate a precondition with any, but this wouldn't help for the postcondition.
+
+    a naive way to fix this would be to duplicate function actions for each thread
+    (we're not going to do this). another is to do what pluscal/sane languages do
+    and have a call stack per thread, instead of what we do with a single pc,
+    parameterized by thread, so we can describe it using a single formula. *)
+let find_call_threads (tp : tprotocol) =
+  let vp =
+    object
+      inherit [_] reduce_protocol_list as super
+
+      method! visit__protocol () p =
+        match p.p with
+        | Call { f; _ } -> [(f, p.pmeta.tid)]
+        | _ -> super#visit__protocol () p
+    end
+  in
+  let map = vp#visit__protocol () tp in
+  let uniq =
+    map |> List.uniq ~eq:(fun (a, _) (b, _) -> String.equal a b) |> List.length
+  in
+  if uniq < List.length map then failwith "calls were not unique";
+  let map =
+    List.map
+      (fun (f, (tid : tid)) ->
+        match tid.params with
+        | [] -> (f, tid.name)
+        | _ ->
+          failwith
+            "tid has params, which is not allowed as it should be either under \
+             par or on main")
+      map
+  in
+  map |> SMap.of_list
+
 let split_into_actions :
     grain -> string -> env -> tprotocol -> G.t * action IMap.t =
  fun grain party env t ->
   let t = label_threads env party t in
+  let call_threads = find_call_threads t in
   let env =
     {
       env with
       subprotocols =
         env.subprotocols
         |> SMap.map (fun sp ->
-               { sp with tp = sp.tp |> label_threads env party });
+               {
+                 sp with
+                 tp =
+                   sp.tp
+                   |> label_threads
+                        ~main:(SMap.find sp.fname call_threads)
+                        env party;
+               });
     }
   in
   (* define every function's entry point *)
@@ -758,7 +810,7 @@ let assigned_variables (e : tprotocol) =
   vp#visit__protocol () e
   |> List.uniq ~eq:(fun (a, _) (b, _) -> String.equal a b)
 
-let abstract_state_variables (e : tprotocol) =
+let abstract_state_variables (tp : tprotocol) =
   let vp =
     object
       inherit [_] reduce_protocol_list
@@ -776,14 +828,14 @@ let abstract_state_variables (e : tprotocol) =
           args
     end
   in
-  vp#visit__protocol () e
+  vp#visit__protocol () tp
   |> List.uniq ~eq:(fun (a, _) (b, _) -> String.equal a b)
 
-let all_tids (e : tprotocol) =
+let all_tids (tp : tprotocol) =
   let vp =
     object
       inherit [_] reduce_protocol_list
       method! visit__protocol _env p = [p.pmeta.tid]
     end
   in
-  vp#visit__protocol () e |> List.uniq ~eq:equal_tid
+  vp#visit__protocol () tp |> List.uniq ~eq:equal_tid

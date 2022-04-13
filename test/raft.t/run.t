@@ -166,8 +166,8 @@ Client actions
 
   $ protocol print --actions --project C raft.spec
   digraph G {
-    5 [label="CSendReq5\n{Cmain = 5}\ns! req(v=value)\n{Ct5(s:S) = 6}\n"];
-    7 [label="CChangeValue7\n{∀ s:S. Ct5(s:S) = 6}\nvalue = value + 1\n{Cmain = 5}\n"];
+    5 [label="CSendReq5\n{Ct3 = 5}\ns! req(v=value)\n{Ct5(s:S) = 6}\n"];
+    7 [label="CChangeValue7\n{∀ s:S. Ct5(s:S) = 6}\nvalue = value + 1\n{Ct3 = 5}\n"];
     13 [label="CChangeValue13\n{Cmain = start}\nvalue = 0\n{Cmain = 13}\n"];
     17 [label="CCall17\n{Cmain = 13}\n$client_requests()\n{Ct3 = 5}\n"];
     17 -> 5;
@@ -300,17 +300,17 @@ Server actions
 
   $ protocol print --actions --project S raft.spec
   digraph G {
-    1 [label="SChangeRole1\n{Smain = 1}\nrole = 'candidate'\n{Smain = 1}\n"];
-    2 [label="SDummy2\n{Smain = 2}\nskip\n{Smain = 2}\n"];
-    3 [label="SChangeRole3\n{Smain = 3}\nrole = 'follower';\nvotes_responded = {};\nvotes_granted = {};\nnext_index = ${{k: 1 for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}};\ncommit_index = 0\n{Smain = 3}\n"];
-    4 [label="SDummy4\n{Smain = 4}\nskip\n{Smain = 4}\n"];
-    5 [label="SReceiveReq5\n{Smain = 5}\nc? req(v)\n{St5(c:C) = 6}\n"];
-    7 [label="SChangeLog7\n{St5(c:C) = 6}\nlog = append(log, [<<term: current_term, value: v>>])\n{All([St5(c:C) = 7, Smain = 5])}\n"];
-    9 [label="SChange_PrevLogIndex9\n{Smain = 4}\n_prev_log_index = next_index[t] - 1;\n_prev_log_term = (_prev_log_index > 0) ? (log[_prev_log_index]['term']) : (0);\n_last_entry = min({length(log), next_index[t]});\n_entries = slice(log, next_index[t] - 1, _last_entry - 1)\n{St8(t:S) = 12}\n"];
+    1 [label="SChangeRole1\n{St1 = 1}\nrole = 'candidate'\n{St1 = 1}\n"];
+    2 [label="SDummy2\n{St2 = 2}\nskip\n{St2 = 2}\n"];
+    3 [label="SChangeRole3\n{St0 = 3}\nrole = 'follower';\nvotes_responded = {};\nvotes_granted = {};\nnext_index = ${{k: 1 for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}};\ncommit_index = 0\n{St0 = 3}\n"];
+    4 [label="SDummy4\n{St4 = 4}\nskip\n{St4 = 4}\n"];
+    5 [label="SReceiveReq5\n{St3 = 5}\nc? req(v)\n{St5(c:C) = 6}\n"];
+    7 [label="SChangeLog7\n{St5(c:C) = 6}\nlog = append(log, [<<term: current_term, value: v>>])\n{All([St5(c:C) = 7, St3 = 5])}\n"];
+    9 [label="SChange_PrevLogIndex9\n{St4 = 4}\n_prev_log_index = next_index[t] - 1;\n_prev_log_term = (_prev_log_index > 0) ? (log[_prev_log_index]['term']) : (0);\n_last_entry = min({length(log), next_index[t]});\n_entries = slice(log, next_index[t] - 1, _last_entry - 1)\n{St8(t:S) = 12}\n"];
     13 [label="SSendAppendEntries13\n{St8(t:S) = 12}\nt! append_entries(term=current_term, prev_log_index=_prev_log_index, prev_log_term=_prev_log_term, entries=_entries, mcommit_index=min({commit_index, _last_entry}))\n{St8(t:S) = 13}\n"];
     14 [label="SSendAppendEntriesResp14\n{St8(t:S) = 13}\nt! append_entries_resp(term=current_term, success=false, mmatch_index=0)\n{St8(t:S) = 14}\n"];
     15 [label="SReceiveAppendEntriesResp15\n{St8(t:S) = 13}\nt? append_entries_resp(term, success, mmatch_index)\n{St8(t:S) = 15}\n"];
-    16 [label="SReceiveAppendEntries16\n{Smain = 4}\ns? append_entries(term, prev_log_index, prev_log_term, entries, mcommit_index)\n{St9(s:S) = 16}\n"];
+    16 [label="SReceiveAppendEntries16\n{St4 = 4}\ns? append_entries(term, prev_log_index, prev_log_term, entries, mcommit_index)\n{St9(s:S) = 16}\n"];
     17 [label="SChange_LogOk17\n{St9(s:S) = 16}\n_log_ok = prev_log_index == 0 | prev_log_index > 0 & _prev_log_index <= length(log) & prev_log_term == log[prev_log_index]['term']\n{St9(s:S) = 17}\n"];
     18 [label="SReceiveAppendEntriesResp18\n{St9(s:S) = 17}\ns? append_entries_resp(term, success, mmatch_index)\n{St9(s:S) = 18}\n"];
     19 [label="SChangeRole19\n{St9(s:S) = 17}\nrole = 'follower'\n{St9(s:S) = 19}\n"];
@@ -318,8 +318,8 @@ Server actions
     22 [label="SSendAppendEntriesResp22\n{St9(s:S) = 21}\ns! append_entries_resp(term=current_term, success=true, mmatch_index=prev_log_index + length(entries))\n{St9(s:S) = 22}\n"];
     23 [label="SChangeLog23\n{St9(s:S) = 17}\nlog = slice(log, 0, length(log) - 1)\n{St9(s:S) = 23}\n"];
     24 [label="SChangeLog24\n{St9(s:S) = 17}\nlog = append(log, [entries[0]])\n{St9(s:S) = 24}\n"];
-    25 [label="SCall25\n{All([∀ t:S{self}. Any([St8(t:S) = 14, St8(t:S) = 15]), ∀ s:S{self}. Any([Any([St9(s:S) = 18, St9(s:S) = 19]), Any([Any([St9(s:S) = 22, St9(s:S) = 23]), St9(s:S) = 24])])])}\n$replicate()\n{Smain = 4}\n"];
-    33 [label="SChangeCurrentTerm33\n{Smain = 2}\ncurrent_term = current_term + 1;\nvoted_for = [ ];\nvotes_responded = {};\nvotes_granted = {}\n{St10 = 36}\n"];
+    25 [label="SCall25\n{All([∀ t:S{self}. Any([St8(t:S) = 14, St8(t:S) = 15]), ∀ s:S{self}. Any([Any([St9(s:S) = 18, St9(s:S) = 19]), Any([Any([St9(s:S) = 22, St9(s:S) = 23]), St9(s:S) = 24])])])}\n$replicate()\n{St4 = 4}\n"];
+    33 [label="SChangeCurrentTerm33\n{St2 = 2}\ncurrent_term = current_term + 1;\nvoted_for = [ ];\nvotes_responded = {};\nvotes_granted = {}\n{St10 = 36}\n"];
     37 [label="SSendRequestVote37\n{St10 = 36}\nself! request_vote(term=current_term, last_log_term=(length(log) == 0) ? (0) : (last(log)['term']), last_log_index=length(log))\n{St12 = 37}\n"];
     38 [label="SReceiveRequestVote38\n{St12 = 37}\nself? request_vote(term, last_log_term, last_log_index)\n{St12 = 38}\n"];
     39 [label="SChange_LogOk39\n{St12 = 38}\n_log_ok = last_log_term > (length(log) == 0) ? (0) : (last(log)['term']) | last_log_term == (length(log) == 0) ? (0) : (last(log)['term']) & last_log_index >= length(log);\n_grant = term == current_term & _log_ok & (voted_for == [self] | voted_for == [ ]);\nvoted_for = [self]\n{St12 = 41}\n"];
@@ -330,10 +330,10 @@ Server actions
     47 [label="SReceiveRequestVoteResp47\n{St14(t:S) = 46}\nt? request_vote_resp(term, granted)\n{St14(t:S) = 47}\n"];
     48 [label="SChangeVotesResponded48\n{St14(t:S) = 47}\nvotes_responded = union(votes_responded, {t});\nvotes_granted = union(votes_granted, {t})\n{St14(t:S) = 49}\n"];
     50 [label="SChangeRole50\n{All([St12 = 45, ∀ t:S{self}. St14(t:S) = 49])}\nrole = 'leader';\nnext_index = ${{k: length(log) for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{St10 = 52}\n"];
-    53 [label="SReceiveRequestVote53\n{Smain = 2}\ns? request_vote(term, last_log_term, last_log_index)\n{St15(s:S) = 53}\n"];
+    53 [label="SReceiveRequestVote53\n{St2 = 2}\ns? request_vote(term, last_log_term, last_log_index)\n{St15(s:S) = 53}\n"];
     54 [label="SChange_LogOk54\n{St15(s:S) = 53}\n_log_ok = last_log_term > (length(log) == 0) ? (0) : (last(log)['term']) | last_log_term == (length(log) == 0) ? (0) : (last(log)['term']) & last_log_index >= length(log);\n_grant = term == current_term & _log_ok & (voted_for == [self] | voted_for == [ ]);\nvoted_for = [self]\n{St15(s:S) = 56}\n"];
     57 [label="SSendRequestVoteResp57\n{St15(s:S) = 56}\ns! request_vote_resp(term=current_term, granted=_grant)\n{St15(s:S) = 57}\n"];
-    58 [label="SCall58\n{All([St10 = 52, ∀ s:S{self}. St15(s:S) = 57])}\n$start_election()\n{Smain = 2}\n"];
+    58 [label="SCall58\n{All([St10 = 52, ∀ s:S{self}. St15(s:S) = 57])}\n$start_election()\n{St2 = 2}\n"];
     61 [label="SChangeCurrentTerm61\n{Smain = start}\ncurrent_term = 1;\nrole = 'follower';\nvoted_for = [ ];\nlog = [ ];\ncommit_index = 0;\nvotes_responded = {};\nvotes_granted = {};\nnext_index = ${{k: 1 for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{Smain = 69}\n"];
     70 [label="SCall70\n{Smain = 69}\n$restart()\n{St0 = 3}\n"];
     71 [label="SCall71\n{Smain = 69}\n$timeout()\n{St1 = 1}\n"];
@@ -410,7 +410,7 @@ Monitor
   	case CSendReq79:
   		// no logical preconditions
   
-  		if !(m.PC["Cmain"] == 79) {
+  		if !(m.PC["Ct19"] == 79) {
   			return fmt.Errorf("control precondition of CSendReq79 %v violated", cparams)
   		}
   		return nil
@@ -446,35 +446,35 @@ Monitor
   	case SChangeRole1:
   		// no logical preconditions
   
-  		if !(m.PC["Smain"] == 1) {
+  		if !(m.PC["St1"] == 1) {
   			return fmt.Errorf("control precondition of SChangeRole1 %v violated", cparams)
   		}
   		return nil
   	case SDummy2:
   		// no logical preconditions
   
-  		if !(m.PC["Smain"] == 2) {
+  		if !(m.PC["St2"] == 2) {
   			return fmt.Errorf("control precondition of SDummy2 %v violated", cparams)
   		}
   		return nil
   	case SChangeRole3:
   		// no logical preconditions
   
-  		if !(m.PC["Smain"] == 3) {
+  		if !(m.PC["St0"] == 3) {
   			return fmt.Errorf("control precondition of SChangeRole3 %v violated", cparams)
   		}
   		return nil
   	case SDummy4:
   		// no logical preconditions
   
-  		if !(m.PC["Smain"] == 4) {
+  		if !(m.PC["St4"] == 4) {
   			return fmt.Errorf("control precondition of SDummy4 %v violated", cparams)
   		}
   		return nil
   	case SReceiveReq5:
   		// no logical preconditions
   
-  		if !(m.PC["Smain"] == 5) {
+  		if !(m.PC["St3"] == 5) {
   			return fmt.Errorf("control precondition of SReceiveReq5 %v violated", cparams)
   		}
   		return nil
@@ -490,7 +490,7 @@ Monitor
   	case SChange_PrevLogIndex9:
   		// no logical preconditions
   
-  		if !(m.PC["Smain"] == 4) {
+  		if !(m.PC["St4"] == 4) {
   			return fmt.Errorf("control precondition of SChange_PrevLogIndex9 %v violated", cparams)
   		}
   		return nil
@@ -524,7 +524,7 @@ Monitor
   	case SReceiveAppendEntries16:
   		// no logical preconditions
   
-  		if !(m.PC["Smain"] == 4) {
+  		if !(m.PC["St4"] == 4) {
   			return fmt.Errorf("control precondition of SReceiveAppendEntries16 %v violated", cparams)
   		}
   		return nil
@@ -603,7 +603,7 @@ Monitor
   	case SChangeCurrentTerm33:
   		// no logical preconditions
   
-  		if !(m.PC["Smain"] == 2) {
+  		if !(m.PC["St2"] == 2) {
   			return fmt.Errorf("control precondition of SChangeCurrentTerm33 %v violated", cparams)
   		}
   		return nil
@@ -684,7 +684,7 @@ Monitor
   	case SReceiveRequestVote53:
   		// no logical preconditions
   
-  		if !(m.PC["Smain"] == 2) {
+  		if !(m.PC["St2"] == 2) {
   			return fmt.Errorf("control precondition of SReceiveRequestVote53 %v violated", cparams)
   		}
   		return nil
