@@ -112,6 +112,7 @@ protocol restart() (
   // everything but current term, voted for, and log is lost
   (forall s in S
     s.role = 'follower';
+    s.current_term = s.current_term + 1; // etcd
     // forces this subprotocol to be here or this type can't be inferred
     // TODO defer checking instantiatedness until after all subprotocols are checked, so ordering doesn't matter
     s.votes_responded = {};

@@ -68,6 +68,7 @@ Types
   protocol restart() (
     (forall s in S
        s.role = 'follower';
+       s.current_term = s.current_term + 1;
        s.votes_responded = {};
        s.votes_granted = {};
        s.next_index = ${{s.k: 1 for k, _ in S}};
@@ -223,6 +224,7 @@ Server projection
   )
   protocol restart() (
     role = 'follower';
+    current_term = current_term + 1;
     votes_responded = {};
     votes_granted = {};
     next_index = ${{k: 1 for k, _ in S}};
@@ -302,7 +304,7 @@ Server actions
   digraph G {
     1 [label="SChangeRole1\n{St1 = 1}\nrole = 'candidate'\n{St1 = 1}\n"];
     2 [label="SDummy2\n{St2 = 2}\nskip\n{St2 = 2}\n"];
-    3 [label="SChangeRole3\n{St0 = 3}\nrole = 'follower';\nvotes_responded = {};\nvotes_granted = {};\nnext_index = ${{k: 1 for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}};\ncommit_index = 0\n{St0 = 3}\n"];
+    3 [label="SChangeRole3\n{St0 = 3}\nrole = 'follower';\ncurrent_term = current_term + 1;\nvotes_responded = {};\nvotes_granted = {};\nnext_index = ${{k: 1 for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}};\ncommit_index = 0\n{St0 = 3}\n"];
     4 [label="SDummy4\n{St4 = 4}\nskip\n{St4 = 4}\n"];
     5 [label="SReceiveReq5\n{St3 = 5}\nc? req(v)\n{St5(c:C) = 6}\n"];
     7 [label="SChangeLog7\n{St5(c:C) = 6}\nlog = append(log, [<<term: current_term, value: v>>])\n{All([St5(c:C) = 7, St3 = 5])}\n"];
@@ -319,53 +321,53 @@ Server actions
     23 [label="SChangeLog23\n{St9(s:S) = 17}\nlog = slice(log, 0, length(log) - 1)\n{St9(s:S) = 23}\n"];
     24 [label="SChangeLog24\n{St9(s:S) = 17}\nlog = append(log, [entries[0]])\n{St9(s:S) = 24}\n"];
     25 [label="SCall25\n{All([∀ t:S{self}. Any([St8(t:S) = 14, St8(t:S) = 15]), ∀ s:S{self}. Any([Any([St9(s:S) = 18, St9(s:S) = 19]), Any([Any([St9(s:S) = 22, St9(s:S) = 23]), St9(s:S) = 24])])])}\n$replicate()\n{St4 = 4}\n"];
-    33 [label="SChangeCurrentTerm33\n{St2 = 2}\ncurrent_term = current_term + 1;\nvoted_for = [ ];\nvotes_responded = {};\nvotes_granted = {}\n{St10 = 36}\n"];
-    37 [label="SSendRequestVote37\n{St10 = 36}\nself! request_vote(term=current_term, last_log_term=(length(log) == 0) ? (0) : (last(log)['term']), last_log_index=length(log))\n{St12 = 37}\n"];
-    38 [label="SReceiveRequestVote38\n{St12 = 37}\nself? request_vote(term, last_log_term, last_log_index)\n{St12 = 38}\n"];
-    39 [label="SChange_LogOk39\n{St12 = 38}\n_log_ok = last_log_term > (length(log) == 0) ? (0) : (last(log)['term']) | last_log_term == (length(log) == 0) ? (0) : (last(log)['term']) & last_log_index >= length(log);\n_grant = term == current_term & _log_ok & (voted_for == [self] | voted_for == [ ]);\nvoted_for = [self]\n{St12 = 41}\n"];
-    42 [label="SSendRequestVoteResp42\n{St12 = 41}\nself! request_vote_resp(term=current_term, granted=_grant)\n{St12 = 42}\n"];
-    43 [label="SReceiveRequestVoteResp43\n{St12 = 42}\nself? request_vote_resp(term, granted)\n{St12 = 43}\n"];
-    44 [label="SChangeVotesResponded44\n{St12 = 43}\nvotes_responded = union(votes_responded, {self});\nvotes_granted = union(votes_granted, {self})\n{St12 = 45}\n"];
-    46 [label="SSendRequestVote46\n{St10 = 36}\nt! request_vote(term=current_term, last_log_term=(length(log) == 0) ? (0) : (last(log)['term']), last_log_index=length(log))\n{St14(t:S) = 46}\n"];
-    47 [label="SReceiveRequestVoteResp47\n{St14(t:S) = 46}\nt? request_vote_resp(term, granted)\n{St14(t:S) = 47}\n"];
-    48 [label="SChangeVotesResponded48\n{St14(t:S) = 47}\nvotes_responded = union(votes_responded, {t});\nvotes_granted = union(votes_granted, {t})\n{St14(t:S) = 49}\n"];
-    50 [label="SChangeRole50\n{All([St12 = 45, ∀ t:S{self}. St14(t:S) = 49])}\nrole = 'leader';\nnext_index = ${{k: length(log) for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{St10 = 52}\n"];
-    53 [label="SReceiveRequestVote53\n{St2 = 2}\ns? request_vote(term, last_log_term, last_log_index)\n{St15(s:S) = 53}\n"];
-    54 [label="SChange_LogOk54\n{St15(s:S) = 53}\n_log_ok = last_log_term > (length(log) == 0) ? (0) : (last(log)['term']) | last_log_term == (length(log) == 0) ? (0) : (last(log)['term']) & last_log_index >= length(log);\n_grant = term == current_term & _log_ok & (voted_for == [self] | voted_for == [ ]);\nvoted_for = [self]\n{St15(s:S) = 56}\n"];
-    57 [label="SSendRequestVoteResp57\n{St15(s:S) = 56}\ns! request_vote_resp(term=current_term, granted=_grant)\n{St15(s:S) = 57}\n"];
-    58 [label="SCall58\n{All([St10 = 52, ∀ s:S{self}. St15(s:S) = 57])}\n$start_election()\n{St2 = 2}\n"];
-    61 [label="SChangeCurrentTerm61\n{Smain = start}\ncurrent_term = 1;\nrole = 'follower';\nvoted_for = [ ];\nlog = [ ];\ncommit_index = 0;\nvotes_responded = {};\nvotes_granted = {};\nnext_index = ${{k: 1 for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{Smain = 69}\n"];
-    70 [label="SCall70\n{Smain = 69}\n$restart()\n{St0 = 3}\n"];
-    71 [label="SCall71\n{Smain = 69}\n$timeout()\n{St1 = 1}\n"];
-    72 [label="SCall72\n{Smain = 69}\n$start_election()\n{St2 = 2}\n"];
-    73 [label="SCall73\n{Smain = 69}\n$client_requests()\n{St3 = 5}\n"];
-    74 [label="SCall74\n{Smain = 69}\n$replicate()\n{St4 = 4}\n"];
-    74 -> 4;
-    73 -> 5;
-    72 -> 2;
-    71 -> 1;
-    70 -> 3;
-    61 -> 74;
-    61 -> 73;
-    61 -> 72;
-    61 -> 71;
-    61 -> 70;
-    58 -> 2;
-    57 -> 58;
-    54 -> 57;
-    53 -> 54;
-    50 -> 58;
-    48 -> 50;
+    34 [label="SChangeCurrentTerm34\n{St2 = 2}\ncurrent_term = current_term + 1;\nvoted_for = [ ];\nvotes_responded = {};\nvotes_granted = {}\n{St10 = 37}\n"];
+    38 [label="SSendRequestVote38\n{St10 = 37}\nself! request_vote(term=current_term, last_log_term=(length(log) == 0) ? (0) : (last(log)['term']), last_log_index=length(log))\n{St12 = 38}\n"];
+    39 [label="SReceiveRequestVote39\n{St12 = 38}\nself? request_vote(term, last_log_term, last_log_index)\n{St12 = 39}\n"];
+    40 [label="SChange_LogOk40\n{St12 = 39}\n_log_ok = last_log_term > (length(log) == 0) ? (0) : (last(log)['term']) | last_log_term == (length(log) == 0) ? (0) : (last(log)['term']) & last_log_index >= length(log);\n_grant = term == current_term & _log_ok & (voted_for == [self] | voted_for == [ ]);\nvoted_for = [self]\n{St12 = 42}\n"];
+    43 [label="SSendRequestVoteResp43\n{St12 = 42}\nself! request_vote_resp(term=current_term, granted=_grant)\n{St12 = 43}\n"];
+    44 [label="SReceiveRequestVoteResp44\n{St12 = 43}\nself? request_vote_resp(term, granted)\n{St12 = 44}\n"];
+    45 [label="SChangeVotesResponded45\n{St12 = 44}\nvotes_responded = union(votes_responded, {self});\nvotes_granted = union(votes_granted, {self})\n{St12 = 46}\n"];
+    47 [label="SSendRequestVote47\n{St10 = 37}\nt! request_vote(term=current_term, last_log_term=(length(log) == 0) ? (0) : (last(log)['term']), last_log_index=length(log))\n{St14(t:S) = 47}\n"];
+    48 [label="SReceiveRequestVoteResp48\n{St14(t:S) = 47}\nt? request_vote_resp(term, granted)\n{St14(t:S) = 48}\n"];
+    49 [label="SChangeVotesResponded49\n{St14(t:S) = 48}\nvotes_responded = union(votes_responded, {t});\nvotes_granted = union(votes_granted, {t})\n{St14(t:S) = 50}\n"];
+    51 [label="SChangeRole51\n{All([St12 = 46, ∀ t:S{self}. St14(t:S) = 50])}\nrole = 'leader';\nnext_index = ${{k: length(log) for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{St10 = 53}\n"];
+    54 [label="SReceiveRequestVote54\n{St2 = 2}\ns? request_vote(term, last_log_term, last_log_index)\n{St15(s:S) = 54}\n"];
+    55 [label="SChange_LogOk55\n{St15(s:S) = 54}\n_log_ok = last_log_term > (length(log) == 0) ? (0) : (last(log)['term']) | last_log_term == (length(log) == 0) ? (0) : (last(log)['term']) & last_log_index >= length(log);\n_grant = term == current_term & _log_ok & (voted_for == [self] | voted_for == [ ]);\nvoted_for = [self]\n{St15(s:S) = 57}\n"];
+    58 [label="SSendRequestVoteResp58\n{St15(s:S) = 57}\ns! request_vote_resp(term=current_term, granted=_grant)\n{St15(s:S) = 58}\n"];
+    59 [label="SCall59\n{All([St10 = 53, ∀ s:S{self}. St15(s:S) = 58])}\n$start_election()\n{St2 = 2}\n"];
+    62 [label="SChangeCurrentTerm62\n{Smain = start}\ncurrent_term = 1;\nrole = 'follower';\nvoted_for = [ ];\nlog = [ ];\ncommit_index = 0;\nvotes_responded = {};\nvotes_granted = {};\nnext_index = ${{k: 1 for k, _ in S}};\nmatch_index = ${{k: 0 for k, _ in S}}\n{Smain = 70}\n"];
+    71 [label="SCall71\n{Smain = 70}\n$restart()\n{St0 = 3}\n"];
+    72 [label="SCall72\n{Smain = 70}\n$timeout()\n{St1 = 1}\n"];
+    73 [label="SCall73\n{Smain = 70}\n$start_election()\n{St2 = 2}\n"];
+    74 [label="SCall74\n{Smain = 70}\n$client_requests()\n{St3 = 5}\n"];
+    75 [label="SCall75\n{Smain = 70}\n$replicate()\n{St4 = 4}\n"];
+    75 -> 4;
+    74 -> 5;
+    73 -> 2;
+    72 -> 1;
+    71 -> 3;
+    62 -> 75;
+    62 -> 74;
+    62 -> 73;
+    62 -> 72;
+    62 -> 71;
+    59 -> 2;
+    58 -> 59;
+    55 -> 58;
+    54 -> 55;
+    51 -> 59;
+    49 -> 51;
+    48 -> 49;
     47 -> 48;
-    46 -> 47;
-    44 -> 50;
+    45 -> 51;
+    44 -> 45;
     43 -> 44;
-    42 -> 43;
-    39 -> 42;
+    40 -> 43;
+    39 -> 40;
     38 -> 39;
-    37 -> 38;
-    33 -> 46;
-    33 -> 37;
+    34 -> 47;
+    34 -> 38;
     25 -> 4;
     24 -> 25;
     23 -> 25;
@@ -389,8 +391,8 @@ Server actions
     4 -> 16;
     4 -> 9;
     3 -> 3;
-    2 -> 53;
-    2 -> 33;
+    2 -> 54;
+    2 -> 34;
     1 -> 1;
   }
 
@@ -407,32 +409,32 @@ Monitor
   $ sed -n '/func.*precondition/,/^}/p' monitorC.go
   func (m *Monitor) precondition(g *Global, action Action, cparams map[string]string, lparams map[string]string) error {
   	switch action {
-  	case CSendReq79:
+  	case CSendReq80:
   		// no logical preconditions
   
-  		if !(m.PC["Ct19"] == 79) {
-  			return fmt.Errorf("control precondition of CSendReq79 %v violated", cparams)
+  		if !(m.PC["Ct19"] == 80) {
+  			return fmt.Errorf("control precondition of CSendReq80 %v violated", cparams)
   		}
   		return nil
-  	case CChangeValue81:
+  	case CChangeValue82:
   		// no logical preconditions
   
-  		if !(allSet(m.vars["S"].(map[string]bool), func(s string) bool { return m.PC["Ct21_"+(s)] == 80 })) {
-  			return fmt.Errorf("control precondition of CChangeValue81 %v violated", cparams)
+  		if !(allSet(m.vars["S"].(map[string]bool), func(s string) bool { return m.PC["Ct21_"+(s)] == 81 })) {
+  			return fmt.Errorf("control precondition of CChangeValue82 %v violated", cparams)
   		}
   		return nil
-  	case CChangeValue87:
+  	case CChangeValue88:
   		// no logical preconditions
   
   		if !(m.PC["Cmain"] == 0) {
-  			return fmt.Errorf("control precondition of CChangeValue87 %v violated", cparams)
+  			return fmt.Errorf("control precondition of CChangeValue88 %v violated", cparams)
   		}
   		return nil
-  	case CCall91:
+  	case CCall92:
   		// no logical preconditions
   
-  		if !(m.PC["Cmain"] == 87) {
-  			return fmt.Errorf("control precondition of CCall91 %v violated", cparams)
+  		if !(m.PC["Cmain"] == 88) {
+  			return fmt.Errorf("control precondition of CCall92 %v violated", cparams)
   		}
   		return nil
   	default:
@@ -600,159 +602,159 @@ Monitor
   			return fmt.Errorf("control precondition of SCall25 %v violated", cparams)
   		}
   		return nil
-  	case SChangeCurrentTerm33:
+  	case SChangeCurrentTerm34:
   		// no logical preconditions
   
   		if !(m.PC["St2"] == 2) {
-  			return fmt.Errorf("control precondition of SChangeCurrentTerm33 %v violated", cparams)
+  			return fmt.Errorf("control precondition of SChangeCurrentTerm34 %v violated", cparams)
   		}
   		return nil
-  	case SSendRequestVote37:
+  	case SSendRequestVote38:
   		// no logical preconditions
   
-  		if !(m.PC["St10"] == 36) {
-  			return fmt.Errorf("control precondition of SSendRequestVote37 %v violated", cparams)
+  		if !(m.PC["St10"] == 37) {
+  			return fmt.Errorf("control precondition of SSendRequestVote38 %v violated", cparams)
   		}
   		return nil
-  	case SReceiveRequestVote38:
-  		// no logical preconditions
-  
-  		if !(m.PC["St12"] == 37) {
-  			return fmt.Errorf("control precondition of SReceiveRequestVote38 %v violated", cparams)
-  		}
-  		return nil
-  	case SChange_LogOk39:
+  	case SReceiveRequestVote39:
   		// no logical preconditions
   
   		if !(m.PC["St12"] == 38) {
-  			return fmt.Errorf("control precondition of SChange_LogOk39 %v violated", cparams)
+  			return fmt.Errorf("control precondition of SReceiveRequestVote39 %v violated", cparams)
   		}
   		return nil
-  	case SSendRequestVoteResp42:
+  	case SChange_LogOk40:
   		// no logical preconditions
   
-  		if !(m.PC["St12"] == 41) {
-  			return fmt.Errorf("control precondition of SSendRequestVoteResp42 %v violated", cparams)
+  		if !(m.PC["St12"] == 39) {
+  			return fmt.Errorf("control precondition of SChange_LogOk40 %v violated", cparams)
   		}
   		return nil
-  	case SReceiveRequestVoteResp43:
+  	case SSendRequestVoteResp43:
   		// no logical preconditions
   
   		if !(m.PC["St12"] == 42) {
-  			return fmt.Errorf("control precondition of SReceiveRequestVoteResp43 %v violated", cparams)
+  			return fmt.Errorf("control precondition of SSendRequestVoteResp43 %v violated", cparams)
   		}
   		return nil
-  	case SChangeVotesResponded44:
+  	case SReceiveRequestVoteResp44:
   		// no logical preconditions
   
   		if !(m.PC["St12"] == 43) {
-  			return fmt.Errorf("control precondition of SChangeVotesResponded44 %v violated", cparams)
+  			return fmt.Errorf("control precondition of SReceiveRequestVoteResp44 %v violated", cparams)
   		}
   		return nil
-  	case SSendRequestVote46:
+  	case SChangeVotesResponded45:
   		// no logical preconditions
   
-  		if !(m.PC["St10"] == 36) {
-  			return fmt.Errorf("control precondition of SSendRequestVote46 %v violated", cparams)
+  		if !(m.PC["St12"] == 44) {
+  			return fmt.Errorf("control precondition of SChangeVotesResponded45 %v violated", cparams)
   		}
   		return nil
-  	case SReceiveRequestVoteResp47:
+  	case SSendRequestVote47:
   		// no logical preconditions
-  		if _, ok := cparams["t"]; !ok {
-  			return fmt.Errorf("expected t to be in cparams: %v", cparams)
-  		}
-  		if !(m.PC["St14_"+(cparams["t"] /* : S */)] == 46) {
-  			return fmt.Errorf("control precondition of SReceiveRequestVoteResp47 %v violated", cparams)
+  
+  		if !(m.PC["St10"] == 37) {
+  			return fmt.Errorf("control precondition of SSendRequestVote47 %v violated", cparams)
   		}
   		return nil
-  	case SChangeVotesResponded48:
+  	case SReceiveRequestVoteResp48:
   		// no logical preconditions
   		if _, ok := cparams["t"]; !ok {
   			return fmt.Errorf("expected t to be in cparams: %v", cparams)
   		}
   		if !(m.PC["St14_"+(cparams["t"] /* : S */)] == 47) {
-  			return fmt.Errorf("control precondition of SChangeVotesResponded48 %v violated", cparams)
+  			return fmt.Errorf("control precondition of SReceiveRequestVoteResp48 %v violated", cparams)
   		}
   		return nil
-  	case SChangeRole50:
+  	case SChangeVotesResponded49:
+  		// no logical preconditions
+  		if _, ok := cparams["t"]; !ok {
+  			return fmt.Errorf("expected t to be in cparams: %v", cparams)
+  		}
+  		if !(m.PC["St14_"+(cparams["t"] /* : S */)] == 48) {
+  			return fmt.Errorf("control precondition of SChangeVotesResponded49 %v violated", cparams)
+  		}
+  		return nil
+  	case SChangeRole51:
   		// no logical preconditions
   
-  		if !(m.PC["St12"] == 45 && allSet(m.vars["S  {self}"].(map[string]bool), func(t string) bool { return m.PC["St14_"+(t)] == 49 })) {
-  			return fmt.Errorf("control precondition of SChangeRole50 %v violated", cparams)
+  		if !(m.PC["St12"] == 46 && allSet(m.vars["S  {self}"].(map[string]bool), func(t string) bool { return m.PC["St14_"+(t)] == 50 })) {
+  			return fmt.Errorf("control precondition of SChangeRole51 %v violated", cparams)
   		}
   		return nil
-  	case SReceiveRequestVote53:
+  	case SReceiveRequestVote54:
   		// no logical preconditions
   
   		if !(m.PC["St2"] == 2) {
-  			return fmt.Errorf("control precondition of SReceiveRequestVote53 %v violated", cparams)
+  			return fmt.Errorf("control precondition of SReceiveRequestVote54 %v violated", cparams)
   		}
   		return nil
-  	case SChange_LogOk54:
+  	case SChange_LogOk55:
   		// no logical preconditions
   		if _, ok := cparams["s"]; !ok {
   			return fmt.Errorf("expected s to be in cparams: %v", cparams)
   		}
-  		if !(m.PC["St15_"+(cparams["s"] /* : S */)] == 53) {
-  			return fmt.Errorf("control precondition of SChange_LogOk54 %v violated", cparams)
+  		if !(m.PC["St15_"+(cparams["s"] /* : S */)] == 54) {
+  			return fmt.Errorf("control precondition of SChange_LogOk55 %v violated", cparams)
   		}
   		return nil
-  	case SSendRequestVoteResp57:
+  	case SSendRequestVoteResp58:
   		// no logical preconditions
   		if _, ok := cparams["s"]; !ok {
   			return fmt.Errorf("expected s to be in cparams: %v", cparams)
   		}
-  		if !(m.PC["St15_"+(cparams["s"] /* : S */)] == 56) {
-  			return fmt.Errorf("control precondition of SSendRequestVoteResp57 %v violated", cparams)
+  		if !(m.PC["St15_"+(cparams["s"] /* : S */)] == 57) {
+  			return fmt.Errorf("control precondition of SSendRequestVoteResp58 %v violated", cparams)
   		}
   		return nil
-  	case SCall58:
+  	case SCall59:
   		// no logical preconditions
   
-  		if !(m.PC["St10"] == 52 && allSet(m.vars["S  {self}"].(map[string]bool), func(s string) bool { return m.PC["St15_"+(s)] == 57 })) {
-  			return fmt.Errorf("control precondition of SCall58 %v violated", cparams)
+  		if !(m.PC["St10"] == 53 && allSet(m.vars["S  {self}"].(map[string]bool), func(s string) bool { return m.PC["St15_"+(s)] == 58 })) {
+  			return fmt.Errorf("control precondition of SCall59 %v violated", cparams)
   		}
   		return nil
-  	case SChangeCurrentTerm61:
+  	case SChangeCurrentTerm62:
   		// no logical preconditions
   
   		if !(m.PC["Smain"] == 0) {
-  			return fmt.Errorf("control precondition of SChangeCurrentTerm61 %v violated", cparams)
-  		}
-  		return nil
-  	case SCall70:
-  		// no logical preconditions
-  
-  		if !(m.PC["Smain"] == 69) {
-  			return fmt.Errorf("control precondition of SCall70 %v violated", cparams)
+  			return fmt.Errorf("control precondition of SChangeCurrentTerm62 %v violated", cparams)
   		}
   		return nil
   	case SCall71:
   		// no logical preconditions
   
-  		if !(m.PC["Smain"] == 69) {
+  		if !(m.PC["Smain"] == 70) {
   			return fmt.Errorf("control precondition of SCall71 %v violated", cparams)
   		}
   		return nil
   	case SCall72:
   		// no logical preconditions
   
-  		if !(m.PC["Smain"] == 69) {
+  		if !(m.PC["Smain"] == 70) {
   			return fmt.Errorf("control precondition of SCall72 %v violated", cparams)
   		}
   		return nil
   	case SCall73:
   		// no logical preconditions
   
-  		if !(m.PC["Smain"] == 69) {
+  		if !(m.PC["Smain"] == 70) {
   			return fmt.Errorf("control precondition of SCall73 %v violated", cparams)
   		}
   		return nil
   	case SCall74:
   		// no logical preconditions
   
-  		if !(m.PC["Smain"] == 69) {
+  		if !(m.PC["Smain"] == 70) {
   			return fmt.Errorf("control precondition of SCall74 %v violated", cparams)
+  		}
+  		return nil
+  	case SCall75:
+  		// no logical preconditions
+  
+  		if !(m.PC["Smain"] == 70) {
+  			return fmt.Errorf("control precondition of SCall75 %v violated", cparams)
   		}
   		return nil
   	default:
