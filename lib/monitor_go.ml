@@ -541,7 +541,7 @@ let rec compile_typ env t =
   | TyFn (_, _) -> nyi "compile type fn" (* seems hard *)
   | TyRecord kvs ->
     let record_name = record_name_of kvs in
-    record_name
+    snake_to_camel record_name
 
 module List = struct
   include List
@@ -870,7 +870,7 @@ let compile_expr :
         in
         declare_type record_name field_types;
         ( List.concat stmts,
-          Format.sprintf "%s{%s}" record_name fields,
+          Format.sprintf "%s{%s}" (snake_to_camel record_name) fields,
           List.concat lpa )
     in
     comp te
@@ -1289,7 +1289,7 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
   let declared_types =
     flags.declared_types
     |> List.map (fun (name, def) ->
-           Format.sprintf "type %s struct {\n%s\n}" name def)
+           Format.sprintf "type %s struct {\n%s\n}" (snake_to_camel name) def)
     |> String.concat "\n"
   in
   template_monitor
