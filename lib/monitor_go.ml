@@ -122,7 +122,7 @@ func (l *LTLMonitor%{i}) StepLTL%{i}(g Global) error {
 let template_monitor ~pname ~extra_imports ~global_contents ~action_defs
     ~preconditions ~postconditions ~ltl_monitor_defs ~ltl_monitor_fields
     ~ltl_monitor_assignments ~ltl_monitor_init ~ltl_monitor_step
-    ~protocol_effects ~declared_types () =
+    ~protocol_effects ~declared_types ~action_string () =
   [%string
     {|package rv%{pname}
 
@@ -151,6 +151,14 @@ type Action int
 const (
 %{action_defs}
 )
+
+func (a Action) String() string {
+	switch a {
+  %{action_string}
+	default:
+		panic("unknown action")
+	}
+}
 
 var None = map[string]string{}
 
@@ -271,7 +279,7 @@ func (m *Monitor) StepA(act Action, cparams map[string]string) error {
 	}
 
   if log {
-    fmt.Printf("%v\n", act)
+    fmt.Printf("%v\n", Action(act))
   }
 
 	if err := m.applyControlPostcondition(act, cparams); err != nil {
@@ -303,7 +311,7 @@ func (m *Monitor) Step(g1 Global, act Action, cparams map[string]string, lparams
 	defer m.trackTime(time.Now())
 
   if log {
-    fmt.Printf("%v\n", act)
+    fmt.Printf("%v\n", Action(act))
   }
 
 	if err := m.precondition(&m.g, act, cparams, lparams); err != nil {
@@ -1302,11 +1310,19 @@ let translate_party_ltl env ltl_i pname ltl action_nodes parties =
            Format.sprintf "type %s struct {\n%s\n}" (snake_to_camel name) def)
     |> String.concat "\n"
   in
+  let action_string =
+    action_nodes |> IMap.bindings
+    |> List.map (fun (id, a) ->
+           let name = Actions.node_name pname (id, a) in
+           Format.asprintf "case %s:\n  return \"%s\"" name name)
+    |> String.concat "\n"
+  in
   template_monitor
     ~pname:(String.lowercase_ascii pname)
     ~extra_imports ~global_contents ~action_defs ~preconditions ~postconditions
     ~ltl_monitor_defs ~ltl_monitor_fields ~ltl_monitor_assignments
-    ~ltl_monitor_init ~ltl_monitor_step ~protocol_effects ~declared_types ()
+    ~ltl_monitor_init ~ltl_monitor_step ~protocol_effects ~declared_types
+    ~action_string ()
 
 let translate_party_ltl env i pname ltl action_nodes parties =
   (* reset state *)
