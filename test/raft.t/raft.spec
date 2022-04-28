@@ -53,7 +53,7 @@ protocol client_requests() (
 protocol start_election() (
   (forall s in S
     s.role == 'candidate' =>*
-      s.current_term = s.current_term + 1;
+      //s.current_term = s.current_term + 1; // etcd does not do this here
       s.voted_for = [ ]; // none
       s.votes_responded = {};
       s.votes_granted = {};

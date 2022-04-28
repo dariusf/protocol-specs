@@ -3,14 +3,6 @@
 party p in P ()
 party f in F ()
 
-forall f in F
-  forall p in P
-    // timeout =>* // this is unnecessary but expresses intent
-      (f->p : exception(id=p);
-       p.some_failed = true
-       \/
-       f->p : ok)
-||
 forall p in P
   forall q in P
     (p->q : yes;
@@ -18,6 +10,12 @@ forall p in P
      \/
      p->q : no;
      q.no = true)
+||
+forall f in F
+  forall p in P
+    forall q in (P \ {p})
+      f->p : exception(id=q);
+      p.some_failed = true
 ||
 forall p in P
   (p.no | p.some_failed =>*
